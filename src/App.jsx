@@ -9,8 +9,7 @@ import BookingManagement from "./page/booking/BookingManagement";
 import Profile from "./page/profile/Profile";
 import ReportsManagement from "./page/reports/ReportsManagement";
 import ServiceCategories from "./page/categories/ServiceCategories";
-
-
+import WorkerVerification from "./page/verification/WorkerVerification";
 
 
 export default function App() {
@@ -38,8 +37,10 @@ export default function App() {
         {/* Report Management */}
         <Route path="reports" element={<ReportsManagement />} />
 
-        {/* Report Management */}
+        {/* Service Categories */}
         <Route path="categories" element={<ServiceCategories />} />
+
+        <Route path="verification" element={<WorkerVerification />} />
 
 
         </Route>

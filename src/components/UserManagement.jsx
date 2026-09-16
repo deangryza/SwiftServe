@@ -62,61 +62,74 @@ export default function UserManagement() {
   // SUMMARY COUNTS
   // ----------------------------------------
 
-  const counts = useMemo(() => {
-    return {
-      Total: userList.length,
+ const counts = useMemo(() => {
+  return {
+    Total: userList.length,
 
-      Approved: userList.filter(
-        (user) => user?.status === "Approved"
-      ).length,
+    Approved: userList.filter(
+      (user) =>
+        user?.status === "Verified" ||
+        user?.status === "Active" ||
+        user?.status === "Approved"
+    ).length,
 
-      Pending: userList.filter(
-        (user) => user?.status === "Pending"
-      ).length,
+    Pending: userList.filter(
+      (user) =>
+        user?.status === "Pending" ||
+        user?.status === "Under Review"
+    ).length,
 
-      Rejected: userList.filter(
-        (user) => user?.status === "Rejected"
-      ).length,
+    Rejected: userList.filter(
+      (user) => user?.status === "Rejected"
+    ).length,
 
-      Suspended: userList.filter(
-        (user) => user?.status === "Suspended"
-      ).length,
-    };
-  }, [userList]);
+    Suspended: userList.filter(
+      (user) => user?.status === "Suspended"
+    ).length,
+  };
+}, [userList]);
 
   // ----------------------------------------
   // SEARCH + FILTER
   // ----------------------------------------
 
   const filteredUsers = useMemo(() => {
-    const term = searchTerm.trim().toLowerCase();
+  const term = searchTerm.trim().toLowerCase();
 
-    return userList.filter((user) => {
-      const fullName = String(user?.fullName ?? "").toLowerCase();
-      const email = String(user?.email ?? "").toLowerCase();
-      const phone = String(user?.phone ?? "")
-        .replace(/\s/g, "")
-        .toLowerCase();
+  return userList.filter((user) => {
+    const name = String(user?.name ?? "").toLowerCase();
+    const id = String(user?.id ?? "").toLowerCase();
+    const category = String(user?.category ?? "").toLowerCase();
+    const location = String(user?.location ?? "").toLowerCase();
 
-      const normalizedSearchPhone = term.replace(/\s/g, "");
+    const matchesSearch =
+      !term ||
+      name.includes(term) ||
+      id.includes(term) ||
+      category.includes(term) ||
+      location.includes(term);
 
-      const matchesSearch =
-        !term ||
-        fullName.includes(term) ||
-        email.includes(term) ||
-        phone.includes(normalizedSearchPhone);
+    const role =
+      user?.id?.startsWith("WRK-")
+        ? "Worker"
+        : "Client";
 
-      const matchesRole =
-        roleFilter === "All" ||
-        String(user?.role ?? "") === roleFilter;
+    const matchesRole =
+      roleFilter === "All" ||
+      role === roleFilter;
 
-      const matchesStatus =
-        statusFilter === "All" ||
-        String(user?.status ?? "") === statusFilter;
+    const matchesStatus =
+      statusFilter === "All" ||
+      user?.status === statusFilter;
 
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [userList, searchTerm, roleFilter, statusFilter]);
+    return matchesSearch && matchesRole && matchesStatus;
+  });
+}, [
+  userList,
+  searchTerm,
+  roleFilter,
+  statusFilter,
+]);
 
   // ----------------------------------------
   // STATUS UPDATE
@@ -143,7 +156,7 @@ export default function UserManagement() {
     updateStatus(
       user,
       "Approved",
-      `${user?.fullName ?? "User"} has been approved.`
+      `${user?.name ?? "User"} has been approved.`
     );
   };
 
@@ -151,7 +164,7 @@ export default function UserManagement() {
     updateStatus(
       user,
       "Rejected",
-      `${user?.fullName ?? "User"} has been rejected.`
+      `${user?.name ?? "User"} has been rejected.`
     );
   };
 
@@ -159,7 +172,7 @@ export default function UserManagement() {
     updateStatus(
       user,
       "Suspended",
-      `${user?.fullName ?? "User"} has been suspended.`
+      `${user?.name ?? "User"} has been suspended.`
     );
   };
 
@@ -167,7 +180,7 @@ export default function UserManagement() {
     updateStatus(
       user,
       "Approved",
-      `${user?.fullName ?? "User"} has been reactivated.`
+      `${user?.name ?? "User"} has been reactivated.`
     );
   };
 
