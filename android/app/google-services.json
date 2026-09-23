@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "885476909974",
+    "project_id": "swiftserve-production",
+    "storage_bucket": "swiftserve-production.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:885476909974:android:5e17d1166ff278827fb3b7",
+        "android_client_info": {
+          "package_name": "com.example.my_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDXLVJAeyXT6vBkmRxE2ku1WbNQ_XQAcY4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
