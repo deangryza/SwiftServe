@@ -1,16 +1,45 @@
-# my_app
+# SwiftServe
 
-A new Flutter project.
+This repository contains the mobile app, web dashboard, and backend.
 
-## Getting Started
+| Component | Directory |
+| --- | --- |
+| SwiftServe Flutter app | `mobile/my_app/` |
+| Web dashboard | `web/swiftserve-login/` |
+| Node.js backend | `swiftserve-backend/` |
+| Original Flutter starter project | `mobile/` |
 
-This project is a starting point for a Flutter application.
+## Mobile
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+cd mobile/my_app
+flutter pub get
+flutter run
+```
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+When opening the repository root in VS Code, select **SwiftServe Mobile** in Run and Debug.
+The outer `mobile/` project is a Flutter demo; the SwiftServe app is in `mobile/my_app/`.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Web dashboard
+
+```powershell
+cd web/swiftserve-login
+npm ci
+npm run dev
+```
+
+## Backend
+
+Install dependencies in `swiftserve-backend/` with `npm ci` and start with `node server.js`.
+The current Firebase configuration requires a local service account file at
+`swiftserve-backend/src/config/serviceAccountKey.json`. Supply this credential locally;
+service account files and `.env` files are excluded from Git.
+
+## Repository history
+
+The combined branch preserves the existing mobile `main` and dashboard `master`
+histories. Backend files are imported as a snapshot because the original local
+backend history included a service account credential.
+
+Deployment services should use the component directories above as their root
+directories. Backend credentials must be supplied separately by the deployment environment.
