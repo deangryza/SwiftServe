@@ -1,0 +1,4 @@
+{"name":"swiftserve-worker-backend","version":"1.0.0","private":true,"main":"src/server.js",
+"scripts":{"dev":"nodemon src/server.js","start":"node src/server.js"},
+"dependencies":{"cors":"^2.8.5","dotenv":"^17.2.2","express":"^5.1.0","firebase-admin":"^13.5.0"},
+"devDependencies":{"nodemon":"^3.1.10"}}
