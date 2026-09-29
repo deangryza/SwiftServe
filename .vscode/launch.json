@@ -1,0 +1,12 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "SwiftServe Mobile",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/mobile/my_app",
+      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart"
+    }
+  ]
+}
