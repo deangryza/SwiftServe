@@ -68,10 +68,9 @@ service cloud.firestore {
 
     match /worker_verifications/{uid} {
       allow read: if self(uid);
-      allow create: if self(uid) && request.resource.data.status == 'pending';
-      allow update: if self(uid)
-        && resource.data.status in ['rejected', 'resubmission_required']
-        && request.resource.data.status == 'pending';
+      // Verification records are written only through the Firebase Admin SDK
+      // after the backend has compared the exact uploaded image buffers.
+      allow create, update, delete: if false;
     }
 
     match /reviews/{requestId} {

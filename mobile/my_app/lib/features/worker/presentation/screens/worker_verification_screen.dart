@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/repositories/verification_repository.dart';
 import '../models/worker_verification_ui_state.dart';
+import 'face_capture_screens.dart';
 
 class WorkerVerificationScreen extends StatefulWidget {
   const WorkerVerificationScreen({super.key, required this.profile});
@@ -20,7 +20,6 @@ class WorkerVerificationScreen extends StatefulWidget {
 
 class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   final _idNumber = TextEditingController();
-  final _picker = ImagePicker();
   final VerificationRepository _repository = VerificationRepository();
   String _idType = 'Philippine National ID';
   File? _governmentId;
@@ -28,21 +27,21 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   bool _uploading = false;
 
   Future<void> _pickId() async {
-    final file = await _picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
+    final file = await Navigator.push<File>(
+      context,
+      MaterialPageRoute(builder: (_) => const DocumentCaptureScreen()),
     );
     if (file != null && mounted) {
-      setState(() => _governmentId = File(file.path));
+      setState(() => _governmentId = file);
     }
   }
 
   Future<void> _pickFace() async {
-    final file = await _picker.pickImage(
-      source: ImageSource.camera,
-      imageQuality: 85,
+    final file = await Navigator.push<File>(
+      context,
+      MaterialPageRoute(builder: (_) => const SelfieLivenessScreen()),
     );
-    if (file != null && mounted) setState(() => _facePhoto = File(file.path));
+    if (file != null && mounted) setState(() => _facePhoto = file);
   }
 
   Future<void> _submit() async {
@@ -58,13 +57,28 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     }
     setState(() => _uploading = true);
     try {
-      await _repository.submit(
-        uid: widget.profile.id,
+      final result = await _repository.submit(
         idType: _idType,
         idNumber: _idNumber.text,
         governmentId: _governmentId!,
         facePhoto: _facePhoto!,
       );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Face match passed (${result.confidence.toStringAsFixed(1)}%). Your submission is pending admin review.',
+          ),
+        ),
+      );
+    } on FaceVerificationException catch (error) {
+      if (!mounted) return;
+      if (error.failure == FaceVerificationFailure.mismatch) {
+        setState(() => _facePhoto = null);
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -210,8 +224,8 @@ class _VerificationContent extends StatelessWidget {
             icon: const Icon(Icons.badge_outlined),
             label: Text(
               governmentIdSelected
-                  ? 'Government ID selected'
-                  : 'Choose government ID',
+                  ? 'Government ID captured'
+                  : 'Capture government ID',
             ),
           ),
           OutlinedButton.icon(
@@ -225,7 +239,18 @@ class _VerificationContent extends StatelessWidget {
           FilledButton(
             onPressed: uploading ? null : onSubmit,
             child: uploading
-                ? const CircularProgressIndicator()
+                ? const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                      SizedBox(width: 10),
+                      Text('Comparing faces…'),
+                    ],
+                  )
                 : Text(
                     state.hasSubmission
                         ? 'Resubmit for review'
