@@ -10,11 +10,13 @@ const createUserProfile = async (req, res) => {
       phoneNumber,
       address,
       role,
+      category,
+      skills,
     } = req.body;
 
-    if (!fullName || !email || !role) {
+    if (!fullName || !email || !['client', 'worker'].includes(role)) {
       return res.status(400).json({
-        message: 'Full name, email, and role are required.',
+        message: 'Full name, email, and a valid role are required.',
       });
     }
 
@@ -27,12 +29,30 @@ const createUserProfile = async (req, res) => {
       phoneNumber: phoneNumber || '',
       address: address || '',
       role,
-      verificationStatus: role === 'worker' ? 'not_required' : 'not_required',
+      category: category || '',
+      skills: Array.isArray(skills) ? skills : [],
+      verificationStatus: role === 'worker' ? 'pending' : 'not_required',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
 
-    await userRef.set(userData);
+    const batch = db.batch();
+    batch.set(userRef, userData);
+    if (role === 'worker') {
+      batch.set(db.collection('worker_profiles').doc(uid), {
+        workerId: uid,
+        fullName,
+        category: category || '',
+        skills: Array.isArray(skills) ? skills : [],
+        location: address || '',
+        verificationStatus: 'pending',
+        rating: 0,
+        completedJobs: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    }
+    await batch.commit();
 
     return res.status(201).json({
       message: 'User profile created successfully.',

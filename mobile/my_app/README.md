@@ -1,16 +1,11 @@
-# my_app
+# SwiftServe Mobile
 
-A new Flutter project.
+The canonical Flutter application targets Android and iOS. Its Dart source uses feature-first folders under `lib/features`, application startup under `lib/app`, and shared models/repositories/services under `lib/shared`.
 
-## Getting Started
+Provide the profile API URL at build time:
 
-This project is a starting point for a Flutter application.
+```powershell
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000
+```
 
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Firebase project: `swiftserve-production`. Do not replace these files with the archived root project configuration.
