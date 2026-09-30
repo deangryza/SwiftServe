@@ -157,6 +157,30 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                   label="Face Verification"
                   value={request.faceVerified ? "Passed" : "Not Verified"}
                 />
+                <InfoRow
+                  icon={ScanFace}
+                  label="Match Confidence"
+                  value={request.faceMatchConfidence == null
+                    ? "—"
+                    : `${Number(request.faceMatchConfidence).toFixed(2)}%`}
+                />
+                <InfoRow
+                  icon={ClipboardCheck}
+                  label="Match Threshold"
+                  value={request.faceMatchThreshold == null
+                    ? "—"
+                    : `${Number(request.faceMatchThreshold).toFixed(0)}%`}
+                />
+                <InfoRow
+                  icon={ClipboardCheck}
+                  label="Provider"
+                  value={request.faceVerificationProvider ?? "—"}
+                />
+                <InfoRow
+                  icon={Calendar}
+                  label="Face Check Time"
+                  value={request.faceVerifiedAt ?? "—"}
+                />
               </div>
             </section>
 

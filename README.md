@@ -31,6 +31,12 @@ npm start
 
 Grant admin access with `npm run admin:claim -- grant admin@example.com`. The user must sign in again to refresh the custom claim.
 
+Face verification uses AWS Rekognition credentials from the backend environment only. Use an IAM policy limited to `rekognition:CompareFaces`, set `AWS_REGION` and `FACE_MATCH_THRESHOLD`, and never place AWS credentials in Flutter configuration.
+
+Verification images remain in Firebase Storage while an admin review is pending. Final decisions set Cloud Storage `Custom-Time`; apply `swiftserve-backend/firebase-storage-lifecycle.json` to the Firebase Storage bucket so those objects are deleted after 30 days. Images are sent to AWS for comparison, and client-side liveness is a deterrent rather than server-attested liveness. Review AWS AI services opt-out settings before production use.
+
+Run verification-rule tests from `mobile/my_app/rules-tests` with `npm install && npm test`. Current Firebase emulators require Java 21 or newer. Apply the retention lifecycle with `gcloud storage buckets update gs://YOUR_BUCKET --lifecycle-file=swiftserve-backend/firebase-storage-lifecycle.json` after reviewing the target bucket.
+
 ## Admin
 
 Create `admin/.env` from `admin/.env.example`, register a Firebase Web app for the dashboard, and run:

@@ -1,4 +1,5 @@
 const { db, storage } = require('../config/firebase');
+const { markForDeletion } = require('../services/faceVerificationService');
 
 const ALLOWED_STATUSES = new Set([
   'under_review',
@@ -29,6 +30,11 @@ const serialize = (id, verification, user = {}) => ({
   maskedIdNumber: verification.maskedIdNumber || '',
   idSubmitted: Boolean(verification.idSubmitted),
   faceVerified: Boolean(verification.faceVerified),
+  faceMatchConfidence: verification.faceMatchConfidence ?? null,
+  faceMatchThreshold: verification.faceMatchThreshold ?? null,
+  faceVerificationProvider: verification.faceVerificationProvider || null,
+  faceVerifiedAt: toIso(verification.faceVerifiedAt),
+  purgeAfter: toIso(verification.purgeAfter),
   reviewDate: toIso(verification.reviewedAt),
   reviewedBy: verification.reviewedBy || null,
   adminNotes: verification.adminNotes || '',
@@ -96,15 +102,24 @@ const updateVerification = async (req, res) => {
     if (!verification.exists) {
       return res.status(404).json({ message: 'Verification request not found.' });
     }
+    const currentStatus = verification.data().status;
+    if (['verified', 'rejected'].includes(currentStatus) && status !== currentStatus) {
+      return res.status(409).json({ message: 'A final verification decision cannot be reopened.' });
+    }
     const batch = db.batch();
     const now = new Date();
     const reviewedBy = req.user.email || req.user.uid;
+    const isFinalDecision = status === 'verified' || status === 'rejected';
+    const purgeAfter = isFinalDecision
+      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+      : null;
     batch.update(verificationRef, {
       status,
       adminNotes,
       reviewedAt: now,
       reviewedBy,
       updatedAt: now,
+      ...(isFinalDecision ? { purgeAfter } : {}),
     });
     batch.set(db.collection('users').doc(workerId), {
       verificationStatus: status,
@@ -123,10 +138,24 @@ const updateVerification = async (req, res) => {
       createdAt: now,
     });
     await batch.commit();
+    if (isFinalDecision) {
+      await markForDeletion(
+        storage.bucket(),
+        [verification.data().governmentIdPath, verification.data().facePhotoPath],
+        now,
+      );
+    }
     return res.json({
       item: serialize(
         workerId,
-        { ...verification.data(), status, adminNotes, reviewedAt: now, reviewedBy },
+        {
+          ...verification.data(),
+          status,
+          adminNotes,
+          reviewedAt: now,
+          reviewedBy,
+          purgeAfter,
+        },
         user.data(),
       ),
     });
