@@ -5,6 +5,7 @@ require('./config/firebase');
 
 const testRoutes = require('./routes/testRoutes');
 const userRoutes = require('./routes/userRoutes');
+const adminVerificationRoutes = require('./routes/adminVerificationRoutes');
 
 const app = express();
 
@@ -19,5 +20,6 @@ app.get('/', (req, res) => {
 
 app.use('/api/test', testRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin/verifications', adminVerificationRoutes);
 
 module.exports = app;
