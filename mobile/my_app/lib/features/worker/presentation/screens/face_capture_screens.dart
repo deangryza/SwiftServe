@@ -121,6 +121,7 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
   bool _capturing = false;
   bool _timedOut = false;
   String? _error;
+  String? _guidance;
 
   @override
   void initState() {
@@ -151,7 +152,7 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
       }
       final controller = CameraController(
         camera,
-        ResolutionPreset.high,
+        ResolutionPreset.medium,
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid
             ? ImageFormatGroup.nv21
@@ -175,9 +176,10 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
       _tracker = LivenessTracker(_randomChallenge());
       _timedOut = false;
       _error = null;
+      _guidance = null;
     });
     await controller.startImageStream(_processFrame);
-    _timer = Timer(const Duration(seconds: 10), () async {
+    _timer = Timer(const Duration(seconds: 20), () async {
       if (!mounted || _capturing) return;
       if (controller.value.isStreamingImages) {
         await controller.stopImageStream();
@@ -188,15 +190,27 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
 
   Future<void> _processFrame(CameraImage image) async {
     if (_processing || _capturing || _timedOut) return;
-    final input = _inputImage(image);
-    if (input == null) return;
+    final frame = _inputImage(image);
+    if (frame == null) {
+      if (mounted && _error == null) {
+        setState(() {
+          _error =
+              'This camera frame could not be analyzed. Try restarting the challenge.';
+        });
+      }
+      return;
+    }
     _processing = true;
     try {
-      final faces = await _detector.processImage(input);
+      final faces = await _detector.processImage(frame.input);
       final face = faces.length == 1 ? faces.first : null;
-      final centered =
-          face == null ||
-          _isCentered(face, image.width.toDouble(), image.height.toDouble());
+      final centered = face != null && _isCentered(face, frame.coordinateSize);
+      final guidance = switch ((faces.length, centered)) {
+        (0, _) => 'No face detected. Move closer and face the camera.',
+        (> 1, _) => 'More than one face detected. Keep only your face in view.',
+        (1, false) => 'Move your face toward the center of the frame.',
+        _ => null,
+      };
       final complete = _tracker.process(
         faceCount: faces.length,
         leftEyeOpenProbability: face?.leftEyeOpenProbability,
@@ -204,7 +218,12 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
         yaw: face?.headEulerAngleY,
         centered: centered,
       );
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          _error = null;
+          _guidance = guidance;
+        });
+      }
       if (complete && !_capturing) {
         _capturing = true;
         unawaited(Future<void>.delayed(Duration.zero, _finishCapture));
@@ -218,22 +237,32 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     }
   }
 
-  bool _isCentered(Face face, double width, double height) {
+  bool _isCentered(Face face, Size coordinateSize) {
     final center = face.boundingBox.center;
-    return (center.dx - width / 2).abs() <= width * 0.3 &&
-        (center.dy - height / 2).abs() <= height * 0.3;
+    return (center.dx - coordinateSize.width / 2).abs() <=
+            coordinateSize.width * 0.35 &&
+        (center.dy - coordinateSize.height / 2).abs() <=
+            coordinateSize.height * 0.35;
   }
 
-  InputImage? _inputImage(CameraImage image) {
+  ({InputImage input, Size coordinateSize})? _inputImage(CameraImage image) {
     final controller = _controller;
     if (controller == null || image.planes.length != 1) return null;
     final rotation = _rotationFor(
       controller.description,
       controller.value.deviceOrientation,
     );
-    final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (rotation == null || format == null) return null;
-    return InputImage.fromBytes(
+    if (rotation == null) return null;
+    final reportedFormat = InputImageFormatValue.fromRawValue(image.format.raw);
+    final format = Platform.isAndroid
+        // CameraX can label its single-plane NV21 output as yuv420.
+        ? InputImageFormat.nv21
+        : reportedFormat;
+    if (format == null ||
+        (Platform.isIOS && format != InputImageFormat.bgra8888)) {
+      return null;
+    }
+    final input = InputImage.fromBytes(
       bytes: image.planes.first.bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
@@ -241,6 +270,15 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
         format: format,
         bytesPerRow: image.planes.first.bytesPerRow,
       ),
+    );
+    final quarterTurn =
+        rotation == InputImageRotation.rotation90deg ||
+        rotation == InputImageRotation.rotation270deg;
+    return (
+      input: input,
+      coordinateSize: quarterTurn
+          ? Size(image.height.toDouble(), image.width.toDouble())
+          : Size(image.width.toDouble(), image.height.toDouble()),
     );
   }
 
@@ -276,6 +314,7 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
       if (controller.value.isStreamingImages) {
         await controller.stopImageStream();
       }
+      await Future<void>.delayed(const Duration(milliseconds: 250));
       final capture = await controller.takePicture();
       if (mounted) Navigator.pop(context, File(capture.path));
     } catch (error) {
@@ -301,7 +340,7 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     error: _error,
     instructions: _timedOut
         ? 'The challenge timed out. Keep one face centered and try again.'
-        : _tracker.prompt,
+        : [_tracker.prompt, ?_guidance].join('\n'),
     action: _timedOut
         ? FilledButton.icon(
             onPressed: _startChallenge,

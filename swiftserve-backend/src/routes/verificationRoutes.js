@@ -5,9 +5,11 @@ const multer = require('multer');
 const authenticateUser = require('../middleware/authMiddleware');
 const { db, storage } = require('../config/firebase');
 const {
+  FaceDetectionError,
   VerificationConflictError,
   WorkerAccessError,
   compareAndCreateSubmission,
+  isFaceCheckDisabled,
 } = require('../services/faceVerificationService');
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
@@ -73,13 +75,18 @@ const createVerificationRouter = ({
       selfie = req.files?.selfie?.[0];
       const idType = String(req.body?.idType || '').trim();
       const idNumber = String(req.body?.idNumber || '').trim();
-      if (!document || !selfie || !idType || !idNumber) {
+      // TODO(face-verification): temporary ID-only bypass. Selfie is optional
+      // while DISABLE_FACE_VERIFICATION=true; restore the strict requirement below.
+      const faceCheckDisabled = isFaceCheckDisabled();
+      if (!document || !idType || !idNumber || (!faceCheckDisabled && !selfie)) {
         return res.status(400).json({
           code: 'INVALID_UPLOAD',
-          message: 'ID type, ID number, document, and selfie are required.',
+          message: faceCheckDisabled
+            ? 'ID type, ID number, and document are required.'
+            : 'ID type, ID number, document, and selfie are required.',
         });
       }
-      if (!hasExpectedSignature(document) || !hasExpectedSignature(selfie)) {
+      if (!hasExpectedSignature(document) || (selfie && !hasExpectedSignature(selfie))) {
         return res.status(415).json({
           code: 'UNSUPPORTED_IMAGE_TYPE',
           message: 'The uploaded files are not valid JPEG or PNG images.',
@@ -95,11 +102,18 @@ const createVerificationRouter = ({
         storage: firebaseStorage,
       });
       if (!result.match) {
-        return res.json({ match: false, confidence: 0, code: 'FACE_MISMATCH' });
+        return res.json({
+          match: false,
+          confidence: result.confidence,
+          distance: result.distance,
+          code: 'FACE_MISMATCH',
+        });
       }
       return res.status(201).json({
         match: true,
-        confidence: result.confidence,
+        confidence: result.confidence ?? null,
+        distance: result.distance ?? null,
+        bypassed: result.bypassed === true,
         verification: { status: result.status },
       });
     } catch (error) {
@@ -109,16 +123,11 @@ const createVerificationRouter = ({
       if (error instanceof VerificationConflictError) {
         return res.status(409).json({ code: 'VERIFICATION_CONFLICT', message: error.message });
       }
-      if (error?.name === 'InvalidParameterException') {
+      if (error instanceof FaceDetectionError) {
         return res.status(400).json({
-          code: 'FACE_NOT_DETECTED',
-          message: 'No usable face was detected in one or both images.',
-        });
-      }
-      if (['ThrottlingException', 'ProvisionedThroughputExceededException', 'InternalServerError'].includes(error?.name)) {
-        return res.status(503).json({
-          code: 'VERIFICATION_UNAVAILABLE',
-          message: 'Face verification is temporarily unavailable.',
+          code: error.code,
+          message: error.message,
+          image: error.image,
         });
       }
       return next(error);

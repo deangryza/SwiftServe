@@ -29,7 +29,7 @@ void main() {
     expect(tracker.isComplete, isTrue);
   });
 
-  test('left turn requires three turned frames and a centered return', () {
+  test('left turn requires sustained turn and a centered return', () {
     final tracker = LivenessTracker(LivenessChallenge.turnLeft);
     for (var i = 0; i < 3; i++) {
       tracker.process(faceCount: 1, yaw: -25);
@@ -41,7 +41,7 @@ void main() {
     expect(tracker.isComplete, isTrue);
   });
 
-  test('right turn requires three turned frames and a centered return', () {
+  test('right turn requires sustained turn and a centered return', () {
     final tracker = LivenessTracker(LivenessChallenge.turnRight);
     for (var i = 0; i < 3; i++) {
       tracker.process(faceCount: 1, yaw: 25);
@@ -52,10 +52,31 @@ void main() {
     expect(tracker.isComplete, isTrue);
   });
 
-  test('losing the face resets progress', () {
+  test('turn challenge accepts mirrored front-camera yaw', () {
+    final tracker = LivenessTracker(LivenessChallenge.turnLeft);
+    tracker.process(faceCount: 1, yaw: 20);
+    tracker.process(faceCount: 1, yaw: 20);
+    tracker.process(faceCount: 1, yaw: 5);
+    tracker.process(faceCount: 1, yaw: 5);
+    expect(tracker.isComplete, isTrue);
+  });
+
+  test('one dropped frame does not erase completed challenge stages', () {
+    final tracker = LivenessTracker(LivenessChallenge.turnLeft);
+    tracker.process(faceCount: 1, yaw: -20);
+    tracker.process(faceCount: 1, yaw: -20);
+    tracker.process(faceCount: 0, yaw: null);
+    tracker.process(faceCount: 1, yaw: 0);
+    tracker.process(faceCount: 1, yaw: 0);
+    expect(tracker.isComplete, isTrue);
+  });
+
+  test('repeatedly losing the face resets progress', () {
     final tracker = LivenessTracker(LivenessChallenge.turnLeft);
     tracker.process(faceCount: 1, yaw: -25);
     tracker.process(faceCount: 1, yaw: -25);
+    tracker.process(faceCount: 0, yaw: -25);
+    tracker.process(faceCount: 0, yaw: -25);
     tracker.process(faceCount: 0, yaw: -25);
     tracker.process(faceCount: 1, yaw: -25);
     expect(tracker.isComplete, isFalse);

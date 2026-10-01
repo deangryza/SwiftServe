@@ -7,6 +7,7 @@ class LivenessTracker {
 
   int _stage = 0;
   int _consecutiveFrames = 0;
+  int _invalidFrames = 0;
   bool _complete = false;
 
   bool get isComplete => _complete;
@@ -26,6 +27,7 @@ class LivenessTracker {
   void reset() {
     _stage = 0;
     _consecutiveFrames = 0;
+    _invalidFrames = 0;
     _complete = false;
   }
 
@@ -38,17 +40,20 @@ class LivenessTracker {
   }) {
     if (_complete) return true;
     if (faceCount != 1 || !centered) {
-      reset();
+      _invalidFrames += 1;
+      _consecutiveFrames = 0;
+      if (_invalidFrames >= 3) reset();
       return false;
     }
+    _invalidFrames = 0;
 
     return switch (challenge) {
       LivenessChallenge.blink => _processBlink(
         leftEyeOpenProbability,
         rightEyeOpenProbability,
       ),
-      LivenessChallenge.turnLeft => _processTurn(yaw, expectPositive: false),
-      LivenessChallenge.turnRight => _processTurn(yaw, expectPositive: true),
+      LivenessChallenge.turnLeft => _processTurn(yaw),
+      LivenessChallenge.turnRight => _processTurn(yaw),
     };
   }
 
@@ -58,22 +63,20 @@ class LivenessTracker {
       return false;
     }
     final qualifies = switch (_stage) {
-      0 || 2 => left >= 0.7 && right >= 0.7,
-      _ => left <= 0.3 && right <= 0.3,
+      0 || 2 => left >= 0.55 && right >= 0.55,
+      _ => left <= 0.45 && right <= 0.45,
     };
-    _advanceWhen(qualifies, requiredFrames: 2, finalStage: 2);
+    _advanceWhen(qualifies, requiredFrames: _stage == 1 ? 1 : 2, finalStage: 2);
     return _complete;
   }
 
-  bool _processTurn(double? yaw, {required bool expectPositive}) {
+  bool _processTurn(double? yaw) {
     if (yaw == null) {
       _consecutiveFrames = 0;
       return false;
     }
-    final qualifies = _stage == 0
-        ? (expectPositive ? yaw >= 20 : yaw <= -20)
-        : yaw.abs() <= 10;
-    _advanceWhen(qualifies, requiredFrames: _stage == 0 ? 3 : 2, finalStage: 1);
+    final qualifies = _stage == 0 ? yaw.abs() >= 15 : yaw.abs() <= 12;
+    _advanceWhen(qualifies, requiredFrames: 2, finalStage: 1);
     return _complete;
   }
 

@@ -1,5 +1,11 @@
 const { db, storage } = require('../config/firebase');
 const { markForDeletion } = require('../services/faceVerificationService');
+const {
+  LOCAL_BACKEND,
+  removeStoredFiles,
+  resolveUploadsDir,
+  sendLocalFile,
+} = require('../services/verificationStorageService');
 
 const ALLOWED_STATUSES = new Set([
   'under_review',
@@ -29,6 +35,7 @@ const serialize = (id, verification, user = {}) => ({
   idType: verification.idType || '',
   maskedIdNumber: verification.maskedIdNumber || '',
   idSubmitted: Boolean(verification.idSubmitted),
+  storageBackend: verification.storageBackend || 'gcs',
   faceVerified: Boolean(verification.faceVerified),
   faceMatchConfidence: verification.faceMatchConfidence ?? null,
   faceMatchThreshold: verification.faceMatchThreshold ?? null,
@@ -63,6 +70,11 @@ const signedUrl = async (path) => {
   return url;
 };
 
+const localImageUrl = (req, workerId) => {
+  const base = `${req.protocol}://${req.get('host')}`;
+  return `${base}/api/admin/verifications/${encodeURIComponent(workerId)}/image`;
+};
+
 const getVerification = async (req, res) => {
   try {
     const workerId = req.params.workerId;
@@ -74,11 +86,22 @@ const getVerification = async (req, res) => {
       return res.status(404).json({ message: 'Verification request not found.' });
     }
     const data = verification.data();
+    const backend = data.storageBackend || 'gcs';
     return res.json({
       item: {
         ...serialize(workerId, data, user.data()),
-        governmentIdUrl: await signedUrl(data.governmentIdPath),
-        facePhotoUrl: await signedUrl(data.facePhotoPath),
+        // TODO(billing): local files are served through the authenticated
+        // image route below (plain links can't carry the admin Bearer token,
+        // so the admin app fetches them into a blob URL). GCS docs keep
+        // signed URLs. Remove the branch when VERIFICATION_STORAGE=gcs.
+        governmentIdUrl: backend === LOCAL_BACKEND
+          ? localImageUrl(req, workerId)
+          : await signedUrl(data.governmentIdPath),
+        facePhotoUrl: !data.facePhotoPath
+          ? null
+          : backend === LOCAL_BACKEND
+            ? null
+            : await signedUrl(data.facePhotoPath),
       },
     });
   } catch (error) {
@@ -139,11 +162,22 @@ const updateVerification = async (req, res) => {
     });
     await batch.commit();
     if (isFinalDecision) {
-      await markForDeletion(
-        storage.bucket(),
-        [verification.data().governmentIdPath, verification.data().facePhotoPath],
-        now,
-      );
+      const priorBackend = verification.data().storageBackend || 'gcs';
+      // TODO(billing): local files are deleted at decision time (no 30-day
+      // GCS lifecycle here). GCS docs keep the mark-for-deletion flow.
+      if (priorBackend === LOCAL_BACKEND) {
+        await removeStoredFiles({
+          paths: [verification.data().governmentIdPath, verification.data().facePhotoPath],
+          backend: LOCAL_BACKEND,
+          uploadsDir: resolveUploadsDir(),
+        }).catch((error) => console.error('Failed to remove local verification images:', error));
+      } else {
+        await markForDeletion(
+          storage.bucket(),
+          [verification.data().governmentIdPath, verification.data().facePhotoPath],
+          now,
+        );
+      }
     }
     return res.json({
       item: serialize(
@@ -165,4 +199,39 @@ const updateVerification = async (req, res) => {
   }
 };
 
-module.exports = { listVerifications, getVerification, updateVerification };
+// TODO(billing): serves locally stored ID photos to admins while there is
+// no Storage bucket. Remove the route + handler when VERIFICATION_STORAGE=gcs.
+const createImageHandler = ({ database = db, uploadsDir } = {}) => async (req, res) => {
+  try {
+    const workerId = req.params.workerId;
+    const snapshot = await database.collection('worker_verifications').doc(workerId).get();
+    if (!snapshot.exists) {
+      return res.status(404).json({ message: 'Verification request not found.' });
+    }
+    const data = snapshot.data();
+    if ((data.storageBackend || 'gcs') !== LOCAL_BACKEND || !data.governmentIdPath) {
+      return res.status(404).json({ message: 'No locally stored verification image.' });
+    }
+    const served = await sendLocalFile(res, data.governmentIdPath, {
+      uploadsDir: uploadsDir || resolveUploadsDir(),
+      contentType: data.governmentIdMimeType,
+    });
+    if (!served) {
+      return res.status(404).json({ message: 'Verification image not found.' });
+    }
+  } catch (error) {
+    console.error('Get verification image error:', error);
+    return res.status(500).json({ message: 'Failed to load verification image.' });
+  }
+};
+
+const getVerificationImage = createImageHandler();
+
+module.exports = {
+  listVerifications,
+  getVerification,
+  getVerificationImage,
+  createImageHandler,
+  localImageUrl,
+  updateVerification,
+};

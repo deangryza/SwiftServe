@@ -26,14 +26,15 @@ Copy `swiftserve-backend/.env.example` to `.env`, point `GOOGLE_APPLICATION_CRED
 ```powershell
 cd swiftserve-backend
 npm install
+npm run models:download
 npm start
 ```
 
 Grant admin access with `npm run admin:claim -- grant admin@example.com`. The user must sign in again to refresh the custom claim.
 
-Face verification uses AWS Rekognition credentials from the backend environment only. Use an IAM policy limited to `rekognition:CompareFaces`, set `AWS_REGION` and `FACE_MATCH_THRESHOLD`, and never place AWS credentials in Flutter configuration.
+Face verification runs locally in the backend with FaceAPI on TensorFlow.js's WASM backend and makes no external face-comparison API calls. WASM is used because the native TensorFlow binding does not publish a compatible Windows binary for the project's Node 22 runtime. The model weights are not committed; download them with `npm run models:download` after installing dependencies and as part of each deployment build. The server validates and loads all models before accepting requests.
 
-Verification images remain in Firebase Storage while an admin review is pending. Final decisions set Cloud Storage `Custom-Time`; apply `swiftserve-backend/firebase-storage-lifecycle.json` to the Firebase Storage bucket so those objects are deleted after 30 days. Images are sent to AWS for comparison, and client-side liveness is a deterrent rather than server-attested liveness. Review AWS AI services opt-out settings before production use.
+Verification images remain in Firebase Storage while an admin review is pending. Final decisions set Cloud Storage `Custom-Time`; apply `swiftserve-backend/firebase-storage-lifecycle.json` to the Firebase Storage bucket so those objects are deleted after 30 days. The returned `confidence` is a heuristic similarity percentage derived from descriptor distance, not a calibrated probability. Client-side liveness is a deterrent rather than server-attested liveness.
 
 Run verification-rule tests from `mobile/my_app/rules-tests` with `npm install && npm test`. Current Firebase emulators require Java 21 or newer. Apply the retention lifecycle with `gcloud storage buckets update gs://YOUR_BUCKET --lifecycle-file=swiftserve-backend/firebase-storage-lifecycle.json` after reviewing the target bucket.
 

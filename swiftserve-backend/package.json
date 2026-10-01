@@ -5,8 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/app.js && node --check src/controllers/adminVerificationController.js && node --check src/routes/verificationRoutes.js && node --check src/services/faceVerificationService.js",
+    "check": "node --check server.js && node --check src/app.js && node --check src/controllers/adminVerificationController.js && node --check src/routes/verificationRoutes.js && node --check src/services/faceVerificationService.js && node --check scripts/downloadFaceModels.js",
     "test": "node --test",
+    "models:download": "node scripts/downloadFaceModels.js",
     "admin:claim": "node scripts/setAdminClaim.js"
   },
   "keywords": [],
@@ -14,7 +15,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@aws-sdk/client-rekognition": "^3.1143.0",
+    "@tensorflow/tfjs": "4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@vladmandic/face-api": "1.7.15",
+    "canvas": "3.2.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",
     "express": "^5.2.1",

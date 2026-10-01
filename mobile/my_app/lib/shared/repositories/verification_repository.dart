@@ -32,9 +32,10 @@ class FaceVerificationException implements Exception {
 }
 
 class FaceVerificationResult {
-  const FaceVerificationResult({required this.confidence});
+  const FaceVerificationResult({this.confidence, this.bypassed = false});
 
-  final double confidence;
+  final double? confidence;
+  final bool bypassed;
 }
 
 class VerificationRepository {
@@ -59,11 +60,14 @@ class VerificationRepository {
         : null,
   );
 
+  // TODO(face-verification): temporary ID-only mode. facePhoto is optional
+  // while the backend bypass is enabled; restore `required File facePhoto`
+  // to re-enable face matching.
   Future<FaceVerificationResult> submit({
     required String idType,
     required String idNumber,
     required File governmentId,
-    required File facePhoto,
+    File? facePhoto,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -78,18 +82,22 @@ class VerificationRepository {
     );
     request.headers['Authorization'] = 'Bearer ${await user.getIdToken(true)}';
     request.fields.addAll({'idType': idType, 'idNumber': idNumber});
-    request.files.addAll([
+    request.files.add(
       await http.MultipartFile.fromPath(
         'document',
         governmentId.path,
         contentType: _contentType(governmentId),
       ),
-      await http.MultipartFile.fromPath(
-        'selfie',
-        facePhoto.path,
-        contentType: _contentType(facePhoto),
-      ),
-    ]);
+    );
+    if (facePhoto != null) {
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'selfie',
+          facePhoto.path,
+          contentType: _contentType(facePhoto),
+        ),
+      );
+    }
 
     try {
       final streamed = await _client.send(request);
@@ -97,7 +105,8 @@ class VerificationRepository {
       final payload = _json(response.body);
       if (response.statusCode == 201 && payload['match'] == true) {
         return FaceVerificationResult(
-          confidence: (payload['confidence'] as num?)?.toDouble() ?? 0,
+          confidence: (payload['confidence'] as num?)?.toDouble(),
+          bypassed: payload['bypassed'] == true,
         );
       }
       final code = payload['code']?.toString();
