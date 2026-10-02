@@ -1,0 +1,11 @@
+{
+  "rule": [
+    {
+      "action": { "type": "Delete" },
+      "condition": {
+        "daysSinceCustomTime": 30,
+        "matchesPrefix": ["worker_verifications/"]
+      }
+    }
+  ]
+}

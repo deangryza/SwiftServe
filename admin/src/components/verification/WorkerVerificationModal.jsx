@@ -17,6 +17,16 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { VERIFICATION_STATUS } from "../../data/workerVerification";
+import { apiRequestBinary } from "../../lib/api";
+
+// TODO(billing): local image links are backend routes needing the admin token,
+// so they open via an authenticated fetch into a blob URL. GCS signed URLs
+// keep plain anchors. Simplify to anchors only when VERIFICATION_STORAGE=gcs.
+async function openProtectedDocument(url) {
+  const path = url.startsWith("http") ? new URL(url).pathname : url;
+  const blob = await apiRequestBinary(path);
+  window.open(URL.createObjectURL(blob), "_blank", "noopener");
+}
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
@@ -33,6 +43,7 @@ function InfoRow({ icon: Icon, label, value }) {
 export default function WorkerVerificationModal({ request, onClose, onUpdate }) {
   const [adminNotes, setAdminNotes] = useState(request?.adminNotes ?? "");
   const [saving, setSaving] = useState(false);
+  const [openingDocument, setOpeningDocument] = useState(false);
 
   useEffect(() => {
     if (request) {
@@ -69,6 +80,18 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
       "Worker resubmission requested."
     );
 
+  const handleOpenDocument = async (url) => {
+    if (request.storageBackend !== "local") return;
+    setOpeningDocument(true);
+    try {
+      await openProtectedDocument(url);
+    } catch (error) {
+      toast.error(error.message || "Unable to open the document.");
+    } finally {
+      setOpeningDocument(false);
+    }
+  };
+
   return (
     <AnimatePresence>
       <motion.div
@@ -104,6 +127,14 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
           </div>
 
           <div className="px-6 py-5 space-y-6">
+            {/* TODO(face-verification): temporary ID-only banner. Remove once
+                automatic face matching is re-enabled. */}
+            {request.faceVerificationProvider === "bypassed" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Face check bypassed — review the government ID manually before
+                approving.
+              </div>
+            )}
             {/* Worker Information */}
             <section>
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
@@ -123,7 +154,18 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
               <section>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Submitted Documents</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {request.governmentIdUrl && <a href={request.governmentIdUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open government ID</a>}
+                  {request.governmentIdUrl && request.storageBackend === "local" ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDocument(request.governmentIdUrl)}
+                      disabled={openingDocument}
+                      className="text-sm text-blue-600 underline text-left disabled:opacity-50"
+                    >
+                      {openingDocument ? "Opening…" : "Open government ID"}
+                    </button>
+                  ) : (
+                    request.governmentIdUrl && <a href={request.governmentIdUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open government ID</a>
+                  )}
                   {request.facePhotoUrl && <a href={request.facePhotoUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open face photo</a>}
                 </div>
               </section>
@@ -155,7 +197,37 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                 <InfoRow
                   icon={ScanFace}
                   label="Face Verification"
-                  value={request.faceVerified ? "Passed" : "Not Verified"}
+                  value={
+                    request.faceVerificationProvider === "bypassed"
+                      ? "Bypassed — manual review"
+                      : request.faceVerified
+                        ? "Passed"
+                        : "Not Verified"
+                  }
+                />
+                <InfoRow
+                  icon={ScanFace}
+                  label="Match Confidence"
+                  value={request.faceMatchConfidence == null
+                    ? "—"
+                    : `${Number(request.faceMatchConfidence).toFixed(2)}%`}
+                />
+                <InfoRow
+                  icon={ClipboardCheck}
+                  label="Match Threshold"
+                  value={request.faceMatchThreshold == null
+                    ? "—"
+                    : `${Number(request.faceMatchThreshold).toFixed(0)}%`}
+                />
+                <InfoRow
+                  icon={ClipboardCheck}
+                  label="Provider"
+                  value={request.faceVerificationProvider ?? "—"}
+                />
+                <InfoRow
+                  icon={Calendar}
+                  label="Face Check Time"
+                  value={request.faceVerifiedAt ?? "—"}
                 />
               </div>
             </section>

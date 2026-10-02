@@ -1,3 +1,6 @@
 node_modules/
 .env
 src/config/serviceAccountKey.json
+models/
+# TODO(billing): local verification uploads (no Storage bucket yet).
+uploads/

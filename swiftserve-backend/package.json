@@ -5,7 +5,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check src/app.js && node --check src/controllers/adminVerificationController.js",
+    "check": "node --check server.js && node --check src/app.js && node --check src/controllers/adminVerificationController.js && node --check src/routes/verificationRoutes.js && node --check src/services/faceVerificationService.js && node --check scripts/downloadFaceModels.js",
+    "test": "node --test",
+    "models:download": "node scripts/downloadFaceModels.js",
     "admin:claim": "node scripts/setAdminClaim.js"
   },
   "keywords": [],
@@ -13,9 +15,18 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@tensorflow/tfjs": "4.22.0",
+    "@tensorflow/tfjs-backend-wasm": "4.22.0",
+    "@vladmandic/face-api": "1.7.15",
+    "canvas": "3.2.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",
     "express": "^5.2.1",
-    "firebase-admin": "^14.4.0"
+    "express-rate-limit": "^8.7.0",
+    "firebase-admin": "^14.4.0",
+    "multer": "^2.4.0"
+  },
+  "devDependencies": {
+    "supertest": "^7.3.0"
   }
 }
