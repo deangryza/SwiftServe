@@ -166,7 +166,6 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: const _RegistrationBottomNavigation(),
       body: Form(
         key: _formKey,
         child: ListView(
@@ -643,84 +642,6 @@ class _RegistrationField extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _RegistrationBottomNavigation extends StatelessWidget {
-  const _RegistrationBottomNavigation();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 80,
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: Color(0xFFE4E4E7))),
-      ),
-      child: const SafeArea(
-        top: false,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _RegistrationNavItem(
-              asset: 'assets/registration/home.svg',
-              label: 'Home',
-              color: Color(0xFF71717A),
-            ),
-            _RegistrationNavItem(
-              asset: 'assets/registration/history.svg',
-              label: 'History',
-              color: Color(0xFF1D4ED8),
-            ),
-            _RegistrationNavItem(
-              asset: 'assets/registration/message.svg',
-              label: 'Message',
-              color: Color(0xFFA1A1AA),
-            ),
-            _RegistrationNavItem(
-              asset: 'assets/registration/profile-nav.svg',
-              label: 'Profile',
-              color: Color(0xFF71717A),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _RegistrationNavItem extends StatelessWidget {
-  const _RegistrationNavItem({
-    required this.asset,
-    required this.label,
-    required this.color,
-  });
-
-  final String asset;
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 64,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SvgPicture.asset(asset),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              height: 15 / 10,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

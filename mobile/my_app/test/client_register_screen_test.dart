@@ -21,6 +21,10 @@ void main() {
     expect(find.text('Primary Service Category'), findsNothing);
     expect(find.byType(TextFormField), findsNWidgets(6));
     expect(find.byType(SvgPicture), findsWidgets);
+    expect(find.text('Home'), findsNothing);
+    expect(find.text('History'), findsNothing);
+    expect(find.text('Message'), findsNothing);
+    expect(find.text('Profile'), findsNothing);
   });
 
   testWidgets('client registration fields accept and display input', (

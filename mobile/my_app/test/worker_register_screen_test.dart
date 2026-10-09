@@ -30,6 +30,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.byType(SvgPicture), findsWidgets);
+    expect(find.text('Home'), findsNothing);
+    expect(find.text('History'), findsNothing);
+    expect(find.text('Message'), findsNothing);
+    expect(find.text('Profile'), findsNothing);
   });
 
   testWidgets('worker registration keeps all required account fields', (
