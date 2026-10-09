@@ -10,7 +10,8 @@ void main() {
     expect(find.text('SwiftServe'), findsOneWidget);
     expect(find.text('I need help'), findsOneWidget);
     expect(find.text('I want to earn'), findsOneWidget);
-    expect(find.text('Already have an account? Sign in'), findsOneWidget);
+    expect(find.text('Already have an account? '), findsOneWidget);
+    expect(find.text('Sign in'), findsOneWidget);
   });
 
   testWidgets('entry flow preserves the root auth-gate route', (tester) async {
