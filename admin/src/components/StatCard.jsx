@@ -31,14 +31,14 @@ export default function StatCard({ title, value, change, trend, icon, color = 's
         <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${palette.bg} ${palette.text}`}>
           <Icon size={20} strokeWidth={2} />
         </div>
-        <span
+        {change != null && <span
           className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
             isUp ? 'bg-success-50 text-success-600' : 'bg-danger-50 text-danger-600'
           }`}
         >
           {isUp ? <ArrowUpRight size={13} /> : <ArrowDownRight size={13} />}
           {change}
-        </span>
+        </span>}
       </div>
 
       <p className="mt-4 text-sm font-medium text-ink-600/70">{title}</p>

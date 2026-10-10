@@ -1,51 +1,34 @@
-# SwiftServe Admin Dashboard — Part 1: Login Page
+﻿# SwiftServe Admin
 
-Static-data, no-backend Login page for the SwiftServe Admin Dashboard capstone project.
+React/Vite admin dashboard using Firebase Authentication and the SwiftServe backend.
 
-## Stack
+## Local setup
 
-React (Vite) · Tailwind CSS · React Router DOM · React Icons · Framer Motion · react-hot-toast
+1. Copy `.env.example` to `.env` and fill in your Firebase web app configuration. Use the same Firebase project as the backend. The local backend URL is `VITE_API_BASE_URL=http://localhost:5000`.
+2. In `../swiftserve-backend`, run `npm install`, `npm run models:download`, and `npm start`. The backend needs its Firebase application credentials configured.
+3. Create or select an existing Firebase Authentication account, then grant access from the backend folder:
 
-## Getting Started
+   ```powershell
+   npm run admin:claim -- grant your-email@example.com
+   ```
 
-```bash
-npm install
-npm run dev
-```
+4. In this folder, run `npm install` and `npm run dev`. Open the URL Vite prints and sign in with that account.
 
-## Demo Credentials
+Restart Vite after changing `.env`. Sign out and back in after changing admin claims.
 
-- **Email:** admin@swiftserve.com
-- **Password:** admin123
+## Backend integration
 
-On success you're redirected to `/dashboard` (a placeholder page — the real
-Dashboard will be generated in Part 2). On failure, a react-hot-toast error
-appears and you stay on the login screen.
+`src/lib/api.js` sends Firebase bearer tokens to the backend. Worker Verification uses `/api/admin/verifications` to list, inspect, and review worker submissions. The backend requires the `admin: true` custom claim. Dashboard Overview, User Management, Bookings, Reports, Service Categories, Profile, and Notifications now load protected backend data. Pages refresh every 30 seconds. Overview statistics are calculated from Firestore profiles and service requests; Firebase Authentication accounts without a `users` profile are not counted as mobile users.
 
-## Folder Structure
+There are no built-in demo login credentials. Never place a Firebase service-account private key in the frontend or any `VITE_*` variable.
 
-```
-src/
-  assets/
-    logo.png              Placeholder SwiftServe logo
-  components/
-    Logo.jsx              Logo + wordmark, used on the branding panel
-    FeatureCard.jsx        Small feature pill (icon + label)
-    InputField.jsx          Generic labeled input with a leading icon
-    PasswordField.jsx       Password input with show/hide toggle
-    LoginForm.jsx            Form state, static validation, submit handling
-  pages/
-    Login/
-      Login.jsx             Page layout: 40% branding / 60% login card
-  App.jsx                  Routing (`/` → Login, `/dashboard` → placeholder)
-  main.jsx                 App entry point
-  index.css                Tailwind directives + shared input/button classes
-```
+## Data collections and actions
 
-## Notes
+- Users: `users`; suspend/reactivate also updates Firebase Authentication. Worker verification approval stays in the verification review workflow.
+- Bookings: `service_requests`; cancellations preserve the mobile status values and require explicit overrides for accepted/ongoing requests.
+- Reports: `reports`; empty until real reports are saved. Review updates save status, admin notes, and resolution. Account restrictions use User Management.
+- Categories: `service_categories`; empty until categories are added through the admin. Category counts use user and booking category names. Mobile category selectors still need to read this collection to share category management.
+- Admin profile: signed-in Firebase Authentication account plus its Firestore profile; password updates reauthenticate with Firebase.
+- Notifications: `notifications` filtered to the signed-in admin's recipient ID.
 
-- All validation is local/static — no backend or Firebase calls.
-- `remember me` is currently just local component state (no persistence) since
-  no auth/session strategy was specified for this part.
-- The `/dashboard` route is a minimal placeholder purely so navigation after
-  login has somewhere to go — it is not the real Dashboard page.
+Restart the backend after updating routes. Run `npm test` in the backend and `npm run build` in the admin to verify changes. No demo records are inserted into Firestore.

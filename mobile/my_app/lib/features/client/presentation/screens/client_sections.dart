@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../onboarding/presentation/screens/onboarding_screen.dart';
 import '../../../../shared/models/service_request.dart';
 import 'client_request_details_screen.dart';
 
@@ -165,7 +164,24 @@ class ClientMessagesScreen extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final conversations = snapshot.data!.docs.toList();
+                final allConversations = snapshot.data!.docs.toList()
+                  ..sort((a, b) {
+                    final aTime = a.data()['updatedAt'];
+                    final bTime = b.data()['updatedAt'];
+                    if (aTime is! Timestamp && bTime is! Timestamp) return 0;
+                    if (aTime is! Timestamp) return 1;
+                    if (bTime is! Timestamp) return -1;
+                    return bTime.compareTo(aTime);
+                  });
+                final latestByWorker =
+                    <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+                for (final conversation in allConversations) {
+                  final workerId = conversation.data()['workerId']?.toString();
+                  if (workerId != null && workerId.isNotEmpty) {
+                    latestByWorker.putIfAbsent(workerId, () => conversation);
+                  }
+                }
+                final conversations = latestByWorker.values.toList();
 
                 if (conversations.isEmpty) {
                   return const Center(
@@ -467,10 +483,8 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
 
     if (!mounted) return;
 
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      (route) => false,
-    );
+    // Keep AuthGate as the root so it can route the next signed-in user.
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override

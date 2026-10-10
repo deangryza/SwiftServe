@@ -26,12 +26,12 @@ export default function ProfileDropdown() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-2 rounded-xl border border-surface-200 py-1 pl-1 pr-2 transition-colors hover:bg-surface-100"
+        className="flex items-center gap-1 rounded-xl border border-surface-200 p-1 transition-colors hover:bg-surface-100 sm:gap-2 sm:py-1 sm:pl-1 sm:pr-2"
       >
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-swift-500 font-display text-xs font-semibold text-white">
-          RC
+          {(auth.currentUser?.displayName || auth.currentUser?.email || 'A').slice(0, 2).toUpperCase()}
         </span>
-        <ChevronDown size={14} className="text-ink-600/60" />
+        <ChevronDown size={14} className="hidden text-ink-600/60 sm:block" />
       </button>
 
       <AnimatePresence>
@@ -41,15 +41,15 @@ export default function ProfileDropdown() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.97 }}
             transition={{ duration: 0.15 }}
-            className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-card-hover"
+            className="fixed left-3 right-3 top-14 z-30 mt-2 overflow-hidden rounded-2xl border border-surface-200 bg-white shadow-card-hover sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:w-56"
           >
             <div className="border-b border-surface-200 px-4 py-3">
-              <p className="text-sm font-semibold text-ink-900">Rica Consunji</p>
-              <p className="text-xs text-ink-600/50">Super Admin</p>
+              <p className="text-sm font-semibold text-ink-900">{auth.currentUser?.displayName || auth.currentUser?.email}</p>
+              <p className="text-xs text-ink-600/50">Administrator</p>
             </div>
             <ul className="py-1.5 text-sm">
               <li>
-                <button className="flex w-full items-center gap-2.5 px-4 py-2 text-ink-700 hover:bg-surface-50">
+                <button onClick={() => { setOpen(false); navigate('/dashboard/profile'); }} className="flex w-full items-center gap-2.5 px-4 py-2 text-ink-700 hover:bg-surface-50">
                   <User size={15} /> Profile
                 </button>
               </li>

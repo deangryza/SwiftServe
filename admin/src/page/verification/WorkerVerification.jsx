@@ -159,7 +159,7 @@ export default function WorkerVerification() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
         {SUMMARY_CONFIG.map((card, i) => {
           const Icon = card.icon;
           return (

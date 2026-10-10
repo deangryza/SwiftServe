@@ -2,6 +2,43 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../shared/models/service_request.dart';
+import 'client_request_details_screen.dart';
+
+Future<void> _openClientNotification(
+  BuildContext context,
+  QueryDocumentSnapshot<Map<String, dynamic>> notification,
+) async {
+  final requestId = notification.data()['requestId']?.toString();
+  try {
+    await notification.reference.update({'read': true});
+    if (requestId == null || requestId.isEmpty) {
+      throw StateError('This notification has no linked request.');
+    }
+    final requestDocument = await FirebaseFirestore.instance
+        .collection('service_requests')
+        .doc(requestId)
+        .get();
+    if (!requestDocument.exists) {
+      throw StateError('This service request is no longer available.');
+    }
+    if (!context.mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientRequestDetailsScreen(
+          request: ServiceRequest.fromDocument(requestDocument),
+        ),
+      ),
+    );
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not open notification: $error')),
+    );
+  }
+}
+
 class ClientNotificationsScreen extends StatelessWidget {
   const ClientNotificationsScreen({super.key});
 
@@ -39,10 +76,15 @@ class ClientNotificationsScreen extends StatelessWidget {
                   children: notifications.map((document) {
                     final data = document.data();
                     return ListTile(
-                      leading: const Icon(Icons.notifications_outlined),
+                      leading: Icon(
+                        data['read'] == true
+                            ? Icons.notifications_outlined
+                            : Icons.notifications_active,
+                      ),
                       title: Text((data['title'] ?? 'Update').toString()),
                       subtitle: Text((data['body'] ?? '').toString()),
-                      onTap: () => document.reference.update({'read': true}),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => _openClientNotification(context, document),
                     );
                   }).toList(),
                 );

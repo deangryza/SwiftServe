@@ -1,3 +1,6 @@
+import useAdminData from '../../lib/useAdminData';
+import DataState from '../../components/DataState';
+import { apiRequest } from '../../lib/api';
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -9,14 +12,12 @@ import {
   Ban,
 } from "lucide-react";
 
-import { bookings as initialBookings, STATUS } from "../../data/bookings";
+import { STATUS } from "../../data/bookings";
 
 import BookingFilters from "../../components/booking/BookingFilters";
 import BookingTable from "../../components/booking/BookingTable";
 import BookingDetailsModal from "../../components/booking/BookingDetailsModal";
 
-// TODO: Replace static booking data with API/database data.
-// e.g. useEffect(() => { fetchBookings().then(setBookings) }, []);
 
 const SUMMARY_CONFIG = [
   {
@@ -60,7 +61,7 @@ const COLOR_STYLES = {
 };
 
 export default function BookingManagement() {
-  const [bookings, setBookings] = useState(initialBookings);
+  const { data: bookings, setData: setBookings, loading, error } = useAdminData('bookings');
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
@@ -109,7 +110,7 @@ export default function BookingManagement() {
     setDateFilter("");
   };
 
-  const handleCancel = (booking, mode) => {
+  const handleCancel = async (booking, mode) => {
     if (!booking?.id) return;
 
     if (mode === "override") {
@@ -120,21 +121,18 @@ export default function BookingManagement() {
       if (!confirmed) return;
     }
 
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id ? { ...b, status: STATUS.CANCELLED } : b
-      )
-    );
+    try {
+      const { item } = await apiRequest('/api/admin/bookings/' + encodeURIComponent(booking.id), { method: 'PATCH', body: JSON.stringify({ status: 'Cancelled', override: mode === 'override' }) });
+      setBookings(previous => previous.map(current => current.id === item.id ? item : current));
+      setSelectedBooking(previous => previous?.id === item.id ? item : previous);
+      toast.success('Booking cancelled.');
+    } catch (failure) { toast.error(failure.message); }
 
-    toast.success(
-      mode === "override"
-        ? `Booking ${booking.id} cancelled via admin override.`
-        : `Booking ${booking.id} cancelled.`
-    );
   };
 
   return (
     <div>
+      <DataState loading={loading} error={error} />
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-800">
@@ -178,6 +176,7 @@ export default function BookingManagement() {
         onSearchChange={setSearchTerm}
         statusFilter={statusFilter}
         onStatusChange={setStatusFilter}
+        categories={[...new Set(bookings.map(booking => booking.category).filter(Boolean))]}
         categoryFilter={categoryFilter}
         onCategoryChange={setCategoryFilter}
         dateFilter={dateFilter}

@@ -247,7 +247,8 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
   Widget _buildSearchResults(String query) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
-          .collection('users')
+          .collection('worker_profiles')
+          .where('verificationStatus', isEqualTo: 'verified')
           .limit(100)
           .snapshots(),
       builder: (context, snapshot) {
@@ -267,17 +268,15 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
         final workers = snapshot.data!.docs.where((doc) {
           final data = doc.data();
 
-          // Change 'worker' if your registration stores a
-          // different role value, such as 'service_provider'.
-          if (data['role'] != 'worker') return false;
-
           final name = (data['fullName'] ?? '').toString().toLowerCase();
           final skills = _skillsText(data['skills']).toLowerCase();
           final location = (data['location'] ?? '').toString().toLowerCase();
+          final category = (data['category'] ?? '').toString().toLowerCase();
 
           return name.contains(query) ||
               skills.contains(query) ||
-              location.contains(query);
+              location.contains(query) ||
+              category.contains(query);
         }).toList();
 
         if (workers.isEmpty) {

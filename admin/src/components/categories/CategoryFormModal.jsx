@@ -79,7 +79,7 @@ export default function CategoryFormModal({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
         onClick={onClose}
       >
         <motion.div
@@ -88,9 +88,9 @@ export default function CategoryFormModal({
           exit={{ opacity: 0, scale: 0.96, y: 10 }}
           transition={{ duration: 0.18 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-2xl shadow-xl w-full max-w-md"
+          className="w-full max-w-md rounded-t-2xl bg-white shadow-xl sm:rounded-2xl"
         >
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between border-b border-gray-100 px-4 py-4 sm:px-6">
             <h2 className="text-lg font-semibold text-gray-800">
               {mode === "edit" ? "Edit Service Category" : "Add Service Category"}
             </h2>
@@ -103,7 +103,7 @@ export default function CategoryFormModal({
             </button>
           </div>
 
-          <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4 px-4 py-5 sm:px-6">
             <div>
               <label className="text-xs text-gray-400 mb-1 block">
                 Category Name
@@ -151,7 +151,7 @@ export default function CategoryFormModal({
               </p>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
+            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={onClose}

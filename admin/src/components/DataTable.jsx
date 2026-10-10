@@ -6,7 +6,7 @@
 
 export default function DataTable({ columns, children, minWidth = '640px' }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-surface-200">
+    <div className="-mx-1 overflow-x-auto rounded-xl border border-surface-200 overscroll-x-contain sm:mx-0">
       <table className="w-full text-left text-sm" style={{ minWidth }}>
         <thead>
           <tr className="border-b border-surface-200 bg-surface-50">

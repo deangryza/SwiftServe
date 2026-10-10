@@ -1,3 +1,6 @@
+import useAdminData from '../lib/useAdminData';
+import DataState from '../components/DataState';
+import { apiRequest } from '../lib/api';
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -9,7 +12,7 @@ import {
 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { allUsers as initialUsers } from "../data/users";
+
 import UserFilters from "./UserFilters";
 import UserTable from "./UserTable";
 import UserDetailsModal from "./UserDetailsModal";
@@ -48,11 +51,7 @@ const SUMMARY_CONFIG = [
 ];
 
 export default function UserManagement() {
-  // Make sure the imported data is always an array
-  const [userList, setUserList] = useState(
-    Array.isArray(initialUsers) ? initialUsers : []
-  );
-
+  const { data: userList, setData: setUserList, loading, error } = useAdminData('users');
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -107,10 +106,10 @@ export default function UserManagement() {
       name.includes(term) ||
       id.includes(term) ||
       category.includes(term) ||
-      location.includes(term);
+      location.includes(term) || String(user.email || "").toLowerCase().includes(term) || String(user.phone || "").includes(term);
 
     const role =
-      user?.id?.startsWith("WRK-")
+      user?.role === "Worker"
         ? "Worker"
         : "Client";
 
@@ -135,21 +134,14 @@ export default function UserManagement() {
   // STATUS UPDATE
   // ----------------------------------------
 
-  const updateStatus = (user, newStatus, message) => {
+  const updateStatus = async (user, newStatus, message) => {
     if (!user) return;
-
-    setUserList((previousUsers) =>
-      previousUsers.map((currentUser) =>
-        currentUser?.id === user?.id
-          ? {
-              ...currentUser,
-              status: newStatus,
-            }
-          : currentUser
-      )
-    );
-
-    toast.success(message);
+    if (user.role === 'Worker' && ['Approved', 'Rejected'].includes(newStatus) && user.status !== 'Suspended') { window.location.assign('/dashboard/verification'); return; }
+    try {
+      const { item } = await apiRequest('/api/admin/users/' + encodeURIComponent(user.id), { method: 'PATCH', body: JSON.stringify({ status: newStatus }) });
+      setUserList(previous => previous.map(current => current.id === item.id ? item : current));
+      toast.success(message);
+    } catch (failure) { toast.error(failure.message); }
   };
 
   const handleApprove = (user) => {
@@ -190,6 +182,7 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6">
+      <DataState loading={loading} error={error} />
       {/* PAGE HEADER */}
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">
@@ -202,7 +195,7 @@ export default function UserManagement() {
       </div>
 
       {/* SUMMARY CARDS */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
         {SUMMARY_CONFIG.map((card, index) => {
           const Icon = card.icon;
 

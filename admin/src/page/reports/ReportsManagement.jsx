@@ -1,3 +1,6 @@
+import useAdminData from '../../lib/useAdminData';
+import DataState from '../../components/DataState';
+import { apiRequest } from '../../lib/api';
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -11,10 +14,8 @@ import {
 import ReportFilters from "../../components/reports/ReportFilters";
 import ReportTable from "../../components/reports/ReportTable";
 import ReportDetailsModal from "../../components/reports/ReportDetailsModal";
-import { reports as initialReports, REPORT_STATUS } from "../../data/reports";
+import { REPORT_STATUS } from "../../data/reports";
 
-// TODO: Replace static reports data with API/database data.
-// e.g. useEffect(() => { fetchReports().then(setReports) }, []);
 
 const SUMMARY_CONFIG = [
   { key: "total", label: "Total Reports", icon: ClipboardList, color: "blue" },
@@ -43,7 +44,7 @@ const COLOR_STYLES = {
 };
 
 export default function ReportsManagement() {
-  const [reports, setReports] = useState(initialReports);
+  const { data: reports, setData: setReports, loading, error } = useAdminData('reports');
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [typeFilter, setTypeFilter] = useState("All");
@@ -96,14 +97,14 @@ export default function ReportsManagement() {
     setPriorityFilter("All");
   };
 
-  const handleSaveReport = (reportId, updates) => {
-    setReports((prev) =>
-      prev.map((r) => (r.id === reportId ? { ...r, ...updates } : r))
-    );
+  const handleSaveReport = async (reportId, updates) => {
+    const { item } = await apiRequest('/api/admin/reports/' + encodeURIComponent(reportId), { method: 'PATCH', body: JSON.stringify(updates) });
+    setReports(previous => previous.map(report => report.id === item.id ? item : report));
   };
 
   return (
     <div>
+      <DataState loading={loading} error={error} />
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-800">
@@ -116,7 +117,7 @@ export default function ReportsManagement() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
         {SUMMARY_CONFIG.map((card, i) => {
           const Icon = card.icon;
           return (

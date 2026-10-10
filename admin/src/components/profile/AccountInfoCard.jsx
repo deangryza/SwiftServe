@@ -35,8 +35,7 @@ export default function AccountInfoCard({ profile }) {
       </div>
 
       <p className="text-xs text-gray-400 mt-4">
-        Session and login details are placeholder values for this prototype.
-        Real session tracking will be added once authentication is connected.
+        Account dates come from Firebase Authentication. Device information describes this browser.
       </p>
     </motion.div>
   );

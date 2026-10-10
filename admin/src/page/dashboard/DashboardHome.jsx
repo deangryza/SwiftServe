@@ -1,6 +1,6 @@
 // src/pages/Dashboard/DashboardHome.jsx
 // Dashboard Overview — the landing page after login.
-// Composed entirely from reusable components + static dummy data.
+// Overview derived from protected Firestore-backed API responses.
 
 import {
   BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
@@ -17,22 +17,47 @@ import StatusBadge from '../../components/StatusBadge'
 import QuickActionCard from '../../components/QuickActionCard'
 import Timeline from '../../components/Timeline'
 
-import { summaryStats, monthlyRegistrations, weeklyBookings, verificationStatus, systemHealth, quickActions } from '../../data/dashboardStats'
-import { categories } from '../../data/categories'
-import { latestBookings } from '../../data/bookings'
-import { pendingWorkers } from '../../data/users'
-import { recentReports } from '../../data/reports'
-import { timelineEvents } from '../../data/timeline'
+import { useNavigate } from 'react-router-dom';
+import useAdminData from '../../lib/useAdminData';
+import DataState from '../../components/DataState';
 
 const HEALTH_ICONS = { Server, Radio, FileWarning, ShieldQuestion, Tag, Database, Plug }
 
-function noop(label) {
-  // Static demo action — every button performs a visible, harmless action.
-  // eslint-disable-next-line no-alert
-  alert(label)
-}
-
 export default function DashboardHome() {
+  const navigate = useNavigate();
+  const { data, loading, error } = useAdminData('overview', { users: [], bookings: [], reports: [], categories: [], verifications: [] });
+  const { users, bookings, reports, verifications } = data;
+  const count = (items, status) => items.filter(item => item.status === status).length;
+  const verified = count(verifications, 'verified');
+  const pending = count(verifications, 'pending') + count(verifications, 'under_review');
+  const summaryStats = [
+    ['total-users', 'Total Users', users.length, 'Users', 'swift'],
+    ['verified-workers', 'Verified Workers', verified, 'ShieldCheck', 'success'],
+    ['pending-verification', 'Pending Verification', pending, 'Clock', 'warning'],
+    ['active-bookings', 'Active Bookings', bookings.filter(b => ['Accepted', 'Ongoing'].includes(b.status)).length, 'CalendarClock', 'violet'],
+    ['completed-jobs', 'Completed Jobs', count(bookings, 'Completed'), 'CheckCircle2', 'success'],
+    ['cancelled-jobs', 'Cancelled Jobs', count(bookings, 'Cancelled'), 'XCircle', 'danger'],
+    ['reports', 'Reports Received', reports.length, 'FileWarning', 'warning'],
+    ['resolved', 'Resolved Complaints', count(reports, 'Resolved'), 'BadgeCheck', 'swift'],
+  ].map(([id, title, value, icon, color]) => ({ id, title, value, icon, color }));
+  const monthlyRegistrations = Array.from({ length: 8 }, (_, index) => {
+    const date = new Date(); date.setDate(1); date.setMonth(date.getMonth() - 7 + index);
+    return { month: date.toLocaleString('en', { month: 'short' }), users: users.filter(user => { const created = new Date(user.createdAt); return created.getMonth() === date.getMonth() && created.getFullYear() === date.getFullYear(); }).length };
+  });
+  const weeklyBookings = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(); date.setDate(date.getDate() - 6 + index);
+    return { day: date.toLocaleString('en', { weekday: 'short' }), bookings: bookings.filter(booking => new Date(booking.createdAt).toDateString() === date.toDateString()).length };
+  });
+  const categoryNames = [...new Set([...data.categories.map(c => c.name), ...users.filter(u => u.role === 'Worker').map(u => u.category)].filter(Boolean))];
+  const categories = categoryNames.map((name, index) => ({ name, value: users.filter(u => u.role === 'Worker' && u.category === name).length, color: ['#2F6FED', '#12B76A', '#F59E0B', '#6D4FEA'][index % 4] }));
+  const verificationStatus = [{ name: 'Verified', value: verified, color: '#12B76A' }, { name: 'Pending', value: pending, color: '#F59E0B' }, { name: 'Rejected', value: count(verifications, 'rejected'), color: '#F04438' }];
+  const latestBookings = bookings.slice(0, 5).map(b => ({ ...b, client: b.clientName, worker: b.providerName }));
+  const pendingWorkers = verifications.filter(v => ['pending', 'under_review'].includes(v.status)).map(v => ({ ...v, name: users.find(u => u.id === v.id)?.name || v.id, status: 'Pending' }));
+  const recentReports = reports.slice(0, 5);
+  const timelineEvents = [...users.filter(u => u.createdAt).map(u => ({ id: 'user-' + u.id, type: 'worker_registered', text: u.name + ' registered', time: u.createdAt })), ...bookings.filter(b => b.createdAt).map(b => ({ id: 'booking-' + b.id, type: 'booking_created', text: b.serviceTitle + ' requested', time: b.createdAt }))].sort((a, b) => b.time.localeCompare(a.time)).slice(0, 10);
+  const systemHealth = [{ label: 'Database', value: 'Connected', icon: 'Database' }, { label: 'Admin API', value: 'Connected', icon: 'Plug' }, { label: 'Pending Reports', value: count(reports, 'Pending'), icon: 'FileWarning' }];
+  const quickActions = [{ id: 'verification', title: 'Review Workers', description: 'Review submitted verification', icon: 'UserCheck', color: 'success' }, { id: 'users', title: 'Manage Users', description: 'Manage registered accounts', icon: 'Users', color: 'swift' }, { id: 'reports', title: 'View Reports', description: 'Review complaints', icon: 'FileWarning', color: 'warning' }, { id: 'bookings', title: 'Bookings', description: 'Manage service requests', icon: 'CalendarClock', color: 'violet' }];
+  if (loading || error) return <DataState loading={loading} error={error} />;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -41,7 +66,7 @@ export default function DashboardHome() {
       />
 
       {/* Summary cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:gap-4 lg:grid-cols-4">
         {summaryStats.map((stat, i) => (
           <StatCard key={stat.id} {...stat} index={i} />
         ))}
@@ -61,7 +86,7 @@ export default function DashboardHome() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Service Categories" subtitle="Active listings by category">
+        <ChartCard title="Service Categories" subtitle="Registered workers by category">
           <ResponsiveContainer width="100%" height={260}>
             <PieChart>
               <Pie data={categories} dataKey="value" nameKey="name" innerRadius={0} outerRadius={95} paddingAngle={1}>
@@ -82,7 +107,7 @@ export default function DashboardHome() {
           </div>
         </ChartCard>
 
-        <ChartCard title="Weekly Bookings" subtitle="Bookings created per day, this week">
+        <ChartCard title="Weekly Bookings" subtitle="Bookings created per day, last 7 days">
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={weeklyBookings}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E4E8F0" />
@@ -122,10 +147,10 @@ export default function DashboardHome() {
               <td className="whitespace-nowrap px-4 py-3"><StatusBadge status={b.status} /></td>
               <td className="whitespace-nowrap px-4 py-3">
                 <div className="flex gap-2">
-                  <button onClick={() => noop(`Viewing ${b.id}`)} className="inline-flex items-center gap-1 rounded-lg border border-surface-200 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-100">
+                  <button onClick={() => navigate('/dashboard/bookings')} className="inline-flex items-center gap-1 rounded-lg border border-surface-200 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-100">
                     <Eye size={13} /> View
                   </button>
-                  <button onClick={() => noop(`Opening details for ${b.id}`)} className="inline-flex items-center gap-1 rounded-lg bg-swift-50 px-2.5 py-1 text-xs font-medium text-swift-600 hover:bg-swift-100">
+                  <button onClick={() => navigate('/dashboard/bookings')} className="inline-flex items-center gap-1 rounded-lg bg-swift-50 px-2.5 py-1 text-xs font-medium text-swift-600 hover:bg-swift-100">
                     <FileText size={13} /> Details
                   </button>
                 </div>
@@ -145,21 +170,21 @@ export default function DashboardHome() {
                 <p className="font-mono text-[11px] text-ink-600/50">{w.id}</p>
               </td>
               <td className="whitespace-nowrap px-4 py-3">
-                <StatusBadge status={w.idSubmitted ? 'Approved' : 'Pending'} />
+                <StatusBadge status={w.idSubmitted ? 'Submitted' : 'Not recorded'} />
               </td>
               <td className="whitespace-nowrap px-4 py-3">
-                <StatusBadge status={w.faceVerified ? 'Approved' : 'Pending'} />
+                <StatusBadge status={w.faceVerified == null ? 'Not recorded' : w.faceVerified ? 'Verified' : 'Not verified'} />
               </td>
               <td className="whitespace-nowrap px-4 py-3"><StatusBadge status={w.status} /></td>
               <td className="whitespace-nowrap px-4 py-3">
                 <div className="flex gap-2">
-                  <button onClick={() => noop(`Approved ${w.name}`)} className="inline-flex items-center gap-1 rounded-lg bg-success-50 px-2.5 py-1 text-xs font-medium text-success-600 hover:bg-success-100">
+                  <button onClick={() => navigate('/dashboard/verification')} className="inline-flex items-center gap-1 rounded-lg bg-success-50 px-2.5 py-1 text-xs font-medium text-success-600 hover:bg-success-100">
                     <Check size={13} /> Approve
                   </button>
-                  <button onClick={() => noop(`Rejected ${w.name}`)} className="inline-flex items-center gap-1 rounded-lg bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-600 hover:bg-danger-100">
+                  <button onClick={() => navigate('/dashboard/verification')} className="inline-flex items-center gap-1 rounded-lg bg-danger-50 px-2.5 py-1 text-xs font-medium text-danger-600 hover:bg-danger-100">
                     <X size={13} /> Reject
                   </button>
-                  <button onClick={() => noop(`Reviewing ${w.name}`)} className="inline-flex items-center gap-1 rounded-lg border border-surface-200 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-100">
+                  <button onClick={() => navigate('/dashboard/verification')} className="inline-flex items-center gap-1 rounded-lg border border-surface-200 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-100">
                     <ClipboardCheck size={13} /> Review
                   </button>
                 </div>
@@ -181,13 +206,13 @@ export default function DashboardHome() {
               <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-ink-600">{r.date}</td>
               <td className="whitespace-nowrap px-4 py-3">
                 <div className="flex gap-2">
-                  <button onClick={() => noop(`Resolved ${r.id}`)} className="inline-flex items-center gap-1 rounded-lg bg-success-50 px-2.5 py-1 text-xs font-medium text-success-600 hover:bg-success-100">
+                  <button onClick={() => navigate('/dashboard/reports')} className="inline-flex items-center gap-1 rounded-lg bg-success-50 px-2.5 py-1 text-xs font-medium text-success-600 hover:bg-success-100">
                     <CheckCircle2 size={13} /> Resolve
                   </button>
-                  <button onClick={() => noop(`Viewing ${r.id}`)} className="inline-flex items-center gap-1 rounded-lg border border-surface-200 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-100">
+                  <button onClick={() => navigate('/dashboard/reports')} className="inline-flex items-center gap-1 rounded-lg border border-surface-200 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-100">
                     <Eye size={13} /> View
                   </button>
-                  <button onClick={() => noop(`Dismissed ${r.id}`)} className="inline-flex items-center gap-1 rounded-lg bg-surface-100 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-200">
+                  <button onClick={() => navigate('/dashboard/reports')} className="inline-flex items-center gap-1 rounded-lg bg-surface-100 px-2.5 py-1 text-xs font-medium text-ink-600 hover:bg-surface-200">
                     <XCircle size={13} /> Dismiss
                   </button>
                 </div>
@@ -202,20 +227,20 @@ export default function DashboardHome() {
         <h2 className="mb-3 font-display text-sm font-semibold text-ink-900">Quick Actions</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {quickActions.map((action, i) => (
-            <QuickActionCard key={action.id} {...action} index={i} onClick={() => noop(`Opening ${action.title}`)} />
+            <QuickActionCard key={action.id} {...action} index={i} onClick={() => navigate('/dashboard/' + action.id)} />
           ))}
         </div>
       </div>
 
       {/* Recent Activity + System Health */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard title="Recent Activity" subtitle="Live feed of platform events" className="lg:col-span-2">
+        <ChartCard title="Recent Activity" subtitle="Recent saved records; refreshed every 30 seconds" className="lg:col-span-2">
           <div className="max-h-[420px] overflow-y-auto pr-1">
             <Timeline events={timelineEvents} />
           </div>
         </ChartCard>
 
-        <ChartCard title="System Health" subtitle="All systems operational">
+        <ChartCard title="System Health" subtitle="Database connection verified">
           <ul className="space-y-3">
             {systemHealth.map((item, i) => {
               const Icon = HEALTH_ICONS[item.icon]

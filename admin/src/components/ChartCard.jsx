@@ -9,9 +9,9 @@ export default function ChartCard({ title, subtitle, action, children, className
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
-      className={`rounded-2xl border border-surface-200 bg-white p-5 shadow-card ${className}`}
+      className={`min-w-0 rounded-2xl border border-surface-200 bg-white p-4 shadow-card sm:p-5 ${className}`}
     >
-      <div className="mb-4 flex items-start justify-between">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 className="font-display text-sm font-semibold text-ink-900">{title}</h3>
           {subtitle && <p className="mt-0.5 text-xs text-ink-600/60">{subtitle}</p>}

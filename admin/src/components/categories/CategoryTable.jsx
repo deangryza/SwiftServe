@@ -19,6 +19,20 @@ function StatusBadge({ status }) {
   );
 }
 
+function formatCreatedDate(category) {
+  const value = category?.dateCreated || category?.createdAt;
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+
+  return new Intl.DateTimeFormat("en-PH", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  }).format(date);
+}
+
 export default function CategoryTable({
   categories,
   onEdit,
@@ -83,7 +97,7 @@ export default function CategoryTable({
                   <td className="px-4 py-3 text-gray-500">
                     <span className="inline-flex items-center gap-1">
                       <Calendar size={13} className="text-gray-400" />
-                      {c?.dateCreated ?? "—"}
+                      {formatCreatedDate(c)}
                     </span>
                   </td>
                   <td className="px-4 py-3">

@@ -1,3 +1,5 @@
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 import { useState } from "react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -23,7 +25,7 @@ export default function ChangePasswordCard() {
   const toggleVisibility = (field) =>
     setVisibility((prev) => ({ ...prev, [field]: !prev[field] }));
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     if (!form.currentPassword || !form.newPassword || !form.confirmPassword) {
@@ -41,10 +43,14 @@ export default function ChangePasswordCard() {
       return;
     }
 
-    // TODO: Replace with an API call to change the admin password.
-    // This prototype has no backend, so no password is actually changed.
-    toast.success("Password changed successfully.");
-    setForm(initialForm);
+    try {
+      const user = auth.currentUser;
+      if (!user?.email) throw new Error('Please sign in again.');
+      await reauthenticateWithCredential(user, EmailAuthProvider.credential(user.email, form.currentPassword));
+      await updatePassword(user, form.newPassword);
+      toast.success('Password changed successfully.'); setForm(initialForm);
+    } catch (failure) { toast.error(failure.message); }
+
   };
 
   return (

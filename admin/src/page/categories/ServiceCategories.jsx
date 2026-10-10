@@ -1,3 +1,6 @@
+import useAdminData from '../../lib/useAdminData';
+import DataState from '../../components/DataState';
+import { apiRequest } from '../../lib/api';
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import toast from "react-hot-toast";
@@ -8,13 +11,9 @@ import CategoryTable from "../../components/categories/CategoryTable";
 import CategoryFormModal from "../../components/categories/CategoryFormModal";
 import ConfirmDialog from "../../components/categories/ConfirmDialog";
 import {
-  serviceCategories as initialCategories,
   CATEGORY_STATUS,
 } from "../../data/serviceCategories";
 
-// TODO: Replace static category data with API/database data, and replace
-// workerCount / bookingCount with live counts derived from the real
-// users.js / bookings.js once their structure is confirmed.
 
 const SUMMARY_CONFIG = [
   { key: "total", label: "Total Categories", icon: Tags, color: "blue" },
@@ -33,7 +32,7 @@ const COLOR_STYLES = {
 };
 
 export default function ServiceCategories() {
-  const [categories, setCategories] = useState(initialCategories);
+  const { data: categories, setData: setCategories, loading, error } = useAdminData('categories');
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -91,27 +90,13 @@ export default function ServiceCategories() {
     setFormOpen(true);
   };
 
-  const handleFormSubmit = (data) => {
-    if (formMode === "edit" && editingCategory) {
-      setCategories((prev) =>
-        prev.map((c) =>
-          c.id === editingCategory.id ? { ...c, ...data } : c
-        )
-      );
-      toast.success("Service category updated successfully.");
-    } else {
-      const newCategory = {
-        id: `CAT-${String(Date.now()).slice(-6)}`,
-        ...data,
-        workerCount: 0,
-        bookingCount: 0,
-        dateCreated: new Date().toISOString().slice(0, 10),
-      };
-      setCategories((prev) => [newCategory, ...prev]);
-      toast.success("Service category added successfully.");
-    }
-    setFormOpen(false);
-    setEditingCategory(null);
+  const handleFormSubmit = async (data) => {
+    try {
+      const editing = formMode === 'edit' && editingCategory;
+      const { item } = await apiRequest('/api/admin/categories' + (editing ? '/' + encodeURIComponent(editingCategory.id) : ''), { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(data) });
+      setCategories(previous => editing ? previous.map(category => category.id === item.id ? { ...category, ...item } : category) : [item, ...previous]);
+      toast.success('Service category saved.'); setFormOpen(false); setEditingCategory(null);
+    } catch (failure) { toast.error(failure.message); }
   };
 
   const handleRequestToggleStatus = (category) => {
@@ -123,47 +108,27 @@ export default function ServiceCategories() {
     }
   };
 
-  const applyToggleStatus = (category) => {
-    const nextStatus =
-      category.status === CATEGORY_STATUS.ACTIVE
-        ? CATEGORY_STATUS.INACTIVE
-        : CATEGORY_STATUS.ACTIVE;
-
-    setCategories((prev) =>
-      prev.map((c) => (c.id === category.id ? { ...c, status: nextStatus } : c))
-    );
-
-    toast.success(
-      nextStatus === CATEGORY_STATUS.INACTIVE
-        ? "Service category deactivated."
-        : "Service category activated."
-    );
+  const applyToggleStatus = async (category) => {
+    try {
+      const status = category.status === CATEGORY_STATUS.ACTIVE ? CATEGORY_STATUS.INACTIVE : CATEGORY_STATUS.ACTIVE;
+      const { item } = await apiRequest('/api/admin/categories/' + encodeURIComponent(category.id), { method: 'PATCH', body: JSON.stringify({ status }) });
+      setCategories(previous => previous.map(current => current.id === item.id ? { ...current, ...item } : current));
+      toast.success('Category status updated.');
+    } catch (failure) { toast.error(failure.message); }
   };
 
   const handleRequestDelete = (category) => {
     setConfirmState({ type: "delete", category });
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!confirmState) return;
     const { type, category } = confirmState;
-
-    if (type === "toggle") {
-      applyToggleStatus(category);
-    } else if (type === "delete") {
-      const hasDependents =
-        (category.workerCount ?? 0) > 0 || (category.bookingCount ?? 0) > 0;
-
-      if (hasDependents) {
-        toast.error(
-          "This category has existing workers or bookings and cannot be deleted. You can deactivate it instead."
-        );
-      } else {
-        setCategories((prev) => prev.filter((c) => c.id !== category.id));
-        toast.success("Service category deleted.");
-      }
-    }
-
+    if (type === 'toggle') await applyToggleStatus(category);
+    else { try {
+      await apiRequest('/api/admin/categories/' + encodeURIComponent(category.id), { method: 'DELETE' });
+      setCategories(previous => previous.filter(current => current.id !== category.id)); toast.success('Category deleted.');
+    } catch (failure) { toast.error(failure.message); } }
     setConfirmState(null);
   };
 
@@ -191,6 +156,7 @@ export default function ServiceCategories() {
 
   return (
     <div>
+      <DataState loading={loading} error={error} />
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
@@ -212,7 +178,7 @@ export default function ServiceCategories() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-5">
         {SUMMARY_CONFIG.map((card, i) => {
           const Icon = card.icon;
           return (

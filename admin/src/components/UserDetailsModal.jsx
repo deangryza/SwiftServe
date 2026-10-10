@@ -14,20 +14,20 @@ import StatusBadge from "./StatusBadge";
 export default function UserDetailsModal({ user, onClose }) {
   if (!user) return null;
 
-  const isWorker = user.id?.startsWith("WRK-");
+  const isWorker = user.role === "Worker";
   const role = isWorker ? "Worker" : "Client";
 
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 sm:p-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
       >
         <motion.div
-          className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-xl"
+          className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
           initial={{ opacity: 0, y: 24, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 24, scale: 0.98 }}
@@ -135,14 +135,14 @@ export default function UserDetailsModal({ user, onClose }) {
               <VerificationTile
                 icon={BadgeCheck}
                 label="ID Submitted"
-                value={user.idSubmitted ? "YES" : "NO"}
+                value={user.idSubmitted == null ? "Not recorded" : user.idSubmitted ? "YES" : "NO"}
                 tone={user.idSubmitted ? "good" : "bad"}
               />
 
               <VerificationTile
                 icon={ScanFace}
                 label="Facial Verification"
-                value={user.faceVerified ? "VERIFIED" : "NOT VERIFIED"}
+                value={user.faceVerified == null ? "Not recorded" : user.faceVerified ? "VERIFIED" : "NOT VERIFIED"}
                 tone={user.faceVerified ? "good" : "bad"}
               />
             </div>

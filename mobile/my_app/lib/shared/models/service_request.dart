@@ -27,6 +27,8 @@ class ServiceRequest {
     this.workerId,
     this.workerName,
     this.schedule,
+    this.scheduleFrom,
+    this.scheduleTo,
   });
 
   final String id;
@@ -41,6 +43,8 @@ class ServiceRequest {
   final String? workerId;
   final String? workerName;
   final DateTime? schedule;
+  final DateTime? scheduleFrom;
+  final DateTime? scheduleTo;
 
   factory ServiceRequest.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> document,
@@ -59,6 +63,12 @@ class ServiceRequest {
       workerId: data['workerId']?.toString(),
       workerName: data['workerName']?.toString(),
       schedule: (data['schedule'] as Timestamp?)?.toDate(),
+      scheduleFrom:
+          (data['scheduleFrom'] as Timestamp?)?.toDate() ??
+          (data['schedule'] as Timestamp?)?.toDate(),
+      scheduleTo:
+          (data['scheduleTo'] as Timestamp?)?.toDate() ??
+          (data['schedule'] as Timestamp?)?.toDate(),
     );
   }
 }

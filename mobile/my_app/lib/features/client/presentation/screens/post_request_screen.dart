@@ -10,6 +10,77 @@ class PostRequestScreen extends StatefulWidget {
   State<PostRequestScreen> createState() => _PostRequestScreenState();
 }
 
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.displayDate,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? value;
+  final String Function(DateTime date) displayDate;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(11),
+      child: Container(
+        height: 54,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFCFCFE),
+          border: Border.all(color: const Color(0xFFE2E5EC)),
+          borderRadius: BorderRadius.circular(11),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.calendar_today_outlined,
+              size: 15,
+              color: Color(0xFF667085),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: Color(0xFF929AAA),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.7,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    value == null ? 'Select date' : displayDate(value!),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: value == null
+                          ? const Color(0xFF929AAA)
+                          : const Color(0xFF1D1E21),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PostRequestScreenState extends State<PostRequestScreen> {
   final _formKey = GlobalKey<FormState>();
 
@@ -19,18 +90,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   final _descriptionController = TextEditingController();
 
   String? _selectedCategory;
-  DateTime? _selectedDate;
+  DateTime? _fromDate;
+  DateTime? _toDate;
   bool _isPosting = false;
-
-  final List<String> _categories = [
-    'Home services',
-    'Academic help',
-    'Repairs',
-    'Errands',
-    'Cleaning',
-    'Beauty',
-    'Other',
-  ];
 
   static const _dark = Color(0xFF1D1E21);
   static const _border = Color(0xFFE2E5EC);
@@ -100,27 +162,39 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     return '$month ${date.day}, ${date.year}';
   }
 
-  Future<void> _pickSchedule() async {
+  Future<void> _pickSchedule({required bool pickingFrom}) async {
     final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final firstDate = pickingFrom ? today : (_fromDate ?? today);
+    final initialDate = pickingFrom
+        ? (_fromDate ?? today)
+        : (_toDate ?? _fromDate ?? today);
 
     final date = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? now,
-      firstDate: DateTime(now.year, now.month, now.day),
+      initialDate: initialDate.isBefore(firstDate) ? firstDate : initialDate,
+      firstDate: firstDate,
       lastDate: DateTime(now.year + 2),
     );
 
     if (date != null && mounted) {
-      setState(() => _selectedDate = date);
+      setState(() {
+        if (pickingFrom) {
+          _fromDate = date;
+          if (_toDate != null && _toDate!.isBefore(date)) _toDate = null;
+        } else {
+          _toDate = date;
+        }
+      });
     }
   }
 
   Future<void> _postJob() async {
     if (!_formKey.currentState!.validate() || _isPosting) return;
 
-    if (_selectedDate == null) {
+    if (_fromDate == null || _toDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose a schedule.')),
+        const SnackBar(content: Text('Please choose both FROM and TO dates.')),
       );
       return;
     }
@@ -153,7 +227,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
         'title': _titleController.text.trim(),
         'category': _selectedCategory,
         'budget': double.parse(_budgetController.text.trim()),
-        'schedule': Timestamp.fromDate(_selectedDate!),
+        'schedule': Timestamp.fromDate(_fromDate!),
+        'scheduleFrom': Timestamp.fromDate(_fromDate!),
+        'scheduleTo': Timestamp.fromDate(_toDate!),
         'location': _locationController.text.trim(),
         'description': _descriptionController.text.trim(),
         'status': 'pending',
@@ -202,22 +278,6 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                           ),
                         ),
                       ),
-                      SizedBox(
-                        height: 31,
-                        width: 75,
-                        child: FilledButton(
-                          onPressed: _isPosting ? null : _postJob,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _dark,
-                            padding: EdgeInsets.zero,
-                            shape: const StadiumBorder(),
-                          ),
-                          child: const Text(
-                            'Post',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
@@ -244,92 +304,121 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         const SizedBox(height: 18),
 
                         _label('Category'),
-                        DropdownButtonFormField<String>(
-                          initialValue: _selectedCategory,
-                          decoration: _inputDecoration('Select a category'),
-                          icon: const Icon(Icons.keyboard_arrow_down),
-                          items: _categories.map((category) {
-                            return DropdownMenuItem(
-                              value: category,
-                              child: Text(category),
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('service_categories')
+                              .where('status', isEqualTo: 'active')
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return InputDecorator(
+                                decoration:
+                                    _inputDecoration(
+                                      'Could not load categories',
+                                    ).copyWith(
+                                      errorText: 'Could not load categories',
+                                    ),
+                                child: const Text('Try again shortly.'),
+                              );
+                            }
+                            if (!snapshot.hasData) {
+                              return InputDecorator(
+                                decoration: _inputDecoration(
+                                  'Loading categories...',
+                                ),
+                                child: const LinearProgressIndicator(),
+                              );
+                            }
+
+                            final categories =
+                                snapshot.data!.docs
+                                    .map(
+                                      (document) => document
+                                          .data()['name']
+                                          ?.toString()
+                                          .trim(),
+                                    )
+                                    .whereType<String>()
+                                    .where((name) => name.isNotEmpty)
+                                    .toSet()
+                                    .toList()
+                                  ..sort(
+                                    (left, right) => left
+                                        .toLowerCase()
+                                        .compareTo(right.toLowerCase()),
+                                  );
+
+                            final selectedCategory =
+                                categories.contains(_selectedCategory)
+                                ? _selectedCategory
+                                : null;
+
+                            return DropdownButtonFormField<String>(
+                              initialValue: selectedCategory,
+                              decoration: _inputDecoration(
+                                categories.isEmpty
+                                    ? 'No active categories'
+                                    : 'Select a category',
+                              ),
+                              icon: const Icon(Icons.keyboard_arrow_down),
+                              items: categories.map((category) {
+                                return DropdownMenuItem(
+                                  value: category,
+                                  child: Text(category),
+                                );
+                              }).toList(),
+                              onChanged: categories.isEmpty
+                                  ? null
+                                  : (value) {
+                                      setState(() => _selectedCategory = value);
+                                    },
+                              validator: (value) =>
+                                  value == null ? 'Select a category' : null,
                             );
-                          }).toList(),
-                          onChanged: (value) {
-                            setState(() => _selectedCategory = value);
                           },
-                          validator: (value) =>
-                              value == null ? 'Select a category' : null,
                         ),
                         const SizedBox(height: 18),
 
+                        _label('Budget (₱)'),
+                        TextFormField(
+                          controller: _budgetController,
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(
+                              RegExp(r'^\d*\.?\d{0,2}'),
+                            ),
+                          ],
+                          decoration: _inputDecoration('e.g. 200'),
+                          validator: (value) {
+                            final amount = double.tryParse(value?.trim() ?? '');
+                            if (amount == null || amount <= 0) {
+                              return 'Enter a valid budget';
+                            }
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 18),
+
+                        _label('Date range'),
                         Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _label('Budget (₱)'),
-                                  TextFormField(
-                                    controller: _budgetController,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.allow(
-                                        RegExp(r'^\d*\.?\d{0,2}'),
-                                      ),
-                                    ],
-                                    decoration: _inputDecoration('e.g. 200'),
-                                    validator: (value) {
-                                      final amount = double.tryParse(
-                                        value?.trim() ?? '',
-                                      );
-                                      if (amount == null || amount <= 0) {
-                                        return 'Enter a valid budget';
-                                      }
-                                      return null;
-                                    },
-                                  ),
-                                ],
+                              child: _DateField(
+                                label: 'FROM',
+                                value: _fromDate,
+                                displayDate: _displayDate,
+                                onTap: () => _pickSchedule(pickingFrom: true),
                               ),
                             ),
-                            const SizedBox(width: 9),
+                            const SizedBox(width: 10),
                             Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  _label('Schedule'),
-                                  InkWell(
-                                    onTap: _pickSchedule,
-                                    borderRadius: BorderRadius.circular(11),
-                                    child: Container(
-                                      height: 51,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 11,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFCFCFE),
-                                        border: Border.all(color: _border),
-                                        borderRadius: BorderRadius.circular(11),
-                                      ),
-                                      alignment: Alignment.centerLeft,
-                                      child: Text(
-                                        _selectedDate == null
-                                            ? 'Select date'
-                                            : _displayDate(_selectedDate!),
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color: _selectedDate == null
-                                              ? _hint
-                                              : _dark,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              child: _DateField(
+                                label: 'TO',
+                                value: _toDate,
+                                displayDate: _displayDate,
+                                onTap: () => _pickSchedule(pickingFrom: false),
                               ),
                             ),
                           ],

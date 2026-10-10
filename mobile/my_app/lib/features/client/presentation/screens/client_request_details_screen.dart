@@ -2,7 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/repositories/service_request_repository.dart';
 import 'client_sections.dart';
 
 class ClientRequestDetailsScreen extends StatefulWidget {
@@ -19,6 +21,15 @@ class _ClientRequestDetailsScreenState
     extends State<ClientRequestDetailsScreen> {
   bool _saving = false;
 
+  String _dateRange(ServiceRequest request) {
+    String format(DateTime date) => '${date.month}/${date.day}/${date.year}';
+    final from = request.scheduleFrom ?? request.schedule;
+    final to = request.scheduleTo ?? from;
+    if (from == null) return 'Flexible';
+    if (to == null || DateUtils.isSameDay(from, to)) return format(from);
+    return '${format(from)} – ${format(to)}';
+  }
+
   Future<void> _cancel() async {
     setState(() => _saving = true);
     try {
@@ -33,6 +44,75 @@ class _ClientRequestDetailsScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  Future<void> _acceptApplicant(ServiceApplication application) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Accept this worker?'),
+        content: Text(
+          'Choose ${application.workerName} for this request? '
+          'Other applications will be declined.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Accept worker'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || _saving) return;
+
+    setState(() => _saving = true);
+    try {
+      await ServiceRequestRepository().acceptApplicant(
+        request: widget.request,
+        application: application,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${application.workerName} was selected.')),
+      );
+      Navigator.pop(context);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not select worker: $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _openWorkerChat() async {
+    final request = widget.request;
+    final pairConversationId = conversationIdFor(
+      clientId: request.clientId,
+      workerId: request.workerId!,
+    );
+    final pairConversation = await FirebaseFirestore.instance
+        .collection('conversations')
+        .doc(pairConversationId)
+        .get();
+    if (!mounted) return;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientChatScreen(
+          conversationId: pairConversation.exists
+              ? pairConversationId
+              : request.id,
+          otherPersonName: request.workerName ?? 'Service provider',
+        ),
+      ),
+    );
   }
 
   Future<void> _rate() async {
@@ -105,6 +185,11 @@ class _ClientRequestDetailsScreenState
             title: Text(request.category),
           ),
           ListTile(
+            leading: const Icon(Icons.date_range_outlined),
+            title: Text(_dateRange(request)),
+            subtitle: const Text('Requested date range'),
+          ),
+          ListTile(
             leading: const Icon(Icons.location_on_outlined),
             title: Text(request.location),
           ),
@@ -116,17 +201,77 @@ class _ClientRequestDetailsScreenState
             padding: const EdgeInsets.all(16),
             child: Text(request.description),
           ),
+          if (request.status == ServiceRequestStatus.pending) ...[
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                'Worker applications',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+            StreamBuilder<List<ServiceApplication>>(
+              stream: ServiceRequestRepository().watchApplications(request.id),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text(
+                      'Could not load applications: ${snapshot.error}',
+                    ),
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Center(child: CircularProgressIndicator()),
+                  );
+                }
+                final applications = snapshot.data!;
+                if (applications.isEmpty) {
+                  return const Card(
+                    margin: EdgeInsets.symmetric(horizontal: 8),
+                    child: Padding(
+                      padding: EdgeInsets.all(18),
+                      child: Text(
+                        'No workers have applied yet. Applications will '
+                        'appear here.',
+                      ),
+                    ),
+                  );
+                }
+                return Column(
+                  children: applications.map((application) {
+                    final initial = application.workerName.trim().isEmpty
+                        ? 'W'
+                        : application.workerName.trim()[0].toUpperCase();
+                    return Card(
+                      margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                      child: ListTile(
+                        leading: CircleAvatar(child: Text(initial)),
+                        title: Text(application.workerName),
+                        subtitle: Text(
+                          application.appliedAt == null
+                              ? 'Application received'
+                              : 'Applied ${_formatDate(application.appliedAt!)}',
+                        ),
+                        trailing: FilledButton(
+                          onPressed: _saving
+                              ? null
+                              : () => _acceptApplicant(application),
+                          child: const Text('Accept'),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
           if (canMessage)
             FilledButton.icon(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ClientChatScreen(
-                    conversationId: request.id,
-                    otherPersonName: request.workerName ?? 'Service provider',
-                  ),
-                ),
-              ),
+              onPressed: _openWorkerChat,
               icon: const Icon(Icons.chat_bubble_outline),
               label: const Text('Message worker'),
             ),
@@ -145,4 +290,6 @@ class _ClientRequestDetailsScreenState
       ),
     );
   }
+
+  String _formatDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 }

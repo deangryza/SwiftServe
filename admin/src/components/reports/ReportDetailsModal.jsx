@@ -44,11 +44,12 @@ export default function ReportDetailsModal({ report, onClose, onSave }) {
 
   if (!report) return null;
 
-  const handleSave = () => {
-    // TODO: Replace with an API call to update the report record.
-    onSave(report.id, { status, adminNotes, resolution, adminAction });
+  const handleSave = async () => {
+    try {
+    await onSave(report.id, { status, adminNotes, resolution, adminAction });
     toast.success(`Report ${report.id} updated successfully.`);
     onClose();
+    } catch (failure) { toast.error(failure.message); }
   };
 
   return (
@@ -57,7 +58,7 @@ export default function ReportDetailsModal({ report, onClose, onSave }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 sm:p-4"
         onClick={onClose}
       >
         <motion.div
@@ -66,10 +67,10 @@ export default function ReportDetailsModal({ report, onClose, onSave }) {
           exit={{ opacity: 0, scale: 0.96, y: 10 }}
           transition={{ duration: 0.18 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+          <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-4 sm:rounded-t-2xl sm:px-6">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
                 {report.subject ?? "Report Details"}
@@ -85,7 +86,7 @@ export default function ReportDetailsModal({ report, onClose, onSave }) {
             </button>
           </div>
 
-          <div className="px-6 py-5 space-y-6">
+          <div className="space-y-6 px-4 py-5 sm:px-6">
             {/* Report Information */}
             <section>
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
@@ -193,7 +194,7 @@ export default function ReportDetailsModal({ report, onClose, onSave }) {
           </div>
 
           {/* Footer actions */}
-          <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100 sticky bottom-0 bg-white rounded-b-2xl">
+          <div className="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-gray-100 bg-white px-4 py-4 sm:flex-row sm:justify-end sm:rounded-b-2xl sm:px-6">
             <button
               type="button"
               onClick={onClose}

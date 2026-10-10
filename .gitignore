@@ -50,3 +50,6 @@ app.*.map.json
 !**/.env.example
 **/node_modules/
 **/dist/
+
+# Firebase Admin credentials stay local to the backend.
+**/serviceAccountKey*.json*

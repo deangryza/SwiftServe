@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
@@ -49,7 +50,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
       ];
       return Scaffold(
         appBar: AppBar(
-          title: Text(['Dashboard', 'My jobs', 'Messages', 'Profile'][_index]),
+          title: Text(['Dashboard', 'History', 'Messages', 'Profile'][_index]),
           actions: [
             if (_index == 0)
               IconButton(
@@ -57,7 +58,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (_) =>
-                        _WorkerNotifications(workerId: widget.profile.id),
+                        _WorkerNotifications(worker: widget.profile),
                   ),
                 ),
                 icon: const Icon(Icons.notifications_outlined),
@@ -73,10 +74,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
               icon: Icon(Icons.dashboard_outlined),
               label: 'Home',
             ),
-            NavigationDestination(
-              icon: Icon(Icons.work_outline),
-              label: 'Jobs',
-            ),
+            NavigationDestination(icon: Icon(Icons.history), label: 'History'),
             NavigationDestination(
               icon: Icon(Icons.chat_bubble_outline),
               label: 'Messages',
@@ -156,34 +154,82 @@ class _WorkerJobs extends StatelessWidget {
   final AppUser worker;
 
   @override
-  Widget build(BuildContext context) => StreamBuilder<List<ServiceRequest>>(
-    stream: ServiceRequestRepository().watchWorkerJobs(worker.id),
+  Widget build(BuildContext context) => StreamBuilder<List<ServiceApplication>>(
+    stream: ServiceRequestRepository().watchWorkerApplications(worker.id),
     builder: (context, snapshot) {
-      if (snapshot.hasError) return Center(child: Text('${snapshot.error}'));
+      if (snapshot.hasError) {
+        return Center(child: Text('${snapshot.error}'));
+      }
       if (!snapshot.hasData) {
         return const Center(child: CircularProgressIndicator());
       }
-      final jobs = snapshot.data!;
-      if (jobs.isEmpty) {
-        return const Center(child: Text('No accepted jobs yet.'));
+      final applications = snapshot.data!;
+      if (applications.isEmpty) {
+        return const Center(child: Text('No application activity yet.'));
       }
       return ListView.builder(
         padding: const EdgeInsets.all(16),
-        itemCount: jobs.length,
-        itemBuilder: (context, index) {
-          final job = jobs[index];
-          return Card(
-            child: ListTile(
-              title: Text(job.title),
-              subtitle: Text('${job.clientName} • ${job.status.name}'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _openJob(context, job, worker),
-            ),
-          );
-        },
+        itemCount: applications.length,
+        itemBuilder: (context, index) => _WorkerApplicationCard(
+          application: applications[index],
+          worker: worker,
+        ),
       );
     },
   );
+}
+
+class _WorkerApplicationCard extends StatelessWidget {
+  const _WorkerApplicationCard({
+    required this.application,
+    required this.worker,
+  });
+
+  final ServiceApplication application;
+  final AppUser worker;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<ServiceRequest?>(
+    future: ServiceRequestRepository().getRequest(application.requestId),
+    builder: (context, snapshot) {
+      final request = snapshot.data;
+      final statusColor = switch (application.status) {
+        ServiceApplicationStatus.accepted => Colors.green,
+        ServiceApplicationStatus.rejected => Colors.red,
+        ServiceApplicationStatus.pending => Colors.orange,
+      };
+      final appliedAt = application.appliedAt;
+      final appliedLabel = appliedAt == null
+          ? 'Recently applied'
+          : 'Applied ${_formatActivityDate(appliedAt)}';
+
+      return Card(
+        child: ListTile(
+          leading: CircleAvatar(
+            backgroundColor: statusColor.withValues(alpha: 0.12),
+            child: Icon(Icons.description_outlined, color: statusColor),
+          ),
+          title: Text(request?.title ?? 'Service request'),
+          subtitle: Text(
+            '$appliedLabel\n${application.status.name.toUpperCase()}',
+          ),
+          isThreeLine: true,
+          trailing: request == null ? null : const Icon(Icons.chevron_right),
+          onTap: request == null
+              ? null
+              : () => _openJob(context, request, worker),
+        ),
+      );
+    },
+  );
+}
+
+String _formatActivityDate(DateTime date) {
+  final local = date.toLocal();
+  final hour = local.hour % 12 == 0 ? 12 : local.hour % 12;
+  final minute = local.minute.toString().padLeft(2, '0');
+  final period = local.hour < 12 ? 'AM' : 'PM';
+  return '${local.month}/${local.day}/${local.year} at $hour:$minute $period';
 }
 
 void _openJob(BuildContext context, ServiceRequest request, AppUser worker) {
@@ -226,8 +272,25 @@ class _WorkerMessages extends StatelessWidget {
           if (snapshot.data!.docs.isEmpty) {
             return const Center(child: Text('No conversations yet.'));
           }
+          final allConversations = snapshot.data!.docs.toList()
+            ..sort((a, b) {
+              final aTime = a.data()['updatedAt'];
+              final bTime = b.data()['updatedAt'];
+              if (aTime is! Timestamp && bTime is! Timestamp) return 0;
+              if (aTime is! Timestamp) return 1;
+              if (bTime is! Timestamp) return -1;
+              return bTime.compareTo(aTime);
+            });
+          final latestByClient =
+              <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
+          for (final conversation in allConversations) {
+            final clientId = conversation.data()['clientId']?.toString();
+            if (clientId != null && clientId.isNotEmpty) {
+              latestByClient.putIfAbsent(clientId, () => conversation);
+            }
+          }
           return ListView(
-            children: snapshot.data!.docs.map((conversation) {
+            children: latestByClient.values.map((conversation) {
               final data = conversation.data();
               final clientName = (data['clientName'] ?? 'Client').toString();
               return ListTile(
@@ -320,9 +383,44 @@ class _VerificationBanner extends StatelessWidget {
 }
 
 class _WorkerNotifications extends StatelessWidget {
-  const _WorkerNotifications({required this.workerId});
+  const _WorkerNotifications({required this.worker});
 
-  final String workerId;
+  final AppUser worker;
+
+  Future<void> _openNotification(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> notification,
+  ) async {
+    final requestId = notification.data()['requestId']?.toString();
+    try {
+      await notification.reference.update({'read': true});
+      if (requestId == null || requestId.isEmpty) {
+        throw StateError('This notification has no linked request.');
+      }
+      final requestDocument = await FirebaseFirestore.instance
+          .collection('service_requests')
+          .doc(requestId)
+          .get();
+      if (!requestDocument.exists) {
+        throw StateError('This service request is no longer available.');
+      }
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WorkerJobDetailsScreen(
+            request: ServiceRequest.fromDocument(requestDocument),
+            worker: worker,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not open notification: $error')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -330,7 +428,7 @@ class _WorkerNotifications extends StatelessWidget {
     body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
       stream: FirebaseFirestore.instance
           .collection('notifications')
-          .where('recipientId', isEqualTo: workerId)
+          .where('recipientId', isEqualTo: worker.id)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) return Center(child: Text('${snapshot.error}'));
@@ -340,13 +438,27 @@ class _WorkerNotifications extends StatelessWidget {
         if (snapshot.data!.docs.isEmpty) {
           return const Center(child: Text('No notifications.'));
         }
+        final notifications = snapshot.data!.docs.toList()
+          ..sort((a, b) {
+            final left = a.data()['createdAt'] as Timestamp?;
+            final right = b.data()['createdAt'] as Timestamp?;
+            return (right?.millisecondsSinceEpoch ?? 0).compareTo(
+              left?.millisecondsSinceEpoch ?? 0,
+            );
+          });
         return ListView(
-          children: snapshot.data!.docs.map((document) {
+          children: notifications.map((document) {
             final data = document.data();
             return ListTile(
-              leading: const Icon(Icons.notifications_outlined),
+              leading: Icon(
+                data['read'] == true
+                    ? Icons.notifications_outlined
+                    : Icons.notifications_active,
+              ),
               title: Text((data['title'] ?? 'Update').toString()),
               subtitle: Text((data['body'] ?? '').toString()),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => _openNotification(context, document),
             );
           }).toList(),
         );

@@ -23,6 +23,7 @@ app.get('/', (req, res) => {
 app.use('/api/test', testRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin/verifications', adminVerificationRoutes);
+app.use('/api/admin', require('./routes/adminDataRoutes'));
 app.use('/api', verificationRoutes());
 
 app.use((error, _req, res, _next) => {

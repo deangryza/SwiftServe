@@ -35,16 +35,17 @@ export default function PersonalInfoCard({ profile, onSave }) {
     setIsEditing(false);
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim()) {
       toast.error("First name, last name, and email are required.");
       return;
     }
 
-    // TODO: Replace with an API call to update the admin profile.
-    onSave(form);
+    try {
+    await onSave(form);
     setIsEditing(false);
     toast.success("Profile updated successfully.");
+    } catch (failure) { toast.error(failure.message); }
   };
 
   return (
@@ -89,7 +90,7 @@ export default function PersonalInfoCard({ profile, onSave }) {
           icon={Mail}
           label="Email Address"
           value={form.email}
-          editable={isEditing}
+          editable={false}
           type="email"
           onChange={handleChange("email")}
         />

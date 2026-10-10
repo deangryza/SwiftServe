@@ -36,7 +36,7 @@ export default function UserTable({
 
         <tbody className="divide-y divide-gray-50">
           {users.map((user, i) => {
-            const isWorker = user.id?.startsWith("WRK-");
+            const isWorker = user.role === "Worker";
 
             return (
               <motion.tr
@@ -117,7 +117,7 @@ export default function UserTable({
                       </>
                     )}
 
-                    {user.status === "Approved" && (
+                    {["Approved", "Active", "Verified"].includes(user.status) && (
                       <ActionButton
                         title="Suspend"
                         onClick={() => onSuspend(user)}

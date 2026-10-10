@@ -63,7 +63,7 @@ export default function BookingDetailsModal({ booking, onClose }) {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-0 sm:p-4"
         onClick={onClose}
       >
         <motion.div
@@ -72,10 +72,10 @@ export default function BookingDetailsModal({ booking, onClose }) {
           exit={{ opacity: 0, scale: 0.96, y: 10 }}
           transition={{ duration: 0.18 }}
           onClick={(e) => e.stopPropagation()}
-          className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+          className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl sm:h-auto sm:max-h-[90vh] sm:rounded-2xl"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 sticky top-0 bg-white rounded-t-2xl">
+          <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-4 sm:rounded-t-2xl sm:px-6">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
                 {booking.serviceTitle ?? "Booking Details"}
@@ -91,7 +91,7 @@ export default function BookingDetailsModal({ booking, onClose }) {
             </button>
           </div>
 
-          <div className="px-6 py-5 space-y-6">
+          <div className="space-y-6 px-4 py-5 sm:px-6">
             {/* Booking Information */}
             <section>
               <h3 className="text-sm font-semibold text-gray-700 mb-3">

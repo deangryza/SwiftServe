@@ -1,3 +1,4 @@
+import { auth } from '../lib/firebase';
 // src/components/Sidebar.jsx
 // Left navigation sidebar. Collapsible, highlights the active route, and
 // shows the admin profile summary pinned to the bottom.
@@ -34,7 +35,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
       <motion.aside
         animate={{ width: collapsed ? 76 : 260 }}
         transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-ink-900 text-surface-100 transition-transform duration-300 lg:static lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex max-w-[86vw] flex-col bg-ink-900 text-surface-100 transition-transform duration-300 lg:static lg:max-w-none lg:translate-x-0 ${
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -65,6 +66,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
                 to={item.to}
                 end={item.end}
                 title={collapsed ? item.label : undefined}
+                onClick={onCloseMobile}
                 className={({ isActive }) =>
                   `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
                     isActive
@@ -103,13 +105,13 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile
         <div className="border-t border-white/5 p-3">
           <div className={`flex items-center gap-3 rounded-xl px-2 py-2 ${!collapsed && 'hover:bg-white/5'}`}>
             <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-swift-400 to-violet-500 font-display text-xs font-bold text-white">
-              RC
+              {(auth.currentUser?.displayName || auth.currentUser?.email || 'A').slice(0, 2).toUpperCase()}
               <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-ink-900 bg-success-400" />
             </span>
             {!collapsed && (
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">Administrator</p>
-                <p className="truncate text-xs text-surface-100/50">Super Admin</p>
+                <p className="truncate text-sm font-semibold text-white">{auth.currentUser?.displayName || auth.currentUser?.email}</p>
+                <p className="truncate text-xs text-surface-100/50">Administrator</p>
               </div>
             )}
           </div>

@@ -12,8 +12,10 @@ export default function ProtectedRoute({ children }) {
       setState({ loading: false, authorized: false });
       return;
     }
-    const token = await user.getIdTokenResult(true);
-    setState({ loading: false, authorized: token.claims.admin === true });
+    try {
+      const token = await user.getIdTokenResult(true);
+      setState({ loading: false, authorized: token.claims.admin === true });
+    } catch { setState({ loading: false, authorized: false }); }
   }), []);
 
   if (state.loading) {

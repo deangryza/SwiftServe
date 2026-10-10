@@ -14,7 +14,7 @@ export default function Login() {
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white">
       {/* Left: Branding panel — 40% on desktop */}
-      <div className="relative lg:w-[40%] w-full min-h-[320px] lg:min-h-screen bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 flex flex-col justify-between p-8 sm:p-10 lg:p-12 overflow-hidden">
+      <div className="relative flex w-full flex-col justify-between overflow-hidden bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 p-6 sm:min-h-[320px] sm:p-10 lg:min-h-screen lg:w-[40%] lg:p-12">
         {/* Decorative glows */}
         <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
         <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
@@ -35,7 +35,7 @@ export default function Login() {
           </p>
         </motion.div>
 
-        <div className="relative z-10 space-y-3 mt-8 lg:mt-0">
+        <div className="relative z-10 mt-8 hidden space-y-3 sm:block lg:mt-0">
           {FEATURES.map((feature, i) => (
             <FeatureCard key={feature.label} icon={feature.icon} label={feature.label} delay={0.15 + i * 0.1} />
           ))}
@@ -52,12 +52,12 @@ export default function Login() {
       </div>
 
       {/* Right: Login card — 60% on desktop */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
+      <div className="flex flex-1 items-center justify-center p-4 py-8 sm:p-10">
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.98 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.4 }}
-          className="w-full max-w-md rounded-2xl border border-slate-100 shadow-card p-8 sm:p-10"
+          className="w-full max-w-md rounded-2xl border border-slate-100 p-5 shadow-card sm:p-10"
         >
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-slate-900">Welcome Back</h2>

@@ -4,18 +4,21 @@ import { motion } from "framer-motion";
 import PersonalInfoCard from "../../components/profile/PersonalInfoCard";
 import ChangePasswordCard from "../../components/profile/ChangePasswordCard";
 import AccountInfoCard from "../../components/profile/AccountInfoCard";
-import { adminProfile as initialProfile } from "../../data/adminProfile";
+import useAdminData from '../../lib/useAdminData';
+import { apiRequest } from '../../lib/api';
+import DataState from '../../components/DataState';
 
-// TODO: Replace static admin profile data with API/database data
-// once authentication and an admin accounts table exist.
 
 export default function Profile() {
-  const [profile, setProfile] = useState(initialProfile);
+  const { data: profile, setData: setProfile, loading, error } = useAdminData('profile', {});
 
-  const handleSavePersonalInfo = (updatedFields) => {
+  const handleSavePersonalInfo = async (updatedFields) => {
+    await apiRequest('/api/admin/profile', { method: 'PATCH', body: JSON.stringify(updatedFields) });
     setProfile((prev) => ({ ...prev, ...updatedFields }));
   };
 
+  if (loading || error) return <DataState loading={loading} error={error} />;
+  const displayProfile = { ...profile, device: navigator.userAgent };
   const fullName = `${profile.firstName} ${profile.lastName}`;
 
   return (
@@ -58,7 +61,7 @@ export default function Profile() {
       {/* Content grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
-          <PersonalInfoCard profile={profile} onSave={handleSavePersonalInfo} />
+          <PersonalInfoCard profile={displayProfile} onSave={handleSavePersonalInfo} />
           <ChangePasswordCard />
         </div>
 
