@@ -47,13 +47,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(ClientRegisterScreen), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await tester.tap(find.text('I want to earn'));
     await tester.pumpAndSettle();
     expect(find.byType(WorkerRegisterScreen), findsOneWidget);
 
-    await tester.pageBack();
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     await tester.tap(find.text('Sign in'));
     await tester.pumpAndSettle();

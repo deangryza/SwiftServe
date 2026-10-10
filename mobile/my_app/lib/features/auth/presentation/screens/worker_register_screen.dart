@@ -6,8 +6,6 @@ class WorkerRegisterScreen extends StatelessWidget {
   const WorkerRegisterScreen({super.key});
 
   @override
-  Widget build(BuildContext context) => const AccountRegistrationScreen(
-    role: 'worker',
-    title: 'Create a worker account',
-  );
+  Widget build(BuildContext context) =>
+      const AccountRegistrationScreen(role: 'worker');
 }
