@@ -1,120 +1,107 @@
-// src/components/Sidebar.jsx
-// Left navigation sidebar. Collapsible, highlights the active route, and
-// shows the admin profile summary pinned to the bottom.
-
-import { NavLink } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { NavLink, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, Users, ShieldCheck, CalendarCheck, FileWarning,
-  LayoutGrid, Bell, BarChart3, History, Settings, UserCircle,
-  ChevronsLeft, Radio,
+  CalendarCheck,
+  FileWarning,
+  LayoutDashboard,
+  LayoutGrid,
+  ShieldCheck,
+  UserCircle,
+  Users,
 } from 'lucide-react'
+import Logo from './Logo'
+import {
+  Sidebar as SidebarPrimitive,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuBadge,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarSeparator,
+  useSidebar,
+} from '@/components/ui/sidebar'
 
 const NAV_ITEMS = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/dashboard/users', label: 'User Management', icon: Users },
-  { to: '/dashboard/verification', label: 'Worker Verification', icon: ShieldCheck },
-  { to: '/dashboard/bookings', label: 'Booking Management', icon: CalendarCheck },
-  { to: '/dashboard/reports', label: 'Reports & Complaints', icon: FileWarning },
-  { to: '/dashboard/categories', label: 'Service Categories', icon: LayoutGrid },
-  { to: '/dashboard/profile', label: 'Profile Setting', icon: UserCircle },
+  { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/dashboard/users', label: 'User management', icon: Users },
+  { to: '/dashboard/verification', label: 'Worker verification', icon: ShieldCheck, badge: 11 },
+  { to: '/dashboard/bookings', label: 'Booking management', icon: CalendarCheck },
+  { to: '/dashboard/reports', label: 'Reports & complaints', icon: FileWarning, badge: 9 },
+  { to: '/dashboard/categories', label: 'Service categories', icon: LayoutGrid },
+  { to: '/dashboard/profile', label: 'Profile settings', icon: UserCircle },
 ]
 
-export default function Sidebar({ collapsed, onToggle, mobileOpen, onCloseMobile }) {
+function routeIsActive(pathname, item) {
+  return item.end ? pathname === item.to : pathname.startsWith(item.to)
+}
+
+export default function Sidebar() {
+  const { pathname } = useLocation()
+  const { isMobile, setOpenMobile } = useSidebar()
+
   return (
-    <>
-      {/* Mobile scrim */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-ink-950/50 lg:hidden"
-          onClick={onCloseMobile}
-        />
-      )}
+    <SidebarPrimitive collapsible="offcanvas" className="border-sidebar-border">
+      <SidebarHeader className="h-16 justify-center border-b border-sidebar-border px-4">
+        <Logo variant="light" />
+      </SidebarHeader>
 
-      <motion.aside
-        animate={{ width: collapsed ? 76 : 260 }}
-        transition={{ duration: 0.25, ease: 'easeInOut' }}
-        className={`fixed inset-y-0 left-0 z-40 flex flex-col bg-ink-900 text-surface-100 transition-transform duration-300 lg:static lg:translate-x-0 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {/* Brand */}
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-white/5 px-4">
-          {!collapsed && (
-            <div className="flex items-center gap-2">
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-swift-500">
-                <Radio size={16} className="text-white" />
-              </span>
-              <span className="font-display text-sm font-bold tracking-tight text-white">SwiftServe</span>
-            </div>
-          )}
-          {collapsed && (
-            <span className="mx-auto flex h-8 w-8 items-center justify-center rounded-lg bg-swift-500">
-              <Radio size={16} className="text-white" />
-            </span>
-          )}
-        </div>
-
-        {/* Nav items */}
-        <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
-          {NAV_ITEMS.map((item) => {
-            const Icon = item.icon
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                end={item.end}
-                title={collapsed ? item.label : undefined}
-                className={({ isActive }) =>
-                  `group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
-                    isActive
-                      ? 'bg-swift-500/15 text-gray-900'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    {isActive && (
-                      <motion.span
-                        layoutId="active-nav-pill"
-                        className="absolute left-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-r-full bg-swift-400"
-                      />
+      <SidebarContent>
+        <SidebarGroup className="px-3 py-4">
+          <SidebarGroupLabel className="px-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/55">
+            Workspace
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {NAV_ITEMS.map((item) => {
+                const Icon = item.icon
+                const isActive = routeIsActive(pathname, item)
+                return (
+                  <SidebarMenuItem key={item.to}>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      tooltip={item.label}
+                      className="h-10 rounded-lg px-3 text-sidebar-foreground/75 hover:bg-white/10 hover:text-white data-active:bg-white/12 data-active:text-white"
+                      render={(
+                        <NavLink
+                          to={item.to}
+                          end={item.end}
+                          onClick={() => isMobile && setOpenMobile(false)}
+                        />
+                      )}
+                    >
+                      <Icon aria-hidden="true" />
+                      <span>{item.label}</span>
+                    </SidebarMenuButton>
+                    {item.badge && (
+                      <SidebarMenuBadge className="right-2 bg-white/10 text-sidebar-foreground">
+                        {item.badge}
+                      </SidebarMenuBadge>
                     )}
-                    <Icon size={18} className="shrink-0" />
-                    {!collapsed && <span className="truncate">{item.label}</span>}
-                  </>
-                )}
-              </NavLink>
-            )
-          })}
-        </nav>
+                  </SidebarMenuItem>
+                )
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
 
-        {/* Collapse toggle (desktop only) */}
-        <button
-          onClick={onToggle}
-          className="mx-3 mb-2 hidden items-center justify-center gap-2 rounded-xl border border-white/10 py-2 text-xs font-medium text-surface-100/60 hover:bg-white/5 hover:text-white lg:flex"
-        >
-          <ChevronsLeft size={15} className={`transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} />
-          {!collapsed && 'Collapse'}
-        </button>
-
-        {/* Admin profile footer */}
-        <div className="border-t border-white/5 p-3">
-          <div className={`flex items-center gap-3 rounded-xl px-2 py-2 ${!collapsed && 'hover:bg-white/5'}`}>
-            <span className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-swift-400 to-violet-500 font-display text-xs font-bold text-white">
-              RC
-              <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-ink-900 bg-success-400" />
-            </span>
-            {!collapsed && (
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-white">Administrator</p>
-                <p className="truncate text-xs text-surface-100/50">Super Admin</p>
-              </div>
-            )}
+      <SidebarSeparator />
+      <SidebarFooter className="p-3">
+        <div className="flex items-center gap-3 rounded-xl bg-white/[0.07] p-2.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-xs font-semibold text-white">
+            RC
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">Administrator</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">Super Admin</p>
           </div>
+          <span className="ml-auto size-2 rounded-full bg-success-400" aria-label="Online" />
         </div>
-      </motion.aside>
-    </>
+      </SidebarFooter>
+    </SidebarPrimitive>
   )
 }

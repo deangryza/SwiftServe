@@ -1,72 +1,47 @@
-import { motion } from 'framer-motion';
-import { FiShield, FiCalendar, FiBarChart2 } from 'react-icons/fi';
+import { motion, useReducedMotion } from 'framer-motion';
+import { CalendarClock, ChartNoAxesCombined, ShieldCheck } from 'lucide-react';
 import Logo from '../../components/Logo';
 import FeatureCard from '../../components/FeatureCard';
 import LoginForm from '../../components/LoginForm';
 
 const FEATURES = [
-  { icon: FiShield, label: 'AI-Assisted Worker Verification' },
-  { icon: FiCalendar, label: 'Booking Management' },
-  { icon: FiBarChart2, label: 'Reports & Analytics' },
+  { icon: ShieldCheck, label: 'Worker verification' },
+  { icon: CalendarClock, label: 'Booking oversight' },
+  { icon: ChartNoAxesCombined, label: 'Reports and insights' },
 ];
 
 export default function Login() {
+  const reduceMotion = useReducedMotion();
+
   return (
-    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white">
-      {/* Left: Branding panel — 40% on desktop */}
-      <div className="relative lg:w-[40%] w-full min-h-[320px] lg:min-h-screen bg-gradient-to-br from-primary-700 via-primary-600 to-primary-800 flex flex-col justify-between p-8 sm:p-10 lg:p-12 overflow-hidden">
-        {/* Decorative glows */}
-        <div className="absolute -top-24 -right-24 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -left-24 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
-
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4 }}
-          className="relative z-10"
-        >
+    <main className="flex min-h-svh w-full flex-col bg-slate-50 lg:flex-row">
+      <section className="flex min-h-[300px] w-full flex-col justify-between overflow-hidden bg-primary-800 p-7 sm:p-10 lg:min-h-svh lg:w-[42%] lg:p-12 xl:p-16">
+        <motion.div initial={reduceMotion ? false : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: reduceMotion ? 0 : 0.35 }}>
           <Logo variant="light" size="lg" />
-
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mt-8 leading-tight">
-            SwiftServe Admin Dashboard
+          <h1 className="mt-10 max-w-md text-3xl font-semibold leading-[1.08] tracking-[-0.04em] text-white sm:text-4xl xl:text-5xl">
+            Run the platform with confidence.
           </h1>
-          <p className="text-white/75 text-sm sm:text-base mt-3 leading-relaxed max-w-sm">
-            Manage workers, clients, bookings, reports, and platform activities from one centralized dashboard.
+          <p className="mt-4 max-w-md text-sm leading-6 text-primary-100 sm:text-base">
+            Secure access to daily operations, trust, and service performance.
           </p>
         </motion.div>
 
-        <div className="relative z-10 space-y-3 mt-8 lg:mt-0">
-          {FEATURES.map((feature, i) => (
-            <FeatureCard key={feature.label} icon={feature.icon} label={feature.label} delay={0.15 + i * 0.1} />
+        <div className="mt-10 grid gap-3 sm:grid-cols-3 lg:mt-16 lg:grid-cols-1">
+          {FEATURES.map((feature, index) => (
+            <FeatureCard key={feature.label} icon={feature.icon} label={feature.label} delay={0.1 + index * 0.08} />
           ))}
         </div>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.5 }}
-          className="relative z-10 text-white/50 text-xs mt-8 lg:mt-0"
-        >
-          Version 1.0
+        <motion.p initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reduceMotion ? 0 : 0.35, delay: reduceMotion ? 0 : 0.35 }} className="mt-8 text-xs text-primary-200/70">
+          SwiftServe Console · Version 1.0
         </motion.p>
-      </div>
+      </section>
 
-      {/* Right: Login card — 60% on desktop */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
-        <motion.div
-          initial={{ opacity: 0, y: 20, scale: 0.98 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ duration: 0.4 }}
-          className="w-full max-w-md rounded-2xl border border-slate-100 shadow-card p-8 sm:p-10"
-        >
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-slate-900">Welcome Back</h2>
-            <p className="text-sm text-slate-400 mt-1.5">Sign in to continue</p>
-          </div>
-
+      <section className="flex flex-1 items-center justify-center px-6 py-12 sm:px-10 lg:px-16">
+        <motion.div initial={reduceMotion ? false : { opacity: 0, y: 20, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: reduceMotion ? 0 : 0.35 }} className="w-full max-w-md">
           <LoginForm />
         </motion.div>
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }
