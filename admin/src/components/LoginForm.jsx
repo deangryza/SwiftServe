@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { FiMail, FiArrowRight } from 'react-icons/fi';
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   browserLocalPersistence,
@@ -11,19 +10,58 @@ import {
   signOut,
 } from 'firebase/auth';
 
-import InputField from './InputField';
-import PasswordField from './PasswordField';
 import { auth } from '../lib/firebase';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getAuthErrorMessage(error) {
+  if (error?.message === 'This account does not have administrator access.') return error.message;
+
+  switch (error?.code) {
+    case 'auth/invalid-credential':
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+      return 'The email or password is incorrect. Check your details and try again.';
+    case 'auth/too-many-requests':
+      return 'Sign-in is temporarily limited after several attempts. Please wait and try again.';
+    case 'auth/network-request-failed':
+      return 'We could not reach the sign-in service. Check your connection and try again.';
+    default:
+      return 'Unable to sign in right now. Try again or contact support.';
+  }
+}
 
 export default function LoginForm() {
   const navigate = useNavigate();
+  const errorSummaryRef = useRef(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const [formError, setFormError] = useState('');
+
+  const emailError = emailTouched && !EMAIL_PATTERN.test(email.trim()) ? 'Enter a valid email address.' : '';
+  const passwordError = passwordTouched && !password ? 'Enter your password.' : '';
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    setEmailTouched(true);
+    setPasswordTouched(true);
+    setFormError('');
+
+    if (!EMAIL_PATTERN.test(email.trim()) || !password) {
+      requestAnimationFrame(() => errorSummaryRef.current?.focus());
+      return;
+    }
+
     setSubmitting(true);
     try {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
@@ -36,23 +74,97 @@ export default function LoginForm() {
       toast.success('Welcome back, Administrator!');
       navigate('/dashboard', { replace: true });
     } catch (error) {
-      toast.error(error.message || 'Unable to sign in.');
+      setFormError(getAuthErrorMessage(error));
+      requestAnimationFrame(() => errorSummaryRef.current?.focus());
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <motion.form initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleSubmit} className="space-y-5">
-      <InputField label="Email Address" icon={FiMail} type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@swiftserve.com" autoComplete="email" required />
-      <PasswordField label="Password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" required />
-      <label className="flex items-center gap-2 text-sm text-slate-500 cursor-pointer select-none">
-        <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="rounded border-slate-300 text-primary-600 focus:ring-primary-500" />
-        Remember me
-      </label>
-      <motion.button type="submit" disabled={submitting} whileTap={{ scale: 0.98 }} className="btn-primary">
-        {submitting ? 'Signing in…' : <>Sign In <FiArrowRight className="w-4 h-4" /></>}
-      </motion.button>
-    </motion.form>
+    <div>
+      <Badge variant="secondary" className="mb-5 bg-primary-50 text-primary-700">
+        <ShieldCheck data-icon="inline-start" aria-hidden="true" />
+        Admin console
+      </Badge>
+      <h2 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950">Welcome back</h2>
+      <p className="mt-2 text-sm text-slate-500">Use your authorized administrator account.</p>
+
+      <form onSubmit={handleSubmit} className="mt-8" noValidate>
+        {(formError || emailError || passwordError) && (
+          <div ref={errorSummaryRef} role="alert" tabIndex={-1} className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+            <p className="font-medium">We could not sign you in.</p>
+            <p className="mt-1 text-red-700">{formError || emailError || passwordError}</p>
+          </div>
+        )}
+
+        <FieldGroup>
+          <Field data-invalid={Boolean(emailError)}>
+            <FieldLabel htmlFor="admin-email">Email address</FieldLabel>
+            <div className="relative">
+              <Mail className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <Input
+                id="admin-email"
+                type="email"
+                value={email}
+                onChange={(event) => { setEmail(event.target.value); setFormError(''); }}
+                onBlur={() => setEmailTouched(true)}
+                placeholder="admin@swiftserve.com"
+                autoComplete="email"
+                disabled={submitting}
+                aria-invalid={Boolean(emailError)}
+                aria-describedby={emailError ? 'admin-email-error' : undefined}
+                className="h-11 bg-white pl-10"
+                required
+              />
+            </div>
+            <FieldError id="admin-email-error">{emailError}</FieldError>
+          </Field>
+
+          <Field data-invalid={Boolean(passwordError)}>
+            <FieldLabel htmlFor="admin-password">Password</FieldLabel>
+            <div className="relative">
+              <LockKeyhole className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+              <Input
+                id="admin-password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(event) => { setPassword(event.target.value); setFormError(''); }}
+                onBlur={() => setPasswordTouched(true)}
+                placeholder="Enter your password"
+                autoComplete="current-password"
+                disabled={submitting}
+                aria-invalid={Boolean(passwordError)}
+                aria-describedby={passwordError ? 'admin-password-error' : undefined}
+                className="h-11 bg-white pl-10 pr-11"
+                required
+              />
+              <Button type="button" variant="ghost" size="icon" onClick={() => setShowPassword((visible) => !visible)} disabled={submitting} className="absolute right-1 top-1/2 size-9 -translate-y-1/2 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label={showPassword ? 'Hide password' : 'Show password'}>
+                {showPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+              </Button>
+            </div>
+            <FieldError id="admin-password-error">{passwordError}</FieldError>
+          </Field>
+
+          <div className="flex min-h-11 items-center justify-between gap-4">
+            <Field orientation="horizontal" className="w-auto items-center gap-2">
+              <Checkbox id="remember-device" checked={remember} onCheckedChange={setRemember} disabled={submitting} />
+              <FieldLabel htmlFor="remember-device" className="cursor-pointer text-sm font-normal text-slate-600">Keep me signed in</FieldLabel>
+            </Field>
+            <a href="mailto:support@swiftserve.com?subject=Admin%20access%20help" className="rounded-sm text-sm font-medium text-primary-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2">Need help?</a>
+          </div>
+
+          <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full bg-primary-600 text-white shadow-card hover:bg-primary-700">
+            {submitting ? 'Signing in…' : 'Sign in to dashboard'}
+            {!submitting && <ArrowRight data-icon="inline-end" aria-hidden="true" />}
+          </Button>
+        </FieldGroup>
+      </form>
+
+      <div className="mt-6 flex items-center gap-2 text-xs text-slate-500">
+        <ShieldCheck className="size-4 text-primary-600" aria-hidden="true" />
+        Protected by role-based administrator access
+      </div>
+    </div>
   );
 }
