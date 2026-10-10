@@ -26,7 +26,9 @@ export default function ProfileDropdown() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 rounded-xl border border-surface-200 p-1 transition-colors hover:bg-surface-100 sm:gap-2 sm:py-1 sm:pl-1 sm:pr-2"
+        aria-label="Open administrator menu"
+        aria-expanded={open}
+        className="flex items-center gap-2 rounded-xl border border-surface-200 py-1 pl-1 pr-2 transition-colors hover:bg-surface-100"
       >
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-swift-500 font-display text-xs font-semibold text-white">
           {(auth.currentUser?.displayName || auth.currentUser?.email || 'A').slice(0, 2).toUpperCase()}

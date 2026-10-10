@@ -1,20 +1,17 @@
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 
-/**
- * FeatureCard
- * Small glassy card used on the branding panel to list what the
- * dashboard lets an admin do. Purely presentational / static content.
- */
 export default function FeatureCard({ icon: Icon, label, delay = 0 }) {
+  const reduceMotion = useReducedMotion();
+
   return (
     <motion.div
-      initial={{ opacity: 0, x: -12 }}
+      initial={reduceMotion ? false : { opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, delay }}
-      className="flex items-center gap-3 rounded-xl bg-white/10 border border-white/15 backdrop-blur-sm px-4 py-3 hover:bg-white/15 transition-colors duration-150"
+      transition={{ duration: 0.35, delay: reduceMotion ? 0 : delay }}
+      className="flex min-h-14 items-center gap-3 rounded-xl border border-white/15 bg-white/[0.07] px-4 py-3"
     >
-      <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
-        <Icon className="w-4 h-4 text-white" />
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
+        <Icon className="size-4 text-white" aria-hidden="true" />
       </div>
       <span className="text-sm font-medium text-white/90">{label}</span>
     </motion.div>

@@ -28,9 +28,11 @@ export default function NotificationDropdown() {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-label="Notifications"
+        aria-expanded={open}
         className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-surface-200 text-ink-600 transition-colors hover:bg-surface-100"
       >
-        <Bell size={17} />
+        <Bell size={17} aria-hidden="true" />
         {notifications.some(item => !item.read) && <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
           <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger-400 opacity-75" />
           <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-danger-500" />
