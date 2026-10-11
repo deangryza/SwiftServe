@@ -33,6 +33,7 @@ class AppUser {
     required this.verificationStatus,
     this.phoneNumber = '',
     this.address = '',
+    this.photoBase64 = '',
   });
 
   final String id;
@@ -42,6 +43,7 @@ class AppUser {
   final VerificationStatus verificationStatus;
   final String phoneNumber;
   final String address;
+  final String photoBase64;
 
   factory AppUser.fromMap(String id, Map<String, dynamic> data) {
     final role = switch (data['role']) {
@@ -59,6 +61,7 @@ class AppUser {
       ),
       phoneNumber: (data['phoneNumber'] ?? '').toString(),
       address: (data['address'] ?? '').toString(),
+      photoBase64: (data['photoBase64'] ?? '').toString(),
     );
   }
 }

@@ -11,6 +11,7 @@ class ProfileDraft {
     required this.role,
     this.category = '',
     this.skills = const [],
+    this.photoBase64 = '',
   });
 
   final String fullName;
@@ -20,6 +21,7 @@ class ProfileDraft {
   final String role;
   final String category;
   final List<String> skills;
+  final String photoBase64;
 
   Map<String, dynamic> toJson() => {
     'fullName': fullName,
@@ -29,6 +31,7 @@ class ProfileDraft {
     'role': role,
     'category': category,
     'skills': skills,
+    'photoBase64': photoBase64,
   };
 
   factory ProfileDraft.fromJson(Map<String, dynamic> json) => ProfileDraft(
@@ -39,6 +42,7 @@ class ProfileDraft {
     role: (json['role'] ?? 'client').toString(),
     category: (json['category'] ?? '').toString(),
     skills: List<String>.from(json['skills'] ?? const []),
+    photoBase64: (json['photoBase64'] ?? '').toString(),
   );
 }
 

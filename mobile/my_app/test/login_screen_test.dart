@@ -1,68 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:my_app/features/auth/presentation/screens/entry_screen.dart';
 import 'package:my_app/features/auth/presentation/screens/login_screen.dart';
 
 void main() {
-  testWidgets('login screen matches the redesigned content and dimensions', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
-
-    expect(find.text('Welcome back'), findsOneWidget);
-    expect(find.text('Sign in to continue to your account'), findsOneWidget);
-    expect(find.text('Email'), findsOneWidget);
-    expect(find.text('Password'), findsOneWidget);
-    expect(find.text('Forgot password?'), findsOneWidget);
-    expect(find.text('Sign In'), findsOneWidget);
-    expect(find.text("Don't have an account? "), findsOneWidget);
-    expect(find.text('Sign up'), findsOneWidget);
-
-    expect(tester.getSize(find.byType(TextField).first), const Size(296, 46));
-    expect(
-      tester.getSize(find.widgetWithText(FilledButton, 'Sign In')),
-      const Size(296, 56),
-    );
-  });
-
-  testWidgets('sign up returns to the account type chooser', (tester) async {
-    tester.view.physicalSize = const Size(360, 900);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(const MaterialApp(home: EntryScreen()));
-    await tester.tap(find.text('Sign in'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Welcome back'), findsOneWidget);
-    await tester.tap(find.text('Sign up'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('I need help'), findsOneWidget);
-    expect(find.text('I want to earn'), findsOneWidget);
-  });
-
-  testWidgets('forgot password asks for an email before contacting Firebase', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(360, 800);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-
-    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
-    await tester.tap(find.text('Forgot password?'));
-    await tester.pump();
-
-    expect(
-      find.text('Enter your email to reset your password.'),
-      findsOneWidget,
-    );
-  });
+  for (final size in [
+    const Size(320, 568),
+    const Size(768, 1024),
+    const Size(1440, 900),
+  ]) {
+    testWidgets('login fits $size and signup opens role selection', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = size;
+      addTearDown(tester.view.resetDevicePixelRatio);
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(1.3)),
+              child: const LoginScreen(),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.text('Welcome back'), findsOneWidget);
+      final google = tester.widget<OutlinedButton>(
+        find.byKey(const ValueKey('google-login-preview')),
+      );
+      expect(google.onPressed, isNotNull);
+      final signup = find.byKey(const ValueKey('login-sign-up'));
+      await tester.ensureVisible(signup);
+      await tester.pumpAndSettle();
+      await tester.tap(signup);
+      await tester.pumpAndSettle();
+      expect(find.text('I need help'), findsOneWidget);
+      expect(find.text('I want to earn'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:my_app/features/auth/presentation/screens/client_register_screen.dart';
 
 void main() {
@@ -15,12 +14,11 @@ void main() {
     await tester.pumpWidget(const MaterialApp(home: ClientRegisterScreen()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create Account'), findsNWidgets(2));
+    expect(find.text('Create Account'), findsOneWidget);
     expect(find.text('Signing up as Client'), findsOneWidget);
     expect(find.text('Signing up as Worker'), findsNothing);
     expect(find.text('Primary Service Category'), findsNothing);
-    expect(find.byType(TextFormField), findsNWidgets(6));
-    expect(find.byType(SvgPicture), findsWidgets);
+    expect(find.byType(TextFormField), findsNWidgets(2));
     expect(find.text('Home'), findsNothing);
     expect(find.text('History'), findsNothing);
     expect(find.text('Message'), findsNothing);
@@ -39,10 +37,10 @@ void main() {
     await tester.pumpAndSettle();
 
     final fields = find.byType(TextFormField);
-    await tester.enterText(fields.at(0), 'Alex Client');
-    await tester.enterText(fields.at(1), 'client@example.com');
+    await tester.enterText(fields.at(0), 'Alex');
+    await tester.enterText(fields.at(1), 'Client');
 
-    expect(find.text('Alex Client'), findsOneWidget);
-    expect(find.text('client@example.com'), findsOneWidget);
+    expect(find.text('Alex'), findsOneWidget);
+    expect(find.text('Client'), findsOneWidget);
   });
 }

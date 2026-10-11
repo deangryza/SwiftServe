@@ -32,6 +32,9 @@ npm start
 
 Grant admin access with `npm run admin:claim -- grant admin@example.com`. The user must sign in again to refresh the custom claim.
 
+Use Node 22.19+ or 24+ for backend startup. `npm start` uses the system certificate
+store so Firebase connections also trust locally installed certificate authorities.
+
 Face verification runs locally in the backend with FaceAPI on TensorFlow.js's WASM backend and makes no external face-comparison API calls. WASM is used because the native TensorFlow binding does not publish a compatible Windows binary for the project's Node 22 runtime. The model weights are not committed; download them with `npm run models:download` after installing dependencies and as part of each deployment build. The server validates and loads all models before accepting requests.
 
 Verification images remain in Firebase Storage while an admin review is pending. Final decisions set Cloud Storage `Custom-Time`; apply `swiftserve-backend/firebase-storage-lifecycle.json` to the Firebase Storage bucket so those objects are deleted after 30 days. The returned `confidence` is a heuristic similarity percentage derived from descriptor distance, not a calibrated probability. Client-side liveness is a deterrent rather than server-attested liveness.

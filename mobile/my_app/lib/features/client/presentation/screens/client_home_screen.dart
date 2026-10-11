@@ -1,16 +1,21 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/models/app_user.dart';
 import 'post_request_screen.dart';
 import 'client_sections.dart';
 import 'client_search_screen.dart';
 import 'client_notifications_screen.dart';
 
 class ClientHomeScreen extends StatelessWidget {
-  const ClientHomeScreen({super.key});
+  const ClientHomeScreen({super.key, this.profile});
+
+  final AppUser? profile;
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final darkMode = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FB),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
 
       body: SafeArea(
         child: LayoutBuilder(
@@ -22,7 +27,7 @@ class ClientHomeScreen extends StatelessWidget {
                 width: isDesktop ? 430 : double.infinity,
                 height: isDesktop ? constraints.maxHeight : double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: colors.surface,
                   borderRadius: isDesktop
                       ? BorderRadius.circular(20)
                       : BorderRadius.zero,
@@ -46,13 +51,18 @@ class ClientHomeScreen extends StatelessWidget {
                                   child: Column(
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                    children: const [
+                                    children: [
                                       Text(
-                                        'Good day, User',
+                                        profile == null ||
+                                                profile!.fullName.trim().isEmpty
+                                            ? 'Good day!'
+                                            : 'Good day, ${profile!.fullName.trim()}!',
                                         style: TextStyle(
                                           fontSize: 20,
                                           fontWeight: FontWeight.w700,
-                                          color: Color(0xFF202124),
+                                          color: darkMode
+                                              ? Color(0xFFF2F2F2)
+                                              : Color(0xFF202124),
                                         ),
                                       ),
                                       SizedBox(height: 4),
@@ -134,7 +144,9 @@ class ClientHomeScreen extends StatelessWidget {
                                   horizontal: 14,
                                 ),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFFF2F3F5),
+                                  color: darkMode
+                                      ? const Color(0xFF2C2C2C)
+                                      : const Color(0xFFF2F3F5),
                                   borderRadius: BorderRadius.circular(13),
                                 ),
                                 child: const Row(
@@ -399,8 +411,8 @@ class ClientHomeScreen extends StatelessWidget {
                     // BOTTOM NAVIGATION
                     // -----------------------------
                     Container(
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
+                      decoration: BoxDecoration(
+                        color: colors.surface,
                         border: Border(
                           top: BorderSide(color: Color(0xFFEAECEF)),
                         ),
@@ -423,7 +435,7 @@ class ClientHomeScreen extends StatelessWidget {
                             ),
                           );
                         },
-                        backgroundColor: Colors.white,
+                        backgroundColor: colors.surface,
                         elevation: 0,
                         type: BottomNavigationBarType.fixed,
                         selectedItemColor: const Color(0xFF2563EB),

@@ -1,8 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
+
+import '../../../../shared/services/api_service.dart';
+import '../../../../shared/services/profile_photo_picker.dart';
+import '../../../../shared/widgets/profile_avatar.dart';
 
 import '../../../../shared/models/service_request.dart';
+import 'client_settings_screen.dart';
 import 'client_request_details_screen.dart';
 
 String? get clientUid => FirebaseAuth.instance.currentUser?.uid;
@@ -426,6 +432,40 @@ class ClientProfileScreen extends StatefulWidget {
 }
 
 class _ClientProfileScreenState extends State<ClientProfileScreen> {
+  bool _savingPhoto = false;
+
+  Future<void> _changePhoto() async {
+    if (_savingPhoto) return;
+    setState(() => _savingPhoto = true);
+    try {
+      final bytes = await pickProfilePhoto();
+      if (bytes == null) return;
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) return;
+      await ApiService().updateProfilePhoto(
+        idToken: token,
+        photoBase64: base64Encode(bytes),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Profile photo saved.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not save photo. Check your connection and try a smaller image.',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _savingPhoto = false);
+    }
+  }
+
   Future<void> _editName(String currentName) async {
     final controller = TextEditingController(text: currentName);
 
@@ -519,10 +559,17 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
           return ListView(
             padding: const EdgeInsets.all(20),
             children: [
-              const Center(
-                child: CircleAvatar(
-                  radius: 35,
-                  child: Icon(Icons.person, size: 40),
+              Center(
+                child: ProfileAvatar(
+                  photoBase64: (data['photoBase64'] ?? '').toString(),
+                  photoUrl: user.photoURL,
+                ),
+              ),
+              Center(
+                child: TextButton.icon(
+                  onPressed: _savingPhoto ? null : _changePhoto,
+                  icon: const Icon(Icons.photo_camera_outlined),
+                  label: Text(_savingPhoto ? 'Saving photo…' : 'Change photo'),
                 ),
               ),
               const SizedBox(height: 14),
@@ -557,6 +604,19 @@ class _ClientProfileScreenState extends State<ClientProfileScreen> {
                       title: const Text('Edit name'),
                       trailing: const Icon(Icons.chevron_right),
                       onTap: () => _editName(name),
+                    ),
+                    const Divider(height: 1),
+                    ListTile(
+                      leading: const Icon(Icons.settings_outlined),
+                      title: const Text('Settings'),
+                      subtitle: const Text('Theme and app preferences'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ClientSettingsScreen(),
+                        ),
+                      ),
                     ),
                   ],
                 ),

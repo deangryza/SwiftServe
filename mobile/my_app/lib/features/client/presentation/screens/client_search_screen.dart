@@ -122,7 +122,7 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
     final query = _searchController.text.trim().toLowerCase();
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -291,7 +291,7 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
             final name = (worker['fullName'] ?? 'Service provider').toString();
 
             return Card(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               child: ListTile(
                 leading: const CircleAvatar(child: Icon(Icons.person_outline)),
                 title: Text(name),

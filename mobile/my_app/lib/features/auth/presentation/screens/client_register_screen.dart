@@ -1,13 +1,16 @@
 import 'dart:typed_data';
+import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../../../shared/services/profile_photo_picker.dart';
 
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_draft_store.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import 'profile_completion_screen.dart';
+import 'client_account_form.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
   const ClientRegisterScreen({super.key});
@@ -59,6 +62,9 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       address: _address.text.trim(),
       role: widget.role,
       category: _category.text.trim(),
+      photoBase64: _profileImageBytes == null
+          ? ''
+          : base64Encode(_profileImageBytes!),
       skills: _category.text.trim().isEmpty
           ? const []
           : [_category.text.trim()],
@@ -81,6 +87,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         role: draft.role,
         category: draft.category,
         skills: draft.skills,
+        photoBase64: draft.photoBase64,
       );
       await ProfileDraftStore().clear();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
@@ -91,15 +98,26 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           content: Text(error.message ?? 'Could not create the account.'),
         ),
       );
-    } catch (error) {
+    } on ApiConnectionException catch (error) {
       if (!mounted) return;
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const ProfileCompletionScreen()),
       );
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Account created. Profile setup needs a retry: $error'),
+        SnackBar(content: Text('Account created. ${error.message}')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileCompletionScreen()),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Account created, but the profile could not be saved. Please retry profile setup.',
+          ),
         ),
       );
     } finally {
@@ -127,20 +145,43 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       value == null || value.trim().isEmpty ? 'This field is required.' : null;
 
   Future<void> _pickProfileImage() async {
-    final image = await ImagePicker().pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1200,
-    );
-    if (image == null) return;
-    final bytes = await image.readAsBytes();
-    if (mounted) setState(() => _profileImageBytes = bytes);
+    try {
+      final bytes = await pickProfilePhoto();
+      if (mounted && bytes != null) setState(() => _profileImageBytes = bytes);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not select photo. Try a smaller image.'),
+          ),
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) => _buildRegistrationScreen(context);
 
   Widget _buildRegistrationScreen(BuildContext context) {
+    if (widget.role == 'client') {
+      return ClientThemeScope(
+        child: ClientAccountForm(
+          formKey: _formKey,
+          name: _name,
+          email: _email,
+          phone: _phone,
+          address: _address,
+          password: _password,
+          confirmPassword: _confirmPassword,
+          acceptedTerms: _acceptedTerms,
+          onTermsChanged: (value) => setState(() => _acceptedTerms = value),
+          loading: _loading,
+          profileImage: _profileImageBytes,
+          onPickImage: _pickProfileImage,
+          onRegister: _register,
+        ),
+      );
+    }
     final isWorker = widget.role == 'worker';
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FF),

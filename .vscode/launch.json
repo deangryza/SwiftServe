@@ -6,7 +6,18 @@
       "request": "launch",
       "type": "dart",
       "cwd": "${workspaceFolder}/mobile/my_app",
-      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart"
+      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart",
+      "preLaunchTask": "SwiftServe: forward USB API",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://127.0.0.1:5000"]
+    },
+    {
+      "name": "SwiftServe Mobile (USB phone)",
+      "request": "launch",
+      "type": "dart",
+      "cwd": "${workspaceFolder}/mobile/my_app",
+      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart",
+      "preLaunchTask": "SwiftServe: forward USB API",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://127.0.0.1:5000"]
     }
   ]
 }

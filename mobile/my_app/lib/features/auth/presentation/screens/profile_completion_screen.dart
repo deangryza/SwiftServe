@@ -51,13 +51,21 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         role: draft.role,
         category: draft.category,
         skills: draft.skills,
+        photoBase64: draft.photoBase64,
       );
       await ProfileDraftStore().clear();
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
-    } catch (error) {
-      if (mounted) setState(() => _error = error.toString());
+    } on ApiConnectionException catch (error) {
+      if (mounted) setState(() => _error = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _error =
+              'The profile could not be saved. Check the backend and try again.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }

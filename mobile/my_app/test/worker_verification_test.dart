@@ -72,22 +72,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Verify to accept jobs'), findsOneWidget);
-    expect(find.text('Accept request'), findsNothing);
-  });
-
-  testWidgets('verified worker retains the accept action', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: WorkerJobDetailsScreen(
-          request: _request,
-          worker: _worker(VerificationStatus.verified),
-        ),
-      ),
-    );
-
-    expect(find.text('Accept request'), findsOneWidget);
-    expect(find.text('Verify to accept jobs'), findsNothing);
+    expect(find.text('Verify to apply'), findsOneWidget);
+    expect(find.text('Apply for this request'), findsNothing);
   });
 
   group('guided verification onboarding', () {
@@ -113,10 +99,7 @@ void main() {
     });
 
     testWidgets('requires an ID number before advancing', (tester) async {
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-      );
+      await _pumpVerification(tester, documentCapture: (_) async => document);
 
       expect(find.text('Verify your identity'), findsOneWidget);
       await _tapVisible(
@@ -135,10 +118,7 @@ void main() {
     testWidgets('captures auto-advance and review masks the ID number', (
       tester,
     ) async {
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-      );
+      await _pumpVerification(tester, documentCapture: (_) async => document);
 
       await _reachReview(tester, idNumber: '123456789012');
 
@@ -173,26 +153,27 @@ void main() {
       expect(deleted, contains(document.path));
     });
 
-    testWidgets('successful ID-only submission cleans files and shows pending view', (
-      tester,
-    ) async {
-      final deleted = <String>[];
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-        deleteFile: (file) async => deleted.add(file.path),
-      );
-      await _reachReview(tester);
+    testWidgets(
+      'successful ID-only submission cleans files and shows pending view',
+      (tester) async {
+        final deleted = <String>[];
+        await _pumpVerification(
+          tester,
+          documentCapture: (_) async => document,
+          deleteFile: (file) async => deleted.add(file.path),
+        );
+        await _reachReview(tester);
 
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('verification_submit')),
-      );
-      await tester.tap(find.byKey(const ValueKey('verification_submit')));
-      await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('verification_submit')),
+        );
+        await tester.tap(find.byKey(const ValueKey('verification_submit')));
+        await tester.pumpAndSettle();
 
-      expect(find.text('Submitted for review'), findsOneWidget);
-      expect(deleted, containsAll(<String>[document.path]));
-    });
+        expect(find.text('Submitted for review'), findsOneWidget);
+        expect(deleted, containsAll(<String>[document.path]));
+      },
+    );
 
     testWidgets('network failure keeps the complete review draft', (
       tester,
@@ -302,10 +283,7 @@ void main() {
     testWidgets('system back asks before discarding an in-memory draft', (
       tester,
     ) async {
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-      );
+      await _pumpVerification(tester, documentCapture: (_) async => document);
       await _tapVisible(
         tester,
         find.byKey(const ValueKey('verification_start_button')),
