@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
@@ -22,6 +23,19 @@ class ClientSettingsScreen extends StatelessWidget {
               activeThumbColor: const Color(0xFFFFC72C),
               onChanged: ClientThemeController.setDarkMode,
             ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.logout),
+            title: const Text('Log out'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () async {
+              await FirebaseAuth.instance.signOut();
+              if (!context.mounted) return;
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            },
           ),
         ),
       ],

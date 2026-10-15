@@ -226,8 +226,35 @@ service cloud.firestore {
         && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId == request.resource.data.workerId;
       match /messages/{messageId} {
         allow read, create: if signedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
+          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds
+          && !exists(/databases/$(database)/documents/user_blocks/$(get(/databases/$(database)/documents/conversations/$(conversationId)).data.clientId + '_' + get(/databases/$(database)/documents/conversations/$(conversationId)).data.workerId))
+          && !exists(/databases/$(database)/documents/user_blocks/$(get(/databases/$(database)/documents/conversations/$(conversationId)).data.workerId + '_' + get(/databases/$(database)/documents/conversations/$(conversationId)).data.clientId));
       }
+    }
+
+    match /user_blocks/{blockId} {
+      allow get: if signedIn()
+        && (!exists(/databases/$(database)/documents/user_blocks/$(blockId))
+          || resource.data.blockerId == request.auth.uid
+          || resource.data.blockedId == request.auth.uid);
+      allow list: if signedIn()
+        && (resource.data.blockerId == request.auth.uid
+          || resource.data.blockedId == request.auth.uid);
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'blockerId', 'blockedId', 'conversationId', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'blockerId', 'blockedId', 'conversationId', 'createdAt'
+        ])
+        && request.resource.data.blockerId == request.auth.uid
+        && request.resource.data.blockedId is string
+        && request.resource.data.blockedId != request.auth.uid
+        && blockId == request.auth.uid + '_' + request.resource.data.blockedId
+        && request.resource.data.createdAt == request.time
+        && request.auth.uid in get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participantIds
+        && request.resource.data.blockedId in get(/databases/$(database)/documents/conversations/$(request.resource.data.conversationId)).data.participantIds;
+      allow delete: if signedIn() && resource.data.blockerId == request.auth.uid;
     }
 
     match /notifications/{notificationId} {
@@ -278,8 +305,60 @@ service cloud.firestore {
     match /reviews/{requestId} {
       allow read: if signedIn();
       allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'requestId', 'clientId', 'workerId', 'workerName', 'rating',
+          'comment', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'requestId', 'clientId', 'workerId', 'workerName', 'rating',
+          'comment', 'createdAt'
+        ])
+        && request.resource.data.requestId == requestId
         && request.resource.data.clientId == request.auth.uid
-        && get(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid;
+        && request.resource.data.workerId is string
+        && request.resource.data.workerName is string
+        && request.resource.data.workerName.size() <= 120
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.comment is string
+        && request.resource.data.comment.size() <= 500
+        && request.resource.data.createdAt == request.time
+        && get(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid
+        && get(/databases/$(database)/documents/service_requests/$(requestId)).data.workerId == request.resource.data.workerId
+        && get(/databases/$(database)/documents/service_requests/$(requestId)).data.status == 'completed';
+    }
+
+    match /reports/{reportId} {
+      allow get: if signedIn()
+        && (!exists(/databases/$(database)/documents/reports/$(reportId))
+          || resource.data.reporterId == request.auth.uid);
+      allow list: if signedIn()
+        && resource.data.reporterId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasAll([
+          'requestId', 'reporterId', 'reportedUserId', 'reportedUserName',
+          'reason', 'details', 'status', 'createdAt'
+        ])
+        && request.resource.data.keys().hasOnly([
+          'requestId', 'reporterId', 'reportedUserId', 'reportedUserName',
+          'reason', 'details', 'status', 'createdAt'
+        ])
+        && reportId == request.resource.data.requestId + '_' + request.auth.uid
+        && request.resource.data.reporterId == request.auth.uid
+        && request.resource.data.reportedUserId is string
+        && request.resource.data.reportedUserName is string
+        && request.resource.data.reportedUserName.size() <= 120
+        && request.resource.data.reason in [
+          'Inappropriate behavior', 'Fraud or scam', 'Poor service',
+          'Safety concern', 'Other'
+        ]
+        && request.resource.data.details is string
+        && request.resource.data.details.size() <= 1000
+        && request.resource.data.status == 'open'
+        && request.resource.data.createdAt == request.time
+        && get(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId == request.auth.uid
+        && get(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId == request.resource.data.reportedUserId;
     }
   }
 }

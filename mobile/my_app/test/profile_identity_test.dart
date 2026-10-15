@@ -72,11 +72,17 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ClientHomeScreen(profile: profile('Alice Santos'))),
     );
-    expect(find.text('Good day, Alice Santos!'), findsOneWidget);
+    expect(find.text('Hello 👋'), findsOneWidget);
+    expect(find.text('Alice Santos'), findsOneWidget);
     await tester.pumpWidget(
       MaterialApp(home: ClientHomeScreen(profile: profile('Alice Cruz'))),
     );
-    expect(find.text('Good day, Alice Cruz!'), findsOneWidget);
-    expect(find.text('Good day, User'), findsNothing);
+    expect(find.text('Alice Cruz'), findsOneWidget);
+    expect(find.text('Alice Santos'), findsNothing);
+    expect(find.text('Most Booked Services'), findsOneWidget);
+    expect(find.text('Other services'), findsOneWidget);
+    expect(find.text('Post what you need help'), findsNothing);
+    expect(find.text('Bookings'), findsOneWidget);
+    expect(find.text('History'), findsNothing);
   });
 }

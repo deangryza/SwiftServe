@@ -1,15 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'dart:convert';
-
-import '../../../../shared/services/api_service.dart';
-import '../../../../shared/services/profile_photo_picker.dart';
-import '../../../../shared/widgets/profile_avatar.dart';
 
 import '../../../../shared/models/service_request.dart';
-import 'client_settings_screen.dart';
+import '../widgets/conversation_ui.dart';
+import 'client_booking_flow.dart';
+import 'client_profile_screen.dart';
 import 'client_request_details_screen.dart';
+
+export 'client_profile_screen.dart';
 
 String? get clientUid => FirebaseAuth.instance.currentUser?.uid;
 
@@ -32,7 +31,7 @@ class ClientHistoryScreen extends StatelessWidget {
     final uid = clientUid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('History')),
+      appBar: AppBar(title: const Text('Bookings')),
       body: uid == null
           ? const Center(child: Text('Please log in again.'))
           : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
@@ -146,102 +145,153 @@ class ClientMessagesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uid = clientUid;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Messages')),
-      body: uid == null
-          ? const Center(child: Text('Please log in again.'))
-          : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('conversations')
-                  .where('participantIds', arrayContains: uid)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      'Could not load messages:\n${snapshot.error}',
-                      textAlign: TextAlign.center,
-                    ),
-                  );
-                }
-
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-
-                final allConversations = snapshot.data!.docs.toList()
-                  ..sort((a, b) {
-                    final aTime = a.data()['updatedAt'];
-                    final bTime = b.data()['updatedAt'];
-                    if (aTime is! Timestamp && bTime is! Timestamp) return 0;
-                    if (aTime is! Timestamp) return 1;
-                    if (bTime is! Timestamp) return -1;
-                    return bTime.compareTo(aTime);
-                  });
-                final latestByWorker =
-                    <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
-                for (final conversation in allConversations) {
-                  final workerId = conversation.data()['workerId']?.toString();
-                  if (workerId != null && workerId.isNotEmpty) {
-                    latestByWorker.putIfAbsent(workerId, () => conversation);
-                  }
-                }
-                final conversations = latestByWorker.values.toList();
-
-                if (conversations.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Text(
-                        'No conversations yet.\n'
-                        'A conversation will appear after you connect '
-                        'with a service provider.',
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  itemCount: conversations.length,
-                  itemBuilder: (context, index) {
-                    final conversation = conversations[index];
-                    final data = conversation.data();
-
-                    return ListTile(
-                      leading: const CircleAvatar(
-                        child: Icon(Icons.person_outline),
-                      ),
-                      title: Text(
-                        (data['workerName'] ?? 'Service provider').toString(),
-                      ),
-                      subtitle: Text(
-                        (data['lastMessage'] ?? 'Open conversation').toString(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ClientChatScreen(
-                              conversationId: conversation.id,
-                              otherPersonName:
-                                  (data['workerName'] ?? 'Service provider')
-                                      .toString(),
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
-              },
+    if (uid == null) {
+      return const Scaffold(body: Center(child: Text('Please log in again.')));
+    }
+    return ConversationInboxScreen(
+      userId: uid,
+      counterpartIdField: 'workerId',
+      counterpartNameField: 'workerName',
+      bottomNavigationBar: _ClientMessagesBottomNav(userId: uid),
+      onOpenConversation: (conversationId, name) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ClientChatScreen(
+              conversationId: conversationId,
+              otherPersonName: name,
             ),
+          ),
+        );
+      },
     );
   }
+}
+
+class _ClientMessagesBottomNav extends StatelessWidget {
+  const _ClientMessagesBottomNav({required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF171717) : const Color(0xFFFFF9E9);
+    final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
+    final text = dark ? const Color(0xFFF3F3F3) : const Color(0xFF242424);
+
+    void replaceWith(Widget screen) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => screen),
+      );
+    }
+
+    return Container(
+      color: background,
+      child: SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(18, 6, 18, 12),
+          padding: const EdgeInsets.symmetric(vertical: 5),
+          decoration: BoxDecoration(
+            color: surface,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x33000000),
+                blurRadius: 5,
+                offset: Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              _MessagesNavItem(
+                icon: Icons.home_outlined,
+                label: 'Home',
+                textColor: text,
+                onTap: () =>
+                    Navigator.popUntil(context, (route) => route.isFirst),
+              ),
+              _MessagesNavItem(
+                icon: Icons.calendar_month_outlined,
+                label: 'Bookings',
+                textColor: text,
+                onTap: () => replaceWith(const ClientBookingsScreen()),
+              ),
+              _MessagesNavItem(
+                icon: Icons.chat_bubble_outline,
+                label: 'Chat',
+                textColor: text,
+                selected: true,
+                userId: userId,
+                onTap: () {},
+              ),
+              _MessagesNavItem(
+                icon: Icons.person_outline,
+                label: 'Profile',
+                textColor: text,
+                onTap: () => replaceWith(const ClientProfileScreen()),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MessagesNavItem extends StatelessWidget {
+  const _MessagesNavItem({
+    required this.icon,
+    required this.label,
+    required this.textColor,
+    required this.onTap,
+    this.selected = false,
+    this.userId,
+  });
+
+  final IconData icon;
+  final String label;
+  final Color textColor;
+  final VoidCallback onTap;
+  final bool selected;
+  final String? userId;
+
+  @override
+  Widget build(BuildContext context) => Expanded(
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 38,
+              height: 27,
+              decoration: BoxDecoration(
+                color: selected ? const Color(0xFFFFC72C) : null,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Center(
+                child: userId == null
+                    ? Icon(icon, color: textColor, size: 19)
+                    : ConversationUnreadBadge(
+                        userId: userId,
+                        child: Icon(icon, color: textColor, size: 19),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(color: textColor, fontSize: 10)),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class ClientChatScreen extends StatefulWidget {
@@ -261,6 +311,31 @@ class ClientChatScreen extends StatefulWidget {
 class _ClientChatScreenState extends State<ClientChatScreen> {
   final _messageController = TextEditingController();
   bool _sending = false;
+  bool _markingRead = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _markRead());
+  }
+
+  Future<void> _markRead() async {
+    final uid = clientUid;
+    if (uid == null || _markingRead) return;
+    _markingRead = true;
+    try {
+      await FirebaseFirestore.instance
+          .collection('conversations')
+          .doc(widget.conversationId)
+          .update({
+            'unreadFor': FieldValue.arrayRemove([uid]),
+          });
+    } catch (_) {
+      // Older or removed conversations are handled by the chat error state.
+    } finally {
+      _markingRead = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -290,6 +365,31 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
       if (!participants.contains(uid)) {
         throw Exception('You cannot send to this conversation.');
       }
+      final otherParticipant = participants.firstWhere(
+        (participantId) => participantId != uid,
+        orElse: () => '',
+      );
+      if (otherParticipant.isEmpty) {
+        throw Exception('This conversation has no recipient.');
+      }
+      final blocks = await Future.wait([
+        FirebaseFirestore.instance
+            .collection('user_blocks')
+            .doc('${uid}_$otherParticipant')
+            .get(),
+        FirebaseFirestore.instance
+            .collection('user_blocks')
+            .doc('${otherParticipant}_$uid')
+            .get(),
+      ]);
+      if (blocks.any((block) => block.exists)) {
+        throw Exception(
+          'Messaging is unavailable because this user is blocked.',
+        );
+      }
+      final unreadFor = participants
+          .where((participantId) => participantId != uid)
+          .toList(growable: false);
 
       final batch = FirebaseFirestore.instance.batch();
 
@@ -303,6 +403,9 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
 
       batch.update(conversation, {
         'lastMessage': text,
+        'lastSenderId': uid,
+        'unreadFor': unreadFor,
+        'hiddenFor': FieldValue.arrayRemove(participants),
         'updatedAt': FieldValue.serverTimestamp(),
       });
 
@@ -322,9 +425,21 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
   @override
   Widget build(BuildContext context) {
     final uid = clientUid;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF171717) : const Color(0xFFFFF9E9);
+    final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
+    final text = dark ? const Color(0xFFF3F3F3) : const Color(0xFF242424);
 
     return Scaffold(
-      appBar: AppBar(title: Text(widget.otherPersonName)),
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: const Color(0xFFFFC72C),
+        foregroundColor: const Color(0xFF242424),
+        title: Text(
+          widget.otherPersonName,
+          style: const TextStyle(fontWeight: FontWeight.w700),
+        ),
+      ),
       body: Column(
         children: [
           Expanded(
@@ -345,6 +460,10 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
+
+                WidgetsBinding.instance.addPostFrameCallback(
+                  (_) => _markRead(),
+                );
 
                 final messages = snapshot.data!.docs;
 
@@ -371,15 +490,13 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: isMine
-                              ? const Color(0xFF1D1E21)
-                              : const Color(0xFFF0F1F4),
+                          color: isMine ? const Color(0xFFFFC72C) : surface,
                           borderRadius: BorderRadius.circular(16),
                         ),
                         child: Text(
                           (data['text'] ?? '').toString(),
                           style: TextStyle(
-                            color: isMine ? Colors.white : Colors.black87,
+                            color: isMine ? const Color(0xFF242424) : text,
                           ),
                         ),
                       ),
@@ -399,15 +516,25 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
                     child: TextField(
                       controller: _messageController,
                       textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
+                      style: TextStyle(color: text),
+                      decoration: InputDecoration(
                         hintText: 'Type a message...',
-                        border: OutlineInputBorder(),
+                        filled: true,
+                        fillColor: surface,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
                       ),
                       onSubmitted: (_) => _sendMessage(),
                     ),
                   ),
-                  IconButton(
+                  IconButton.filled(
                     onPressed: _sending ? null : _sendMessage,
+                    style: IconButton.styleFrom(
+                      backgroundColor: const Color(0xFFFFC72C),
+                      foregroundColor: const Color(0xFF242424),
+                    ),
                     icon: const Icon(Icons.send),
                   ),
                 ],
@@ -415,221 +542,6 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-// =====================================================
-// PROFILE
-// =====================================================
-
-class ClientProfileScreen extends StatefulWidget {
-  const ClientProfileScreen({super.key});
-
-  @override
-  State<ClientProfileScreen> createState() => _ClientProfileScreenState();
-}
-
-class _ClientProfileScreenState extends State<ClientProfileScreen> {
-  bool _savingPhoto = false;
-
-  Future<void> _changePhoto() async {
-    if (_savingPhoto) return;
-    setState(() => _savingPhoto = true);
-    try {
-      final bytes = await pickProfilePhoto();
-      if (bytes == null) return;
-      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-      if (token == null) return;
-      await ApiService().updateProfilePhoto(
-        idToken: token,
-        photoBase64: base64Encode(bytes),
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Profile photo saved.')));
-      }
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not save photo. Check your connection and try a smaller image.',
-            ),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _savingPhoto = false);
-    }
-  }
-
-  Future<void> _editName(String currentName) async {
-    final controller = TextEditingController(text: currentName);
-
-    try {
-      final newName = await showDialog<String>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: const Text('Edit name'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Full name'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () {
-                final name = controller.text.trim();
-                if (name.isNotEmpty) {
-                  Navigator.pop(dialogContext, name);
-                }
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        ),
-      );
-
-      if (newName == null || clientUid == null) return;
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(clientUid)
-          .update({'fullName': newName});
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Name updated.')));
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not update name: $error')));
-    } finally {
-      controller.dispose();
-    }
-  }
-
-  Future<void> _logOut() async {
-    await FirebaseAuth.instance.signOut();
-
-    if (!mounted) return;
-
-    // Keep AuthGate as the root so it can route the next signed-in user.
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      return const Scaffold(body: Center(child: Text('Please log in again.')));
-    }
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('Profile')),
-      body: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Could not load profile: ${snapshot.error}'),
-            );
-          }
-
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          final data = snapshot.data!.data() ?? {};
-          final name = (data['fullName'] ?? 'Client').toString();
-
-          return ListView(
-            padding: const EdgeInsets.all(20),
-            children: [
-              Center(
-                child: ProfileAvatar(
-                  photoBase64: (data['photoBase64'] ?? '').toString(),
-                  photoUrl: user.photoURL,
-                ),
-              ),
-              Center(
-                child: TextButton.icon(
-                  onPressed: _savingPhoto ? null : _changePhoto,
-                  icon: const Icon(Icons.photo_camera_outlined),
-                  label: Text(_savingPhoto ? 'Saving photo…' : 'Change photo'),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Center(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Card(
-                child: Column(
-                  children: [
-                    ListTile(
-                      leading: const Icon(Icons.email_outlined),
-                      title: const Text('Email'),
-                      subtitle: Text(user.email ?? 'No email available'),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.phone_outlined),
-                      title: const Text('Contact number'),
-                      subtitle: Text(
-                        (data['phoneNumber'] ?? 'No contact number saved')
-                            .toString(),
-                      ),
-                    ),
-                    ListTile(
-                      leading: const Icon(Icons.edit_outlined),
-                      title: const Text('Edit name'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => _editName(name),
-                    ),
-                    const Divider(height: 1),
-                    ListTile(
-                      leading: const Icon(Icons.settings_outlined),
-                      title: const Text('Settings'),
-                      subtitle: const Text('Theme and app preferences'),
-                      trailing: const Icon(Icons.chevron_right),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ClientSettingsScreen(),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              OutlinedButton.icon(
-                onPressed: _logOut,
-                icon: const Icon(Icons.logout),
-                label: const Text('Log out'),
-              ),
-            ],
-          );
-        },
       ),
     );
   }

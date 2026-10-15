@@ -166,13 +166,61 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
     ),
   );
 
+  Widget _profileAvatar() => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          color: _field,
+          shape: BoxShape.circle,
+          border: Border.all(color: _border, width: 1.5),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x26000000),
+              blurRadius: 3,
+              offset: Offset(0, 2),
+            ),
+          ],
+          image: widget.profileImage == null
+              ? null
+              : DecorationImage(
+                  image: MemoryImage(widget.profileImage!),
+                  fit: BoxFit.cover,
+                ),
+        ),
+        alignment: Alignment.center,
+        child: widget.profileImage == null
+            ? Icon(Icons.person_outline, color: _muted, size: 27)
+            : null,
+      ),
+      Positioned(
+        right: -1,
+        bottom: 1,
+        child: SizedBox.square(
+          dimension: 22,
+          child: IconButton.filled(
+            onPressed: widget.loading ? null : widget.onPickImage,
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              backgroundColor: _yellow,
+              foregroundColor: const Color(0xFF242424),
+            ),
+            icon: const Icon(Icons.camera_alt_outlined, size: 12),
+          ),
+        ),
+      ),
+    ],
+  );
+
   Widget _header() {
-    const labels = ['Account', 'Verification', 'Review'];
     const progress = [0.18, 0.30, 0.50, 0.70, 0.78, 1.0];
     final active = _page < 2 ? 0 : (_page < 5 ? 1 : 2);
     return SizedBox(
       height: 124,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           const Positioned.fill(child: ColoredBox(color: _yellow)),
           Positioned(
@@ -246,35 +294,68 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
               ),
             ),
           ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 54,
-            child: Row(
-              children: labels
-                  .map(
-                    (label) => Expanded(
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Color(0xFF3D4148),
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  )
-                  .toList(),
+          if (_page == 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: -36,
+              child: Center(child: _profileAvatar()),
             ),
-          ),
         ],
       ),
     );
   }
 
+  Widget _nameField(String label, TextEditingController controller) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: _text,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextFormField(
+          key: ValueKey(label),
+          controller: controller,
+          enabled: !widget.loading,
+          validator: _required,
+          style: TextStyle(color: _text, fontSize: 14),
+          decoration: InputDecoration(
+            isDense: true,
+            filled: true,
+            fillColor: _field,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 14,
+              vertical: 11,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: _border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: BorderSide(color: _border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(16),
+              borderSide: const BorderSide(color: _yellow, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
   Widget _accountPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      const SizedBox(height: 44),
       Text(
         'Create Account',
         textAlign: TextAlign.center,
@@ -290,43 +371,29 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         textAlign: TextAlign.center,
         style: TextStyle(color: _muted, fontSize: 13),
       ),
-      const SizedBox(height: 24),
-      Center(
-        child: Stack(
-          children: [
-            CircleAvatar(
-              radius: 46,
-              backgroundColor: _field,
-              foregroundImage: widget.profileImage == null
-                  ? null
-                  : MemoryImage(widget.profileImage!),
-              child: widget.profileImage == null
-                  ? Icon(Icons.person_outline, color: _muted, size: 32)
-                  : null,
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: IconButton.filled(
-                onPressed: widget.onPickImage,
-                style: IconButton.styleFrom(backgroundColor: _yellow),
-                icon: const Icon(Icons.camera_alt_outlined, size: 17),
-              ),
-            ),
-          ],
-        ),
-      ),
-      const SizedBox(height: 20),
+      const SizedBox(height: 26),
       Container(
-        padding: const EdgeInsets.all(12),
+        padding: const EdgeInsets.fromLTRB(11, 9, 8, 9),
         decoration: BoxDecoration(
           color: _field,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(13),
           border: Border.all(color: _border),
         ),
         child: Row(
           children: [
-            const Icon(Icons.person_outline, color: _yellow),
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: _yellow,
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: const Icon(
+                Icons.badge_outlined,
+                color: Color(0xFF242424),
+                size: 17,
+              ),
+            ),
             const SizedBox(width: 10),
             Expanded(
               child: Column(
@@ -334,25 +401,45 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
                 children: [
                   Text(
                     'CURRENT ROLE',
-                    style: TextStyle(color: _muted, fontSize: 10),
+                    style: TextStyle(
+                      color: _muted,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   Text(
                     'Signing up as Client',
-                    style: TextStyle(color: _text, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: _text,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
             ),
             TextButton(
               onPressed: () => Navigator.maybePop(context),
-              child: const Text('Change'),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF242424),
+                backgroundColor: _yellow,
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                minimumSize: const Size(0, 24),
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                shape: const StadiumBorder(),
+              ),
+              child: const Text(
+                'Change',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              ),
             ),
           ],
         ),
       ),
+      const SizedBox(height: 18),
+      _nameField('First Name', _firstName),
+      _nameField('Last Name', _lastName),
       const SizedBox(height: 22),
-      _inputField('First Name', 'First name', _firstName),
-      _inputField('Last Name', 'Last name', _lastName),
     ],
   );
 

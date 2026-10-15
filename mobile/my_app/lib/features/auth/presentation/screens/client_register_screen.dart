@@ -11,6 +11,7 @@ import '../../../../shared/services/profile_draft_store.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import 'profile_completion_screen.dart';
 import 'client_account_form.dart';
+import 'worker_account_form.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
   const ClientRegisterScreen({super.key});
@@ -173,6 +174,26 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           address: _address,
           password: _password,
           confirmPassword: _confirmPassword,
+          acceptedTerms: _acceptedTerms,
+          onTermsChanged: (value) => setState(() => _acceptedTerms = value),
+          loading: _loading,
+          profileImage: _profileImageBytes,
+          onPickImage: _pickProfileImage,
+          onRegister: _register,
+        ),
+      );
+    }
+    if (widget.role == 'worker') {
+      return ClientThemeScope(
+        child: WorkerAccountForm(
+          formKey: _formKey,
+          name: _name,
+          email: _email,
+          phone: _phone,
+          address: _address,
+          password: _password,
+          confirmPassword: _confirmPassword,
+          category: _category,
           acceptedTerms: _acceptedTerms,
           onTermsChanged: (value) => setState(() => _acceptedTerms = value),
           loading: _loading,

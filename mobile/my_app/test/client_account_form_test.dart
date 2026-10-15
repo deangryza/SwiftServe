@@ -65,9 +65,9 @@ void main() {
         await tester.tap(button);
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
-        expect(find.text('Account'), findsOneWidget);
-        expect(find.text('Verification'), findsOneWidget);
-        expect(find.text('Review'), findsOneWidget);
+        expect(find.text('Account'), findsNothing);
+        expect(find.text('Verification'), findsNothing);
+        expect(find.text('Review'), findsNothing);
         expect(find.text('Credentials'), findsNothing);
       }
 

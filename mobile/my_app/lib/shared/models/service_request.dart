@@ -29,6 +29,7 @@ class ServiceRequest {
     this.schedule,
     this.scheduleFrom,
     this.scheduleTo,
+    this.createdAt,
   });
 
   final String id;
@@ -45,6 +46,7 @@ class ServiceRequest {
   final DateTime? schedule;
   final DateTime? scheduleFrom;
   final DateTime? scheduleTo;
+  final DateTime? createdAt;
 
   factory ServiceRequest.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> document,
@@ -69,6 +71,7 @@ class ServiceRequest {
       scheduleTo:
           (data['scheduleTo'] as Timestamp?)?.toDate() ??
           (data['schedule'] as Timestamp?)?.toDate(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
   }
 }

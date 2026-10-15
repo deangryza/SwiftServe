@@ -8,6 +8,8 @@ import 'worker_register_screen.dart';
 class EntryScreen extends StatelessWidget {
   const EntryScreen({super.key});
 
+  static const _background = Color(0xFFFFF9E9);
+  static const _yellow = Color(0xFFFFC72C);
   static const _ink = Color(0xFF18181B);
   static const _muted = Color(0xFF71717A);
   static const _border = Color(0xFFE4E4E7);
@@ -21,14 +23,14 @@ class EntryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.white,
+        statusBarColor: _background,
         statusBarIconBrightness: Brightness.dark,
         statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.white,
+        systemNavigationBarColor: _background,
         systemNavigationBarIconBrightness: Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: _background,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) => SingleChildScrollView(
@@ -70,8 +72,8 @@ class EntryScreen extends StatelessWidget {
                             onPressed: () =>
                                 _open(context, const ClientRegisterScreen()),
                             style: FilledButton.styleFrom(
-                              backgroundColor: _ink,
-                              foregroundColor: Colors.white,
+                              backgroundColor: _yellow,
+                              foregroundColor: _ink,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -93,7 +95,7 @@ class EntryScreen extends StatelessWidget {
                                 _open(context, const WorkerRegisterScreen()),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: _ink,
-                              backgroundColor: Colors.white,
+                              backgroundColor: const Color(0xFFFFFEFB),
                               side: const BorderSide(color: _border),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),

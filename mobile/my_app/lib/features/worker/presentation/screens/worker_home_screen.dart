@@ -7,7 +7,9 @@ import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
+import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../../../client/presentation/screens/client_sections.dart';
+import '../../../client/presentation/widgets/conversation_ui.dart';
 import '../models/worker_verification_ui_state.dart';
 import '../widgets/legacy/job_offer_card.dart';
 import '../widgets/legacy/profile_header.dart';
@@ -42,44 +44,57 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
           verificationState: verificationState,
         ),
         _WorkerJobs(worker: widget.profile),
-        _WorkerMessages(worker: widget.profile),
+        _WorkerMessages(
+          worker: widget.profile,
+          onBack: () => setState(() => _index = 0),
+        ),
         _WorkerProfile(
           worker: widget.profile,
           verificationState: verificationState,
         ),
       ];
       return Scaffold(
-        appBar: AppBar(
-          title: Text(['Dashboard', 'History', 'Messages', 'Profile'][_index]),
-          actions: [
-            if (_index == 0)
-              IconButton(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        _WorkerNotifications(worker: widget.profile),
-                  ),
+        appBar: _index == 2
+            ? null
+            : AppBar(
+                title: Text(
+                  ['Dashboard', 'History', 'Messages', 'Profile'][_index],
                 ),
-                icon: const Icon(Icons.notifications_outlined),
+                actions: [
+                  if (_index == 0)
+                    IconButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              _WorkerNotifications(worker: widget.profile),
+                        ),
+                      ),
+                      icon: const Icon(Icons.notifications_outlined),
+                    ),
+                ],
               ),
-          ],
-        ),
         body: IndexedStack(index: _index, children: pages),
         bottomNavigationBar: NavigationBar(
           selectedIndex: _index,
           onDestinationSelected: (value) => setState(() => _index = value),
-          destinations: const [
-            NavigationDestination(
+          destinations: [
+            const NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
               label: 'Home',
             ),
-            NavigationDestination(icon: Icon(Icons.history), label: 'History'),
-            NavigationDestination(
-              icon: Icon(Icons.chat_bubble_outline),
-              label: 'Messages',
+            const NavigationDestination(
+              icon: Icon(Icons.history),
+              label: 'History',
             ),
             NavigationDestination(
+              icon: ConversationUnreadBadge(
+                userId: widget.profile.id,
+                child: const Icon(Icons.chat_bubble_outline),
+              ),
+              label: 'Messages',
+            ),
+            const NavigationDestination(
               icon: Icon(Icons.person_outline),
               label: 'Profile',
             ),
@@ -251,66 +266,27 @@ void _openVerification(BuildContext context, AppUser worker) {
 }
 
 class _WorkerMessages extends StatelessWidget {
-  const _WorkerMessages({required this.worker});
+  const _WorkerMessages({required this.worker, required this.onBack});
 
   final AppUser worker;
+  final VoidCallback onBack;
 
   @override
-  Widget build(BuildContext context) =>
-      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('conversations')
-            .where('participantIds', arrayContains: worker.id)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(child: Text('${snapshot.error}'));
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text('No conversations yet.'));
-          }
-          final allConversations = snapshot.data!.docs.toList()
-            ..sort((a, b) {
-              final aTime = a.data()['updatedAt'];
-              final bTime = b.data()['updatedAt'];
-              if (aTime is! Timestamp && bTime is! Timestamp) return 0;
-              if (aTime is! Timestamp) return 1;
-              if (bTime is! Timestamp) return -1;
-              return bTime.compareTo(aTime);
-            });
-          final latestByClient =
-              <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
-          for (final conversation in allConversations) {
-            final clientId = conversation.data()['clientId']?.toString();
-            if (clientId != null && clientId.isNotEmpty) {
-              latestByClient.putIfAbsent(clientId, () => conversation);
-            }
-          }
-          return ListView(
-            children: latestByClient.values.map((conversation) {
-              final data = conversation.data();
-              final clientName = (data['clientName'] ?? 'Client').toString();
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
-                title: Text(clientName),
-                subtitle: Text((data['lastMessage'] ?? '').toString()),
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ClientChatScreen(
-                      conversationId: conversation.id,
-                      otherPersonName: clientName,
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          );
-        },
-      );
+  Widget build(BuildContext context) => ConversationInboxScreen(
+    userId: worker.id,
+    counterpartIdField: 'clientId',
+    counterpartNameField: 'clientName',
+    onBack: onBack,
+    onOpenConversation: (conversationId, name) => Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ClientChatScreen(
+          conversationId: conversationId,
+          otherPersonName: name,
+        ),
+      ),
+    ),
+  );
 }
 
 class _WorkerProfile extends StatelessWidget {
@@ -323,11 +299,16 @@ class _WorkerProfile extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.all(18),
     children: [
-      ProfileHeader(
-        name: worker.fullName,
-        verified: verificationState.isVerified,
-        verificationLabel: verificationState.statusLabel,
-        onEdit: () {},
+      WorkerRatingBuilder(
+        workerId: worker.id,
+        builder: (context, rating) => ProfileHeader(
+          name: worker.fullName,
+          verified: verificationState.isVerified,
+          verificationLabel: verificationState.statusLabel,
+          rating: rating.displayAverage,
+          reviewCount: rating.reviewCount,
+          onEdit: () {},
+        ),
       ),
       ListTile(
         leading: Icon(
@@ -454,6 +435,9 @@ class _WorkerNotifications extends StatelessWidget {
                 data['read'] == true
                     ? Icons.notifications_outlined
                     : Icons.notifications_active,
+                color: data['read'] == true
+                    ? Colors.grey
+                    : const Color(0xFFFFD14E),
               ),
               title: Text((data['title'] ?? 'Update').toString()),
               subtitle: Text((data['body'] ?? '').toString()),
