@@ -1,8 +1,16 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/services/api_service.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/services/profile_draft_store.dart';
+import '../../../../shared/services/profile_photo_picker.dart';
+import '../widgets/phone_number_field.dart';
+import 'client_account_form.dart';
+import 'worker_account_form.dart';
 
 class GoogleProfileSetupScreen extends StatefulWidget {
   const GoogleProfileSetupScreen({super.key});
@@ -14,48 +22,119 @@ class GoogleProfileSetupScreen extends StatefulWidget {
 
 class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   final _form = GlobalKey<FormState>();
-  final _name = TextEditingController(
-    text: FirebaseAuth.instance.currentUser?.displayName ?? '',
-  );
+  final _name = TextEditingController();
+  final _email = TextEditingController();
   final _phone = TextEditingController();
   final _address = TextEditingController();
+  final _password = TextEditingController();
+  final _confirmPassword = TextEditingController();
   final _category = TextEditingController();
   String _role = 'client';
+  String _countryCode = '+63';
   bool _saving = false;
   bool _accepted = false;
+  Uint8List? _profileImageBytes;
+
+  @override
+  void initState() {
+    super.initState();
+    final user = FirebaseAuth.instance.currentUser;
+    _name.text = user?.displayName?.trim() ?? '';
+    _email.text = user?.email?.trim() ?? '';
+  }
 
   @override
   void dispose() {
-    for (final controller in [_name, _phone, _address, _category]) {
+    for (final controller in [
+      _name,
+      _email,
+      _phone,
+      _address,
+      _password,
+      _confirmPassword,
+      _category,
+    ]) {
       controller.dispose();
     }
     super.dispose();
   }
 
-  Future<void> _save() async {
-    if (_saving || !_form.currentState!.validate()) return;
-    if (!_accepted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please accept the terms and privacy policy.'),
-        ),
-      );
-      return;
+  Future<void> _pickProfileImage() async {
+    try {
+      final bytes = await pickProfilePhoto();
+      if (mounted && bytes != null) setState(() => _profileImageBytes = bytes);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not select photo. Try a smaller image.'),
+          ),
+        );
+      }
     }
+  }
+
+  Future<void> _chooseRole() async {
+    if (_saving) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Text(
+                'Choose your account type',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 12),
+              _RoleOption(
+                icon: Icons.person_outline,
+                title: 'I need help',
+                subtitle: 'Continue as a Client',
+                selected: _role == 'client',
+                onTap: () => Navigator.pop(context, 'client'),
+              ),
+              const SizedBox(height: 10),
+              _RoleOption(
+                icon: Icons.handyman_outlined,
+                title: 'I want to earn',
+                subtitle: 'Continue as a Worker',
+                selected: _role == 'worker',
+                onTap: () => Navigator.pop(context, 'worker'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (mounted && selected != null && selected != _role) {
+      setState(() => _role = selected);
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     setState(() => _saving = true);
+    final category = _role == 'worker' ? _category.text.trim() : '';
+    final draft = ProfileDraft(
+      fullName: _name.text.trim(),
+      email: user.email ?? _email.text.trim(),
+      phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
+      address: _address.text.trim(),
+      role: _role,
+      category: category,
+      skills: category.isEmpty ? const [] : [category],
+      photoBase64: _profileImageBytes == null
+          ? ''
+          : base64Encode(_profileImageBytes!),
+    );
     try {
-      final category = _role == 'worker' ? _category.text.trim() : '';
-      final draft = ProfileDraft(
-        fullName: _name.text.trim(),
-        email: user.email ?? '',
-        phoneNumber: _phone.text.trim(),
-        address: _address.text.trim(),
-        role: _role,
-        category: category,
-        skills: category.isEmpty ? [] : [category],
-      );
       await ProfileDraftStore().save(draft);
       final token = await user.getIdToken();
       await ApiService().createUserProfile(
@@ -67,31 +146,28 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
         role: draft.role,
         category: draft.category,
         skills: draft.skills,
+        photoBase64: draft.photoBase64,
       );
       await user.updateDisplayName(draft.fullName);
       await ProfileDraftStore().clear();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } on ApiException catch (error) {
       _showError(
-        'Profile save failed (HTTP ${error.statusCode}). '
-        '${error.statusCode == 401
-            ? 'Sign out and sign in again.'
-            : error.statusCode == 404
-            ? 'Check that the correct SwiftServe backend is running.'
-            : 'Check the backend terminal for the error.'}',
+        error.code == 'PHONE_NUMBER_IN_USE'
+            ? error.message
+            : 'Profile save failed (HTTP ${error.statusCode}). '
+                  '${error.statusCode == 401
+                      ? 'Sign out and sign in again.'
+                      : error.statusCode == 404
+                      ? 'Check that the correct SwiftServe backend is running.'
+                      : 'Check the backend terminal for the error.'}',
       );
     } on ApiConnectionException catch (error) {
       _showError(error.message);
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not save your profile. Check the backend connection and try again.',
-            ),
-          ),
-        );
-      }
+      _showError(
+        'Could not save your profile. Check the backend connection and try again.',
+      );
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -104,96 +180,110 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Widget _field(
-    String label,
-    TextEditingController controller, {
-    TextInputType? keyboard,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 16),
-    child: TextFormField(
-      controller: controller,
-      enabled: !_saving,
-      keyboardType: keyboard,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
-      validator: (value) => value == null || value.trim().isEmpty
-          ? 'This field is required.'
-          : null,
-    ),
-  );
+  void _signOut() {
+    FirebaseAuth.instance.signOut();
+  }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Complete your account')),
-    body: SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: Form(
-              key: _form,
+  Widget build(BuildContext context) {
+    void changeCountry(String value) => setState(() => _countryCode = value);
+    final form = _role == 'client'
+        ? ClientAccountForm(
+            key: const ValueKey('google-client-account-flow'),
+            formKey: _form,
+            name: _name,
+            email: _email,
+            phone: _phone,
+            address: _address,
+            password: _password,
+            confirmPassword: _confirmPassword,
+            acceptedTerms: _accepted,
+            onTermsChanged: (value) => setState(() => _accepted = value),
+            loading: _saving,
+            profileImage: _profileImageBytes,
+            onPickImage: _pickProfileImage,
+            onRegister: _save,
+            countryCode: _countryCode,
+            onCountryCodeChanged: changeCountry,
+            federatedAccount: true,
+            onChangeRole: _chooseRole,
+            onExit: _signOut,
+          )
+        : WorkerAccountForm(
+            key: const ValueKey('google-worker-account-flow'),
+            formKey: _form,
+            name: _name,
+            email: _email,
+            phone: _phone,
+            address: _address,
+            password: _password,
+            confirmPassword: _confirmPassword,
+            category: _category,
+            acceptedTerms: _accepted,
+            onTermsChanged: (value) => setState(() => _accepted = value),
+            loading: _saving,
+            profileImage: _profileImageBytes,
+            onPickImage: _pickProfileImage,
+            onRegister: _save,
+            countryCode: _countryCode,
+            onCountryCodeChanged: changeCountry,
+            federatedAccount: true,
+            onChangeRole: _chooseRole,
+            onExit: _signOut,
+          );
+    return ClientThemeScope(child: form);
+  }
+}
+
+class _RoleOption extends StatelessWidget {
+  const _RoleOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: selected
+        ? const Color(0xFFFFC72C).withValues(alpha: 0.18)
+        : Theme.of(context).colorScheme.surfaceContainerHighest,
+    borderRadius: BorderRadius.circular(16),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            CircleAvatar(
+              backgroundColor: const Color(0xFFFFC72C),
+              foregroundColor: const Color(0xFF242424),
+              child: Icon(icon),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    FirebaseAuth.instance.currentUser?.email ?? '',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Choose how you will use SwiftServe and complete your profile.',
-                  ),
-                  const SizedBox(height: 20),
-                  DropdownButtonFormField<String>(
-                    initialValue: _role,
-                    decoration: const InputDecoration(
-                      labelText: 'Account type',
-                      border: OutlineInputBorder(),
-                    ),
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'client',
-                        child: Text('I need help — Client'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'worker',
-                        child: Text('I want to earn — Worker'),
-                      ),
-                    ],
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _role = value!),
-                  ),
-                  const SizedBox(height: 20),
-                  _field('Full name', _name),
-                  _field('Phone number', _phone, keyboard: TextInputType.phone),
-                  _field('Address', _address),
-                  if (_role == 'worker') _field('Service category', _category),
-                  CheckboxListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _accepted,
-                    onChanged: _saving
-                        ? null
-                        : (value) => setState(() => _accepted = value ?? false),
-                    title: const Text(
-                      'I agree to the Terms and Conditions and Privacy Policy.',
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: _saving ? null : _save,
-                    child: Text(_saving ? 'Saving...' : 'Continue'),
-                  ),
-                  TextButton(
-                    onPressed: _saving ? null : FirebaseAuth.instance.signOut,
-                    child: const Text('Sign out'),
-                  ),
+                  Text(subtitle),
                 ],
               ),
             ),
-          ),
+            if (selected)
+              const Icon(Icons.check_circle, color: Color(0xFFFFC72C)),
+          ],
         ),
       ),
     ),

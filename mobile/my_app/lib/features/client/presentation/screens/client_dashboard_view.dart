@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/profile_avatar.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
@@ -28,188 +29,186 @@ class ClientDashboardView extends StatelessWidget {
     final muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF666666);
     final name = profile?.fullName.trim();
 
-    return Scaffold(
-      backgroundColor: background,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _Greeting(
-                          profile: profile,
-                          name: name == null || name.isEmpty ? 'Client' : name,
-                          textColor: text,
-                          surface: surface,
-                        ),
-                        const SizedBox(height: 16),
-                        _SearchButton(
-                          surface: surface,
-                          textColor: muted,
-                          onTap: () =>
-                              _open(context, const ClientSearchScreen()),
-                        ),
-                        const SizedBox(height: 18),
-                        _RequestBanner(
-                          onPostRequest: () =>
-                              _open(context, const PostRequestScreen()),
-                          onOpenMap: () =>
-                              _open(context, const ClientSearchScreen()),
-                          onOpenPlus: () {
-                            ScaffoldMessenger.of(context)
-                              ..hideCurrentSnackBar()
-                              ..showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'SwiftServe Plus is coming soon.',
+    return ClientTabSwipeRegion(
+      currentIndex: 0,
+      onSwipeToIndex: (index) => _openTab(context, index),
+      child: Scaffold(
+        backgroundColor: background,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _Greeting(
+                            profile: profile,
+                            name: name == null || name.isEmpty
+                                ? 'Client'
+                                : name,
+                            textColor: text,
+                            surface: surface,
+                          ),
+                          const SizedBox(height: 16),
+                          _SearchButton(
+                            surface: surface,
+                            textColor: muted,
+                            onTap: () =>
+                                _open(context, const ClientSearchScreen()),
+                          ),
+                          const SizedBox(height: 18),
+                          _RequestBanner(
+                            onPostRequest: () =>
+                                _open(context, const PostRequestScreen()),
+                            onOpenMap: () =>
+                                _open(context, const ClientSearchScreen()),
+                            onOpenPlus: () {
+                              ScaffoldMessenger.of(context)
+                                ..hideCurrentSnackBar()
+                                ..showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                      'SwiftServe Plus is coming soon.',
+                                    ),
+                                  ),
+                                );
+                            },
+                          ),
+                          const SizedBox(height: 22),
+                          Text(
+                            'Most Booked Services',
+                            style: TextStyle(
+                              color: text,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          GridView.count(
+                            crossAxisCount: 3,
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 0.93,
+                            children: [
+                              _ServiceCard(
+                                icon: Icons.home_outlined,
+                                title: 'Home Services',
+                                tint: const Color(0xFFFFE9A8),
+                                surface: surface,
+                                textColor: text,
+                                onTap: () => _open(
+                                  context,
+                                  const PostRequestScreen(
+                                    initialCategory: 'Home Services',
                                   ),
                                 ),
-                              );
-                          },
-                        ),
-                        const SizedBox(height: 22),
-                        Text(
-                          'Most Booked Services',
-                          style: TextStyle(
-                            color: text,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                              ),
+                              _ServiceCard(
+                                icon: Icons.school_outlined,
+                                title: 'Academic Help',
+                                tint: const Color(0xFFFFDDD5),
+                                surface: surface,
+                                textColor: text,
+                                onTap: () => _open(
+                                  context,
+                                  const PostRequestScreen(
+                                    initialCategory: 'Academic Help',
+                                  ),
+                                ),
+                              ),
+                              _ServiceCard(
+                                icon: Icons.handyman_outlined,
+                                title: 'Repairs',
+                                tint: const Color(0xFFF4ECD3),
+                                surface: surface,
+                                textColor: text,
+                                onTap: () => _open(
+                                  context,
+                                  const PostRequestScreen(
+                                    initialCategory: 'Repairs',
+                                  ),
+                                ),
+                              ),
+                              _ServiceCard(
+                                icon: Icons.shopping_bag_outlined,
+                                title: 'Errands',
+                                tint: const Color(0xFFDDF4E9),
+                                surface: surface,
+                                textColor: text,
+                                onTap: () => _open(
+                                  context,
+                                  const PostRequestScreen(
+                                    initialCategory: 'Errands',
+                                  ),
+                                ),
+                              ),
+                              _ServiceCard(
+                                icon: Icons.auto_awesome_outlined,
+                                title: 'Cleaning',
+                                tint: const Color(0xFFFFE9A8),
+                                surface: surface,
+                                textColor: text,
+                                onTap: () => _open(
+                                  context,
+                                  const PostRequestScreen(
+                                    initialCategory: 'Cleaning',
+                                  ),
+                                ),
+                              ),
+                              _ServiceCard(
+                                icon: Icons.content_cut_outlined,
+                                title: 'Beauty',
+                                tint: const Color(0xFFFFDDD5),
+                                surface: surface,
+                                textColor: text,
+                                onTap: () => _open(
+                                  context,
+                                  const PostRequestScreen(
+                                    initialCategory: 'Beauty',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        GridView.count(
-                          crossAxisCount: 3,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          crossAxisSpacing: 10,
-                          mainAxisSpacing: 10,
-                          childAspectRatio: 0.93,
-                          children: [
-                            _ServiceCard(
-                              icon: Icons.home_outlined,
-                              title: 'Home Services',
-                              tint: const Color(0xFFFFE9A8),
-                              surface: surface,
-                              textColor: text,
-                              onTap: () => _open(
-                                context,
-                                const PostRequestScreen(
-                                  initialCategory: 'Home Services',
-                                ),
+                          const SizedBox(height: 16),
+                          FilledButton.icon(
+                            key: const ValueKey('client-other-services'),
+                            onPressed: () =>
+                                _open(context, const PostRequestScreen()),
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _yellow,
+                              foregroundColor: _ink,
+                              minimumSize: const Size.fromHeight(52),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
+                              elevation: 2,
                             ),
-                            _ServiceCard(
-                              icon: Icons.school_outlined,
-                              title: 'Academic Help',
-                              tint: const Color(0xFFFFDDD5),
-                              surface: surface,
-                              textColor: text,
-                              onTap: () => _open(
-                                context,
-                                const PostRequestScreen(
-                                  initialCategory: 'Academic Help',
-                                ),
-                              ),
+                            icon: const Icon(Icons.grid_view_rounded, size: 19),
+                            label: const Text(
+                              'Other services',
+                              style: TextStyle(fontWeight: FontWeight.w700),
                             ),
-                            _ServiceCard(
-                              icon: Icons.handyman_outlined,
-                              title: 'Repairs',
-                              tint: const Color(0xFFF4ECD3),
-                              surface: surface,
-                              textColor: text,
-                              onTap: () => _open(
-                                context,
-                                const PostRequestScreen(
-                                  initialCategory: 'Repairs',
-                                ),
-                              ),
-                            ),
-                            _ServiceCard(
-                              icon: Icons.shopping_bag_outlined,
-                              title: 'Errands',
-                              tint: const Color(0xFFDDF4E9),
-                              surface: surface,
-                              textColor: text,
-                              onTap: () => _open(
-                                context,
-                                const PostRequestScreen(
-                                  initialCategory: 'Errands',
-                                ),
-                              ),
-                            ),
-                            _ServiceCard(
-                              icon: Icons.auto_awesome_outlined,
-                              title: 'Cleaning',
-                              tint: const Color(0xFFFFE9A8),
-                              surface: surface,
-                              textColor: text,
-                              onTap: () => _open(
-                                context,
-                                const PostRequestScreen(
-                                  initialCategory: 'Cleaning',
-                                ),
-                              ),
-                            ),
-                            _ServiceCard(
-                              icon: Icons.content_cut_outlined,
-                              title: 'Beauty',
-                              tint: const Color(0xFFFFDDD5),
-                              surface: surface,
-                              textColor: text,
-                              onTap: () => _open(
-                                context,
-                                const PostRequestScreen(
-                                  initialCategory: 'Beauty',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        FilledButton.icon(
-                          key: const ValueKey('client-other-services'),
-                          onPressed: () =>
-                              _open(context, const PostRequestScreen()),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _yellow,
-                            foregroundColor: _ink,
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            elevation: 2,
                           ),
-                          icon: const Icon(Icons.grid_view_rounded, size: 19),
-                          label: const Text(
-                            'Other services',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                _ClientNavigation(
-                  userId: profile?.id,
-                  surface: surface,
-                  textColor: text,
-                  onSelected: (index) {
-                    if (index == 0) return;
-                    final screen = switch (index) {
-                      1 => const ClientBookingsScreen(),
-                      2 => const ClientMessagesScreen(),
-                      _ => const ClientProfileScreen(),
-                    };
-                    _open(context, screen);
-                  },
-                ),
-              ],
+                  _ClientNavigation(
+                    userId: profile?.id,
+                    surface: surface,
+                    textColor: text,
+                    onSelected: (index) => _openTab(context, index),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -217,8 +216,21 @@ class ClientDashboardView extends StatelessWidget {
     );
   }
 
+  void _openTab(BuildContext context, int index) {
+    if (index == 0) return;
+    final screen = switch (index) {
+      1 => const ClientBookingsScreen(),
+      2 => const ClientMessagesScreen(),
+      _ => const ClientProfileScreen(),
+    };
+    Navigator.push(
+      context,
+      clientTabPageRoute(screen, fromIndex: 0, toIndex: index),
+    );
+  }
+
   void _open(BuildContext context, Widget screen) {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
+    Navigator.push(context, clientPageRoute(screen));
   }
 }
 
@@ -278,9 +290,7 @@ class _Greeting extends StatelessWidget {
           key: const ValueKey('client-notifications'),
           onPressed: () => Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (_) => const ClientNotificationsScreen(),
-            ),
+            clientPageRoute(const ClientNotificationsScreen()),
           ),
           icon: NotificationUnreadBadge(
             userId: profile?.id,

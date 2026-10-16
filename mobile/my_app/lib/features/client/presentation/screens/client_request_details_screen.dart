@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import 'client_sections.dart';
 
 class ClientRequestDetailsScreen extends StatefulWidget {
@@ -104,8 +105,8 @@ class _ClientRequestDetailsScreenState
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ClientChatScreen(
+      clientPageRoute(
+        ClientChatScreen(
           conversationId: pairConversation.exists
               ? pairConversationId
               : request.id,

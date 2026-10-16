@@ -123,6 +123,28 @@ void main() {
     expect(firstName.style?.color, const Color(0xFFF2F2F2));
     expect(firstName.decoration?.fillColor, const Color(0xFF2C2C2C));
   });
+
+  testWidgets('worker profile photo overlaps the curved account panel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(364, 1024);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: WorkerRegisterScreen()));
+    await tester.pumpAndSettle();
+
+    final avatar = tester.getRect(
+      find.byKey(const ValueKey('worker-registration-profile-avatar')),
+    );
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('worker-registration-curved-panel')),
+    );
+
+    expect(avatar.top, lessThan(panel.top));
+    expect(avatar.bottom, greaterThan(panel.top));
+  });
 }
 
 Future<void> _tapNext(WidgetTester tester) async {

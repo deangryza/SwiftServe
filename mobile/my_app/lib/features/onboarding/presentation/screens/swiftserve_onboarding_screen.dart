@@ -2,7 +2,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../auth/presentation/screens/entry_screen.dart';
 
@@ -26,13 +25,15 @@ class _SwiftServeOnboardingScreenState
 
   static const _pages = [
     _OnboardingPageData(
-      illustration: 'assets/onboarding/find_nearby.svg',
+      lightIllustration: 'assets/onboarding/onboarding_nearby_light.png',
+      darkIllustration: 'assets/onboarding/onboarding_nearby_dark.png',
       title: 'Find Nearby Services Easily',
       description:
           'Connect with trusted workers near your location for short-term tasks and daily services anytime and anywhere.',
     ),
     _OnboardingPageData(
-      illustration: 'assets/onboarding/skills_opportunities.svg',
+      lightIllustration: 'assets/onboarding/onboarding_skills_light.png',
+      darkIllustration: 'assets/onboarding/onboarding_skills_dark.png',
       title: 'Turn your Skills into\nOpportunities',
       description:
           'Workers can offer their skills, accept bookings, and connect with clients through one organized platform.',
@@ -64,94 +65,110 @@ class _SwiftServeOnboardingScreenState
   }
 
   @override
-  Widget build(BuildContext context) => AnnotatedRegion<SystemUiOverlayStyle>(
-    value: const SystemUiOverlayStyle(
-      statusBarColor: _background,
-      statusBarIconBrightness: Brightness.dark,
-      statusBarBrightness: Brightness.light,
-      systemNavigationBarColor: _background,
-      systemNavigationBarIconBrightness: Brightness.dark,
-    ),
-    child: Scaffold(
-      backgroundColor: _background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 12, 16, 8),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'SwiftServe',
-                      style: TextStyle(
-                        color: _ink,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF171717) : _background;
+    final ink = dark ? const Color(0xFFF3F3F3) : _ink;
+    final muted = dark ? const Color(0xFFB8B8B8) : _muted;
+    final divider = dark ? const Color(0xFF444444) : const Color(0xFFE3DDCD);
+    final inactiveDot = dark
+        ? const Color(0xFF666666)
+        : const Color(0xFFD9D9D9);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: background,
+        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: background,
+        systemNavigationBarIconBrightness: dark
+            ? Brightness.light
+            : Brightness.dark,
+      ),
+      child: Scaffold(
+        backgroundColor: background,
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'SwiftServe',
+                        style: TextStyle(
+                          color: ink,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
-                  TextButton(
-                    key: const ValueKey('onboarding-skip'),
-                    onPressed: _openEntry,
-                    style: TextButton.styleFrom(
-                      foregroundColor: _ink,
-                      minimumSize: const Size(52, 36),
-                      textStyle: const TextStyle(fontSize: 12),
+                    TextButton(
+                      key: const ValueKey('onboarding-skip'),
+                      onPressed: _openEntry,
+                      style: TextButton.styleFrom(
+                        foregroundColor: ink,
+                        minimumSize: const Size(52, 36),
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                      child: const Text('Skip'),
                     ),
-                    child: const Text('Skip'),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: PageView.builder(
-                controller: _controller,
-                itemCount: _pages.length,
-                onPageChanged: (page) => setState(() => _page = page),
-                itemBuilder: (context, index) => _OnboardingPage(
-                  data: _pages[index],
-                  pageIndex: index,
-                  selectedPage: _page,
+                  ],
                 ),
               ),
-            ),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: Color(0xFFE3DDCD))),
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 430),
-                  child: FilledButton(
-                    key: const ValueKey('onboarding-next'),
-                    onPressed: _continue,
-                    style: FilledButton.styleFrom(
-                      backgroundColor: _yellow,
-                      foregroundColor: const Color(0xFF171717),
-                      minimumSize: const Size.fromHeight(52),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      textStyle: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    child: Text(
-                      _page == _pages.length - 1 ? 'Get Started' : 'Next',
-                    ),
+              Expanded(
+                child: PageView.builder(
+                  controller: _controller,
+                  itemCount: _pages.length,
+                  onPageChanged: (page) => setState(() => _page = page),
+                  itemBuilder: (context, index) => _OnboardingPage(
+                    data: _pages[index],
+                    pageIndex: index,
+                    selectedPage: _page,
+                    ink: ink,
+                    muted: muted,
+                    inactiveDot: inactiveDot,
+                    dark: dark,
                   ),
                 ),
               ),
-            ),
-          ],
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: divider)),
+                ),
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 430),
+                    child: FilledButton(
+                      key: const ValueKey('onboarding-next'),
+                      onPressed: _continue,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _yellow,
+                        foregroundColor: const Color(0xFF171717),
+                        minimumSize: const Size.fromHeight(52),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        textStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      child: Text(
+                        _page == _pages.length - 1 ? 'Get Started' : 'Next',
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
 
 class _OnboardingPage extends StatelessWidget {
@@ -159,11 +176,19 @@ class _OnboardingPage extends StatelessWidget {
     required this.data,
     required this.pageIndex,
     required this.selectedPage,
+    required this.ink,
+    required this.muted,
+    required this.inactiveDot,
+    required this.dark,
   });
 
   final _OnboardingPageData data;
   final int pageIndex;
   final int selectedPage;
+  final Color ink;
+  final Color muted;
+  final Color inactiveDot;
+  final bool dark;
 
   @override
   Widget build(BuildContext context) => LayoutBuilder(
@@ -192,15 +217,20 @@ class _OnboardingPage extends StatelessWidget {
                     child: SizedBox.square(
                       key: ValueKey('onboarding-illustration-$pageIndex'),
                       dimension: illustrationSize,
-                      child: SvgPicture.asset(data.illustration),
+                      child: Image.asset(
+                        dark ? data.darkIllustration : data.lightIllustration,
+                        fit: BoxFit.contain,
+                        filterQuality: FilterQuality.high,
+                        gaplessPlayback: true,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 26),
                   Text(
                     data.title,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: _SwiftServeOnboardingScreenState._ink,
+                    style: TextStyle(
+                      color: ink,
                       fontSize: 24,
                       height: 29 / 24,
                       fontWeight: FontWeight.w700,
@@ -211,8 +241,8 @@ class _OnboardingPage extends StatelessWidget {
                   Text(
                     data.description,
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      color: _SwiftServeOnboardingScreenState._muted,
+                    style: TextStyle(
+                      color: muted,
                       fontSize: 14,
                       height: 21 / 14,
                     ),
@@ -231,7 +261,7 @@ class _OnboardingPage extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: selected
                               ? _SwiftServeOnboardingScreenState._yellow
-                              : const Color(0xFFD9D9D9),
+                              : inactiveDot,
                           borderRadius: BorderRadius.circular(8),
                         ),
                       );
@@ -249,12 +279,14 @@ class _OnboardingPage extends StatelessWidget {
 
 class _OnboardingPageData {
   const _OnboardingPageData({
-    required this.illustration,
+    required this.lightIllustration,
+    required this.darkIllustration,
     required this.title,
     required this.description,
   });
 
-  final String illustration;
+  final String lightIllustration;
+  final String darkIllustration;
   final String title;
   final String description;
 }

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
+import '../widgets/phone_number_field.dart';
 import 'login_screen.dart';
 
 class ClientAccountForm extends StatefulWidget {
@@ -21,6 +22,11 @@ class ClientAccountForm extends StatefulWidget {
     required this.profileImage,
     required this.onPickImage,
     required this.onRegister,
+    this.countryCode = '+63',
+    this.onCountryCodeChanged,
+    this.federatedAccount = false,
+    this.onChangeRole,
+    this.onExit,
   });
 
   final GlobalKey<FormState> formKey;
@@ -36,6 +42,11 @@ class ClientAccountForm extends StatefulWidget {
   final Uint8List? profileImage;
   final VoidCallback onPickImage;
   final VoidCallback onRegister;
+  final String countryCode;
+  final ValueChanged<String>? onCountryCodeChanged;
+  final bool federatedAccount;
+  final VoidCallback? onChangeRole;
+  final VoidCallback? onExit;
 
   @override
   State<ClientAccountForm> createState() => _ClientAccountFormState();
@@ -49,6 +60,23 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   var _page = 0;
   var _obscurePassword = true;
   var _obscureConfirmation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final parts = widget.name.text.trim().split(RegExp(r'\s+'));
+    if (parts.isNotEmpty && parts.first.isNotEmpty) {
+      _firstName.text = parts.first;
+      _lastName.text = parts.skip(1).join(' ');
+    }
+    _firstName.addListener(_syncName);
+    _lastName.addListener(_syncName);
+  }
+
+  void _syncName() {
+    widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}'
+        .trim();
+  }
 
   bool get _dark => ClientThemeController.darkMode.value;
   Color get _surface =>
@@ -104,6 +132,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
     TextEditingController controller, {
     TextInputType? keyboardType,
     bool obscure = false,
+    bool readOnly = false,
     VoidCallback? toggle,
     String? Function(String?)? validator,
   }) => Padding(
@@ -127,6 +156,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           validator: validator ?? _required,
           keyboardType: keyboardType,
           obscureText: obscure,
+          readOnly: readOnly,
           style: TextStyle(color: _text),
           decoration: InputDecoration(
             hintText: hint,
@@ -170,6 +200,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
     clipBehavior: Clip.none,
     children: [
       Container(
+        key: const ValueKey('client-registration-profile-avatar'),
         width: 72,
         height: 72,
         decoration: BoxDecoration(
@@ -229,6 +260,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
             bottom: 0,
             height: 46,
             child: DecoratedBox(
+              key: const ValueKey('client-registration-curved-panel'),
               decoration: BoxDecoration(
                 color: _surface,
                 borderRadius: const BorderRadius.only(
@@ -298,7 +330,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: -36,
+              bottom: -4,
               child: Center(child: _profileAvatar()),
             ),
         ],
@@ -355,7 +387,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   Widget _accountPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
-      const SizedBox(height: 44),
+      const SizedBox(height: 12),
       Text(
         'Create Account',
         textAlign: TextAlign.center,
@@ -419,7 +451,8 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.maybePop(context),
+              onPressed:
+                  widget.onChangeRole ?? () => Navigator.maybePop(context),
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFF242424),
                 backgroundColor: _yellow,
@@ -450,38 +483,47 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         'john@example.com',
         widget.email,
         keyboardType: TextInputType.emailAddress,
+        readOnly: widget.federatedAccount,
       ),
-      _inputField(
-        'Phone Number',
-        '+63 000-000-0000',
-        widget.phone,
-        keyboardType: TextInputType.phone,
+      PhoneNumberField(
+        fieldKey: const ValueKey('Phone Number'),
+        controller: widget.phone,
+        dialCode: widget.countryCode,
+        onDialCodeChanged: widget.onCountryCodeChanged ?? (_) {},
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted,
+        borderColor: _border,
+        focusColor: _yellow,
       ),
       _inputField(
         'Address / Location',
         '123 Street, Tech City',
         widget.address,
       ),
-      _inputField(
-        'Password',
-        'Enter your password',
-        widget.password,
-        obscure: _obscurePassword,
-        toggle: () => setState(() => _obscurePassword = !_obscurePassword),
-        validator: (value) => value == null || value.length < 6
-            ? 'Use at least 6 characters.'
-            : null,
-      ),
-      _inputField(
-        'Confirm Password',
-        'Re-enter your password',
-        widget.confirmPassword,
-        obscure: _obscureConfirmation,
-        toggle: () =>
-            setState(() => _obscureConfirmation = !_obscureConfirmation),
-        validator: (value) =>
-            value != widget.password.text ? 'Passwords do not match.' : null,
-      ),
+      if (!widget.federatedAccount) ...[
+        _inputField(
+          'Password',
+          'Enter your password',
+          widget.password,
+          obscure: _obscurePassword,
+          toggle: () => setState(() => _obscurePassword = !_obscurePassword),
+          validator: (value) => value == null || value.length < 6
+              ? 'Use at least 6 characters.'
+              : null,
+        ),
+        _inputField(
+          'Confirm Password',
+          'Re-enter your password',
+          widget.confirmPassword,
+          obscure: _obscureConfirmation,
+          toggle: () =>
+              setState(() => _obscureConfirmation = !_obscureConfirmation),
+          validator: (value) =>
+              value != widget.password.text ? 'Passwords do not match.' : null,
+        ),
+      ],
       Row(
         children: [
           Icon(Icons.lock_outline, color: _muted, size: 15),
@@ -521,7 +563,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
       ),
       const SizedBox(height: 8),
       Text(
-        'Your code was sent to ${widget.phone.text}',
+        'Your code was sent to ${normalizePhoneNumber(widget.countryCode, widget.phone.text)}',
         textAlign: TextAlign.center,
         style: TextStyle(color: _muted),
       ),
@@ -690,8 +732,15 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         leading: IconButton(
           onPressed: widget.loading
               ? null
-              : () =>
-                    _page > 0 ? _goTo(_page - 1) : Navigator.maybePop(context),
+              : () {
+                  if (_page > 0) {
+                    _goTo(_page - 1);
+                  } else if (widget.onExit != null) {
+                    widget.onExit!();
+                  } else {
+                    Navigator.maybePop(context);
+                  }
+                },
           icon: const Icon(Icons.arrow_back),
         ),
       ),
@@ -743,15 +792,16 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
                           child: const Text('Skip for now'),
                         ),
                       const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const LoginScreen(),
+                      if (!widget.federatedAccount)
+                        TextButton(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const LoginScreen(),
+                            ),
                           ),
+                          child: const Text('Already have an account? Log In'),
                         ),
-                        child: const Text('Already have an account? Log In'),
-                      ),
                     ],
                   ),
                 ),

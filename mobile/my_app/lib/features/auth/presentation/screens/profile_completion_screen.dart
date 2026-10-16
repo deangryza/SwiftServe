@@ -57,6 +57,8 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
+    } on ApiException catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } on ApiConnectionException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } catch (_) {

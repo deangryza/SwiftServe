@@ -103,6 +103,20 @@ class ApiException implements Exception {
   final int statusCode;
   final String body;
 
+  Map<String, dynamic> get _payload {
+    try {
+      final value = jsonDecode(body);
+      return value is Map<String, dynamic> ? value : const {};
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  String? get code => _payload['code']?.toString();
+
+  String get message =>
+      _payload['message']?.toString() ?? 'The request could not be completed.';
+
   @override
   String toString() => 'Request failed ($statusCode): $body';
 }

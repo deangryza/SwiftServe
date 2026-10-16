@@ -5,8 +5,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/services/api_service.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
 import '../../../../shared/widgets/profile_avatar.dart';
+import '../../../../shared/widgets/client_rating_summary.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_sections.dart' show ClientMessagesScreen;
@@ -72,188 +74,200 @@ class _ProfileView extends StatelessWidget {
     final phone = (data['phoneNumber'] ?? 'No phone number saved').toString();
     final address = (data['address'] ?? 'No address saved').toString();
     final status = (data['verificationStatus'] ?? 'pending').toString();
-    final ratingValue = data['rating'] ?? data['averageRating'];
-    final rating = ratingValue is num ? ratingValue.toStringAsFixed(1) : '—';
     final createdAt = data['createdAt'];
     final since = createdAt is Timestamp
         ? createdAt.toDate().year.toString()
         : (user.metadata.creationTime?.year.toString() ?? '—');
 
-    return Scaffold(
-      backgroundColor: _profileYellow,
-      bottomNavigationBar: _ProfileBottomNavigation(
-        userId: user.uid,
-        background: background,
-        surface: surface,
-        text: text,
+    return ClientTabSwipeRegion(
+      currentIndex: 3,
+      onSwipeToIndex: (_) => Navigator.pushReplacement(
+        context,
+        clientTabPageRoute(
+          const ClientMessagesScreen(),
+          fromIndex: 3,
+          toIndex: 2,
+        ),
       ),
-      body: SafeArea(
-        bottom: false,
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [_profileYellow, background, background],
-                  stops: const [0, 0.34, 1],
-                ),
-              ),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
-                children: [
-                  const Text(
-                    'Profile',
-                    style: TextStyle(
-                      color: _profileInk,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                    ),
+      child: Scaffold(
+        backgroundColor: _profileYellow,
+        bottomNavigationBar: _ProfileBottomNavigation(
+          userId: user.uid,
+          background: background,
+          surface: surface,
+          text: text,
+        ),
+        body: SafeArea(
+          bottom: false,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [_profileYellow, background, background],
+                    stops: const [0, 0.34, 1],
                   ),
-                  const SizedBox(height: 22),
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
-                    decoration: _cardDecoration(surface),
-                    child: Column(
-                      children: [
-                        _ProfilePhoto(
-                          name: safeName,
-                          photoBase64: (data['photoBase64'] ?? '').toString(),
-                          photoUrl: user.photoURL,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          safeName,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: text,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700,
+                ),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
+                  children: [
+                    const Text(
+                      'Profile',
+                      style: TextStyle(
+                        color: _profileInk,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+                      decoration: _cardDecoration(surface),
+                      child: Column(
+                        children: [
+                          _ProfilePhoto(
+                            name: safeName,
+                            photoBase64: (data['photoBase64'] ?? '').toString(),
+                            photoUrl: user.photoURL,
                           ),
-                        ),
-                        const SizedBox(height: 7),
-                        _VerificationBadge(status: status),
-                        const SizedBox(height: 21),
-                        Divider(
-                          color: muted.withValues(alpha: 0.18),
-                          height: 1,
-                        ),
-                        const SizedBox(height: 18),
-                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                          stream: FirebaseFirestore.instance
-                              .collection('service_requests')
-                              .where('clientId', isEqualTo: user.uid)
-                              .snapshots(),
-                          builder: (context, jobsSnapshot) => Row(
-                            children: [
-                              _ProfileStat(
-                                value: jobsSnapshot.hasData
-                                    ? '${jobsSnapshot.data!.docs.length}'
-                                    : '—',
-                                label: 'Jobs',
-                                text: text,
-                                muted: muted,
-                              ),
-                              _ProfileStat(
-                                value: rating,
-                                label: 'Rating',
-                                text: text,
-                                muted: muted,
-                              ),
-                              _ProfileStat(
-                                value: since,
-                                label: 'Since',
-                                text: text,
-                                muted: muted,
-                              ),
-                            ],
+                          const SizedBox(height: 12),
+                          Text(
+                            safeName,
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: text,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            key: const ValueKey('client-edit-profile'),
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => ClientEditProfileScreen(
-                                  initialData: data,
-                                  photoUrl: user.photoURL,
+                          const SizedBox(height: 7),
+                          _VerificationBadge(status: status),
+                          const SizedBox(height: 21),
+                          Divider(
+                            color: muted.withValues(alpha: 0.18),
+                            height: 1,
+                          ),
+                          const SizedBox(height: 18),
+                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                            stream: FirebaseFirestore.instance
+                                .collection('service_requests')
+                                .where('clientId', isEqualTo: user.uid)
+                                .snapshots(),
+                            builder: (context, jobsSnapshot) => Row(
+                              children: [
+                                _ProfileStat(
+                                  value: jobsSnapshot.hasData
+                                      ? '${jobsSnapshot.data!.docs.length}'
+                                      : '—',
+                                  label: 'Jobs',
+                                  text: text,
+                                  muted: muted,
+                                ),
+                                ClientRatingBuilder(
+                                  clientId: user.uid,
+                                  builder: (context, summary) => _ProfileStat(
+                                    value: summary.displayAverage,
+                                    label: summary.reviewCount == 1
+                                        ? '1 rating'
+                                        : '${summary.reviewCount} ratings',
+                                    text: text,
+                                    muted: muted,
+                                  ),
+                                ),
+                                _ProfileStat(
+                                  value: since,
+                                  label: 'Since',
+                                  text: text,
+                                  muted: muted,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              key: const ValueKey('client-edit-profile'),
+                              onPressed: () => Navigator.push(
+                                context,
+                                clientPageRoute(
+                                  ClientEditProfileScreen(
+                                    initialData: data,
+                                    photoUrl: user.photoURL,
+                                  ),
                                 ),
                               ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: text,
-                              side: BorderSide(
-                                color: muted.withValues(alpha: 0.3),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: text,
+                                side: BorderSide(
+                                  color: muted.withValues(alpha: 0.3),
+                                ),
+                                minimumSize: const Size.fromHeight(48),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                elevation: 2,
+                                backgroundColor: surface,
                               ),
-                              minimumSize: const Size.fromHeight(48),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
+                              child: const Text(
+                                'Edit Profile',
+                                style: TextStyle(fontWeight: FontWeight.w700),
                               ),
-                              elevation: 2,
-                              backgroundColor: surface,
-                            ),
-                            child: const Text(
-                              'Edit Profile',
-                              style: TextStyle(fontWeight: FontWeight.w700),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Container(
-                    decoration: _cardDecoration(surface),
-                    child: Column(
-                      children: [
-                        _ContactRow(
-                          icon: Icons.mail_outline,
-                          value: email,
-                          text: text,
-                          muted: muted,
-                        ),
-                        _ContactRow(
-                          icon: Icons.phone_outlined,
-                          value: phone,
-                          text: text,
-                          muted: muted,
-                        ),
-                        _ContactRow(
-                          icon: Icons.location_on_outlined,
-                          value: address,
-                          text: text,
-                          muted: muted,
-                          showDivider: false,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Material(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(12),
-                    child: ListTile(
-                      key: const ValueKey('client-profile-settings'),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        ],
                       ),
-                      leading: Icon(Icons.settings_outlined, color: muted),
-                      title: Text('Settings', style: TextStyle(color: text)),
-                      trailing: Icon(Icons.chevron_right, color: muted),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const ClientSettingsScreen(),
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      decoration: _cardDecoration(surface),
+                      child: Column(
+                        children: [
+                          _ContactRow(
+                            icon: Icons.mail_outline,
+                            value: email,
+                            text: text,
+                            muted: muted,
+                          ),
+                          _ContactRow(
+                            icon: Icons.phone_outlined,
+                            value: phone,
+                            text: text,
+                            muted: muted,
+                          ),
+                          _ContactRow(
+                            icon: Icons.location_on_outlined,
+                            value: address,
+                            text: text,
+                            muted: muted,
+                            showDivider: false,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Material(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        key: const ValueKey('client-profile-settings'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        leading: Icon(Icons.settings_outlined, color: muted),
+                        title: Text('Settings', style: TextStyle(color: text)),
+                        trailing: Icon(Icons.chevron_right, color: muted),
+                        onTap: () => Navigator.push(
+                          context,
+                          clientPageRoute(const ClientSettingsScreen()),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -354,14 +368,9 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     if (user == null || name.isEmpty || _saving) return;
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-            'fullName': name,
-            'phoneNumber': _phoneController.text.trim(),
-            'address': _addressController.text.trim(),
-          });
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
+        {'fullName': name, 'address': _addressController.text.trim()},
+      );
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -455,6 +464,15 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
                         text: text,
                         muted: muted,
                         keyboardType: TextInputType.phone,
+                        readOnly: true,
+                      ),
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Verified phone numbers cannot be changed here.',
+                          style: TextStyle(color: muted, fontSize: 12),
+                        ),
                       ),
                       const SizedBox(height: 14),
                       _EditField(
@@ -713,10 +731,10 @@ class _ProfileBottomNavigation extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    void replaceWith(Widget screen) {
+    void replaceWith(Widget screen, int toIndex) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => screen),
+        clientTabPageRoute(screen, fromIndex: 3, toIndex: toIndex),
       );
     }
 
@@ -741,14 +759,14 @@ class _ProfileBottomNavigation extends StatelessWidget {
                 icon: Icons.calendar_month_outlined,
                 label: 'Bookings',
                 text: text,
-                onTap: () => replaceWith(const ClientBookingsScreen()),
+                onTap: () => replaceWith(const ClientBookingsScreen(), 1),
               ),
               _ProfileNavItem(
                 icon: Icons.chat_bubble_outline,
                 label: 'Chat',
                 text: text,
                 badgeUserId: userId,
-                onTap: () => replaceWith(const ClientMessagesScreen()),
+                onTap: () => replaceWith(const ClientMessagesScreen(), 2),
               ),
               _ProfileNavItem(
                 icon: Icons.person_outline,

@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../shared/services/client_theme_controller.dart';
 import 'client_booking_flow.dart';
 
 const _headerYellow = Color(0xFFFFC72C);
@@ -29,9 +30,7 @@ Future<void> _openClientNotification(
     if (!context.mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ClientWorkersFoundScreen(requestId: requestId),
-      ),
+      clientPageRoute(ClientWorkersFoundScreen(requestId: requestId)),
     );
   } catch (error) {
     if (!context.mounted) return;

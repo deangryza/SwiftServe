@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_sections.dart';
@@ -89,42 +90,60 @@ class _ClientBookingsScreenState extends State<ClientBookingsScreen> {
   Widget build(BuildContext context) {
     final palette = _BookingPalette(context);
     final uid = FirebaseAuth.instance.currentUser?.uid;
-    return Scaffold(
-      backgroundColor: _bookingYellow,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                _BookingsHeader(
-                  controller: _searchController,
-                  palette: palette,
-                  filter: _filter,
-                  onChanged: (_) => setState(() {}),
-                  onFilterChanged: (filter) => setState(() => _filter = filter),
-                ),
-                Expanded(
-                  child: Container(
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: palette.background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(42),
-                      ),
-                    ),
-                    child: uid == null
-                        ? const Center(child: Text('Please log in again.'))
-                        : _BookingList(
-                            clientId: uid,
-                            query: _searchController.text,
-                            filter: _filter,
-                            palette: palette,
-                          ),
+    return ClientTabSwipeRegion(
+      currentIndex: 1,
+      onSwipeToIndex: (index) {
+        if (index == 0) {
+          Navigator.popUntil(context, (route) => route.isFirst);
+        } else if (index == 2) {
+          Navigator.pushReplacement(
+            context,
+            clientTabPageRoute(
+              const ClientMessagesScreen(),
+              fromIndex: 1,
+              toIndex: 2,
+            ),
+          );
+        }
+      },
+      child: Scaffold(
+        backgroundColor: _bookingYellow,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+              child: Column(
+                children: [
+                  _BookingsHeader(
+                    controller: _searchController,
+                    palette: palette,
+                    filter: _filter,
+                    onChanged: (_) => setState(() {}),
+                    onFilterChanged: (filter) =>
+                        setState(() => _filter = filter),
                   ),
-                ),
-                _BookingsBottomNav(palette: palette),
-              ],
+                  Expanded(
+                    child: Container(
+                      clipBehavior: Clip.antiAlias,
+                      decoration: BoxDecoration(
+                        color: palette.background,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(42),
+                        ),
+                      ),
+                      child: uid == null
+                          ? const Center(child: Text('Please log in again.'))
+                          : _BookingList(
+                              clientId: uid,
+                              query: _searchController.text,
+                              filter: _filter,
+                              palette: palette,
+                            ),
+                    ),
+                  ),
+                  _BookingsBottomNav(palette: palette),
+                ],
+              ),
             ),
           ),
         ),
@@ -372,9 +391,8 @@ class _BookingList extends StatelessWidget {
               palette: palette,
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ClientWorkersFoundScreen(requestId: requests[index].id),
+                clientPageRoute(
+                  ClientWorkersFoundScreen(requestId: requests[index].id),
                 ),
               ),
             ),
@@ -770,8 +788,8 @@ class _ApplicationCard extends StatelessWidget {
           onTap: _accepted
               ? () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => ClientBookingDetailsScreen(
+                  clientPageRoute(
+                    ClientBookingDetailsScreen(
                       requestId: request.id,
                       workerId: application.workerId,
                     ),
@@ -906,8 +924,8 @@ class _ClientBookingDetailsScreenState
     if (!mounted) return;
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ClientChatScreen(
+      clientPageRoute(
+        ClientChatScreen(
           conversationId: pairConversation.exists
               ? pairConversationId
               : request.id,
@@ -2081,7 +2099,8 @@ class _BookingsBottomNav extends StatelessWidget {
               icon: Icons.home_outlined,
               label: 'Home',
               palette: palette,
-              onTap: () => Navigator.pop(context),
+              onTap: () =>
+                  Navigator.popUntil(context, (route) => route.isFirst),
             ),
             _BookingNavItem(
               icon: Icons.calendar_month_outlined,
@@ -2095,18 +2114,26 @@ class _BookingsBottomNav extends StatelessWidget {
               label: 'Chat',
               palette: palette,
               showUnreadBadge: true,
-              onTap: () => Navigator.push(
+              onTap: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const ClientMessagesScreen()),
+                clientTabPageRoute(
+                  const ClientMessagesScreen(),
+                  fromIndex: 1,
+                  toIndex: 2,
+                ),
               ),
             ),
             _BookingNavItem(
               icon: Icons.person_outline,
               label: 'Profile',
               palette: palette,
-              onTap: () => Navigator.push(
+              onTap: () => Navigator.pushReplacement(
                 context,
-                MaterialPageRoute(builder: (_) => const ClientProfileScreen()),
+                clientTabPageRoute(
+                  const ClientProfileScreen(),
+                  fromIndex: 1,
+                  toIndex: 3,
+                ),
               ),
             ),
           ],

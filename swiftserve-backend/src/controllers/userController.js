@@ -1,5 +1,19 @@
+const crypto = require('node:crypto');
+
 const { db } = require('../config/firebase');
 const { normalizeProfilePhoto } = require('../services/profilePhotoService');
+
+const normalizePhoneNumber = (value) => {
+  const phoneNumber = String(value || '').replace(/[\s()-]/g, '');
+  return /^\+[1-9]\d{7,14}$/.test(phoneNumber) ? phoneNumber : null;
+};
+
+const phoneClaimId = (phoneNumber) => crypto
+  .createHash('sha256')
+  .update(phoneNumber)
+  .digest('hex');
+
+class PhoneNumberConflictError extends Error {}
 
 const createUserProfile = async (req, res) => {
   try {
@@ -16,13 +30,31 @@ const createUserProfile = async (req, res) => {
       photoBase64,
     } = req.body;
 
+    const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
+
     if (!fullName || !email || !['client', 'worker'].includes(role)) {
       return res.status(400).json({
         message: 'Full name, email, and a valid role are required.',
       });
     }
+    if (!normalizedPhoneNumber) {
+      return res.status(400).json({
+        code: 'INVALID_PHONE_NUMBER',
+        message: 'A valid international phone number is required.',
+      });
+    }
 
     const userRef = db.collection('users').doc(uid);
+    const duplicateProfiles = await db.collection('users')
+      .where('phoneNumber', '==', normalizedPhoneNumber)
+      .limit(5)
+      .get();
+    if (duplicateProfiles.docs.some((document) => document.id !== uid)) {
+      return res.status(409).json({
+        code: 'PHONE_NUMBER_IN_USE',
+        message: 'This phone number is already registered to another account.',
+      });
+    }
 
     let photo;
     if (photoBase64 !== undefined) {
@@ -37,7 +69,7 @@ const createUserProfile = async (req, res) => {
       uid,
       fullName,
       email,
-      phoneNumber: phoneNumber || '',
+      phoneNumber: normalizedPhoneNumber,
       address: address || '',
       role,
       category: category || '',
@@ -48,23 +80,46 @@ const createUserProfile = async (req, res) => {
       updatedAt: new Date(),
     };
 
-    const batch = db.batch();
-    batch.set(userRef, userData);
-    if (role === 'worker') {
-      batch.set(db.collection('worker_profiles').doc(uid), {
-        workerId: uid,
-        fullName,
-        category: category || '',
-        skills: Array.isArray(skills) ? skills : [],
-        location: address || '',
-        verificationStatus: 'pending',
-        rating: 0,
-        completedJobs: 0,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+    const claimRef = db.collection('phone_number_claims').doc(
+      phoneClaimId(normalizedPhoneNumber),
+    );
+    try {
+      await db.runTransaction(async (transaction) => {
+        const claim = await transaction.get(claimRef);
+        if (claim.exists && claim.data().uid !== uid) {
+          throw new PhoneNumberConflictError();
+        }
+        transaction.set(claimRef, {
+          uid,
+          phoneNumber: normalizedPhoneNumber,
+          updatedAt: new Date(),
+          ...(!claim.exists ? { createdAt: new Date() } : {}),
+        });
+        transaction.set(userRef, userData);
+        if (role === 'worker') {
+          transaction.set(db.collection('worker_profiles').doc(uid), {
+            workerId: uid,
+            fullName,
+            category: category || '',
+            skills: Array.isArray(skills) ? skills : [],
+            location: address || '',
+            verificationStatus: 'pending',
+            rating: 0,
+            completedJobs: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        }
       });
+    } catch (error) {
+      if (error instanceof PhoneNumberConflictError) {
+        return res.status(409).json({
+          code: 'PHONE_NUMBER_IN_USE',
+          message: 'This phone number is already registered to another account.',
+        });
+      }
+      throw error;
     }
-    await batch.commit();
 
     return res.status(201).json({
       message: 'User profile created successfully.',

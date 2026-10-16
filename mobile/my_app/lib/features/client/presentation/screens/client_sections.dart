@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_profile_screen.dart';
@@ -82,8 +83,8 @@ class ClientHistoryScreen extends StatelessWidget {
                     return GestureDetector(
                       onTap: () => Navigator.push(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) => ClientRequestDetailsScreen(
+                        clientPageRoute(
+                          ClientRequestDetailsScreen(
                             request: ServiceRequest.fromDocument(document),
                           ),
                         ),
@@ -148,22 +149,34 @@ class ClientMessagesScreen extends StatelessWidget {
     if (uid == null) {
       return const Scaffold(body: Center(child: Text('Please log in again.')));
     }
-    return ConversationInboxScreen(
-      userId: uid,
-      counterpartIdField: 'workerId',
-      counterpartNameField: 'workerName',
-      bottomNavigationBar: _ClientMessagesBottomNav(userId: uid),
-      onOpenConversation: (conversationId, name) {
-        Navigator.push(
+    return ClientTabSwipeRegion(
+      currentIndex: 2,
+      onSwipeToIndex: (index) {
+        final screen = index == 1
+            ? const ClientBookingsScreen()
+            : const ClientProfileScreen();
+        Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (_) => ClientChatScreen(
-              conversationId: conversationId,
-              otherPersonName: name,
-            ),
-          ),
+          clientTabPageRoute(screen, fromIndex: 2, toIndex: index),
         );
       },
+      child: ConversationInboxScreen(
+        userId: uid,
+        counterpartIdField: 'workerId',
+        counterpartNameField: 'workerName',
+        bottomNavigationBar: _ClientMessagesBottomNav(userId: uid),
+        onOpenConversation: (conversationId, name) {
+          Navigator.push(
+            context,
+            clientPageRoute(
+              ClientChatScreen(
+                conversationId: conversationId,
+                otherPersonName: name,
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -180,10 +193,10 @@ class _ClientMessagesBottomNav extends StatelessWidget {
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
     final text = dark ? const Color(0xFFF3F3F3) : const Color(0xFF242424);
 
-    void replaceWith(Widget screen) {
+    void replaceWith(Widget screen, int toIndex) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => screen),
+        clientTabPageRoute(screen, fromIndex: 2, toIndex: toIndex),
       );
     }
 
@@ -218,7 +231,7 @@ class _ClientMessagesBottomNav extends StatelessWidget {
                 icon: Icons.calendar_month_outlined,
                 label: 'Bookings',
                 textColor: text,
-                onTap: () => replaceWith(const ClientBookingsScreen()),
+                onTap: () => replaceWith(const ClientBookingsScreen(), 1),
               ),
               _MessagesNavItem(
                 icon: Icons.chat_bubble_outline,
@@ -232,7 +245,7 @@ class _ClientMessagesBottomNav extends StatelessWidget {
                 icon: Icons.person_outline,
                 label: 'Profile',
                 textColor: text,
-                onTap: () => replaceWith(const ClientProfileScreen()),
+                onTap: () => replaceWith(const ClientProfileScreen(), 3),
               ),
             ],
           ),

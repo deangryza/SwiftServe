@@ -219,7 +219,7 @@ class ServiceRequestRepository {
         .doc(request.id);
     final conversationRef = _firestore
         .collection('conversations')
-        .doc(request.id);
+        .doc(conversationIdFor(clientId: request.clientId, workerId: workerId));
     final notificationRef = _firestore.collection('notifications').doc();
 
     await _firestore.runTransaction((transaction) async {

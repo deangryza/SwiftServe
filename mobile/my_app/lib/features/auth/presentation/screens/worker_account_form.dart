@@ -3,6 +3,8 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
+import '../widgets/phone_number_field.dart';
+
 class WorkerAccountForm extends StatefulWidget {
   const WorkerAccountForm({
     super.key,
@@ -20,6 +22,11 @@ class WorkerAccountForm extends StatefulWidget {
     required this.profileImage,
     required this.onPickImage,
     required this.onRegister,
+    this.countryCode = '+63',
+    this.onCountryCodeChanged,
+    this.federatedAccount = false,
+    this.onChangeRole,
+    this.onExit,
   });
 
   final GlobalKey<FormState> formKey;
@@ -36,6 +43,11 @@ class WorkerAccountForm extends StatefulWidget {
   final Uint8List? profileImage;
   final VoidCallback onPickImage;
   final VoidCallback onRegister;
+  final String countryCode;
+  final ValueChanged<String>? onCountryCodeChanged;
+  final bool federatedAccount;
+  final VoidCallback? onChangeRole;
+  final VoidCallback? onExit;
 
   @override
   State<WorkerAccountForm> createState() => _WorkerAccountFormState();
@@ -56,6 +68,23 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
   var _page = 0;
   var _obscurePassword = true;
   var _obscureConfirmation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    final parts = widget.name.text.trim().split(RegExp(r'\s+'));
+    if (parts.isNotEmpty && parts.first.isNotEmpty) {
+      _firstName.text = parts.first;
+      _lastName.text = parts.skip(1).join(' ');
+    }
+    _firstName.addListener(_syncName);
+    _lastName.addListener(_syncName);
+  }
+
+  void _syncName() {
+    widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}'
+        .trim();
+  }
 
   bool get _dark => Theme.of(context).brightness == Brightness.dark;
   Color get _surface =>
@@ -133,6 +162,55 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     }
   }
 
+  Widget _profileAvatar() => Stack(
+    clipBehavior: Clip.none,
+    children: [
+      Container(
+        key: const ValueKey('worker-registration-profile-avatar'),
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          color: _field,
+          shape: BoxShape.circle,
+          border: Border.all(color: _border, width: 1.5),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x26000000),
+              blurRadius: 3,
+              offset: Offset(0, 2),
+            ),
+          ],
+          image: widget.profileImage == null
+              ? null
+              : DecorationImage(
+                  image: MemoryImage(widget.profileImage!),
+                  fit: BoxFit.cover,
+                ),
+        ),
+        alignment: Alignment.center,
+        child: widget.profileImage == null
+            ? Icon(Icons.person_outline, color: _muted, size: 27)
+            : null,
+      ),
+      Positioned(
+        right: -1,
+        bottom: 1,
+        child: SizedBox.square(
+          dimension: 22,
+          child: IconButton.filled(
+            onPressed: widget.loading ? null : widget.onPickImage,
+            padding: EdgeInsets.zero,
+            style: IconButton.styleFrom(
+              backgroundColor: _yellow,
+              foregroundColor: const Color(0xFF242424),
+            ),
+            icon: const Icon(Icons.camera_alt_outlined, size: 12),
+          ),
+        ),
+      ),
+    ],
+  );
+
   Widget _header() {
     final active = switch (_page) {
       <= 2 => 0,
@@ -141,8 +219,9 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       _ => 3,
     };
     return SizedBox(
-      height: 116,
+      height: 131,
       child: Stack(
+        clipBehavior: Clip.none,
         children: [
           const Positioned.fill(child: ColoredBox(color: _yellow)),
           Positioned(
@@ -151,6 +230,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
             bottom: 0,
             height: 44,
             child: DecoratedBox(
+              key: const ValueKey('worker-registration-curved-panel'),
               decoration: BoxDecoration(
                 color: _surface,
                 borderRadius: const BorderRadius.only(
@@ -218,6 +298,13 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
               ),
             ),
           ),
+          if (_page == 0)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: -4,
+              child: Center(child: _profileAvatar()),
+            ),
         ],
       ),
     );
@@ -229,6 +316,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     TextEditingController controller, {
     TextInputType? keyboardType,
     bool obscure = false,
+    bool readOnly = false,
     VoidCallback? toggle,
     String? Function(String?)? validator,
   }) => Padding(
@@ -252,6 +340,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
           validator: validator ?? _required,
           keyboardType: keyboardType,
           obscureText: obscure,
+          readOnly: readOnly,
           style: TextStyle(color: _text),
           decoration: InputDecoration(
             hintText: hint,
@@ -294,6 +383,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
   Widget _accountPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
+      const SizedBox(height: 12),
       Text(
         'Create Account',
         textAlign: TextAlign.center,
@@ -308,32 +398,6 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         'Join our professional service network',
         textAlign: TextAlign.center,
         style: TextStyle(color: _muted, fontSize: 13),
-      ),
-      const SizedBox(height: 24),
-      Center(
-        child: Stack(
-          children: [
-            CircleAvatar(
-              radius: 46,
-              backgroundColor: _field,
-              foregroundImage: widget.profileImage == null
-                  ? null
-                  : MemoryImage(widget.profileImage!),
-              child: widget.profileImage == null
-                  ? Icon(Icons.person_outline, color: _muted, size: 32)
-                  : null,
-            ),
-            Positioned(
-              right: 0,
-              bottom: 0,
-              child: IconButton.filled(
-                onPressed: widget.onPickImage,
-                style: IconButton.styleFrom(backgroundColor: _yellow),
-                icon: const Icon(Icons.camera_alt_outlined, size: 17),
-              ),
-            ),
-          ],
-        ),
       ),
       const SizedBox(height: 20),
       Container(
@@ -363,7 +427,8 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.maybePop(context),
+              onPressed:
+                  widget.onChangeRole ?? () => Navigator.maybePop(context),
               child: const Text('Change'),
             ),
           ],
@@ -382,34 +447,43 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         'john@example.com',
         widget.email,
         keyboardType: TextInputType.emailAddress,
+        readOnly: widget.federatedAccount,
       ),
-      _input(
-        'Phone Number',
-        '+63 000-000-0000',
-        widget.phone,
-        keyboardType: TextInputType.phone,
+      PhoneNumberField(
+        fieldKey: const ValueKey('worker-Phone Number'),
+        controller: widget.phone,
+        dialCode: widget.countryCode,
+        onDialCodeChanged: widget.onCountryCodeChanged ?? (_) {},
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted.withValues(alpha: 0.55),
+        borderColor: _border,
+        focusColor: _yellow,
       ),
       _input('Address / Location', '123 Street, Tech City', widget.address),
-      _input(
-        'Password',
-        'Enter your password',
-        widget.password,
-        obscure: _obscurePassword,
-        toggle: () => setState(() => _obscurePassword = !_obscurePassword),
-        validator: (value) => value == null || value.length < 6
-            ? 'Use at least 6 characters.'
-            : null,
-      ),
-      _input(
-        'Confirm Password',
-        'Re-enter your password',
-        widget.confirmPassword,
-        obscure: _obscureConfirmation,
-        toggle: () =>
-            setState(() => _obscureConfirmation = !_obscureConfirmation),
-        validator: (value) =>
-            value != widget.password.text ? 'Passwords do not match.' : null,
-      ),
+      if (!widget.federatedAccount) ...[
+        _input(
+          'Password',
+          'Enter your password',
+          widget.password,
+          obscure: _obscurePassword,
+          toggle: () => setState(() => _obscurePassword = !_obscurePassword),
+          validator: (value) => value == null || value.length < 6
+              ? 'Use at least 6 characters.'
+              : null,
+        ),
+        _input(
+          'Confirm Password',
+          'Re-enter your password',
+          widget.confirmPassword,
+          obscure: _obscureConfirmation,
+          toggle: () =>
+              setState(() => _obscureConfirmation = !_obscureConfirmation),
+          validator: (value) =>
+              value != widget.password.text ? 'Passwords do not match.' : null,
+        ),
+      ],
       Row(
         children: [
           const Icon(
@@ -612,7 +686,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       ),
       const SizedBox(height: 8),
       Text(
-        'Your code was sent to ${widget.phone.text}',
+        'Your code was sent to ${normalizePhoneNumber(widget.countryCode, widget.phone.text)}',
         textAlign: TextAlign.center,
         style: TextStyle(color: _muted),
       ),
@@ -822,8 +896,15 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         leading: IconButton(
           onPressed: widget.loading
               ? null
-              : () =>
-                    _page > 0 ? _goTo(_page - 1) : Navigator.maybePop(context),
+              : () {
+                  if (_page > 0) {
+                    _goTo(_page - 1);
+                  } else if (widget.onExit != null) {
+                    widget.onExit!();
+                  } else {
+                    Navigator.maybePop(context);
+                  }
+                },
           icon: const Icon(Icons.arrow_back),
         ),
       ),
