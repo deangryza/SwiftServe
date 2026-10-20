@@ -1,3 +1,5 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 enum UserRole { client, worker, admin }
 
 enum VerificationStatus {
@@ -34,6 +36,7 @@ class AppUser {
     this.phoneNumber = '',
     this.address = '',
     this.photoBase64 = '',
+    this.createdAt,
   });
 
   final String id;
@@ -44,6 +47,7 @@ class AppUser {
   final String phoneNumber;
   final String address;
   final String photoBase64;
+  final DateTime? createdAt;
 
   factory AppUser.fromMap(String id, Map<String, dynamic> data) {
     final role = switch (data['role']) {
@@ -62,6 +66,9 @@ class AppUser {
       phoneNumber: (data['phoneNumber'] ?? '').toString(),
       address: (data['address'] ?? '').toString(),
       photoBase64: (data['photoBase64'] ?? '').toString(),
+      createdAt: data['createdAt'] is Timestamp
+          ? (data['createdAt'] as Timestamp).toDate()
+          : null,
     );
   }
 }

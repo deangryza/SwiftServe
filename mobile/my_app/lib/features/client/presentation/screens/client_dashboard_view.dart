@@ -3,7 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/services/client_theme_controller.dart';
-import '../../../../shared/widgets/profile_avatar.dart';
+import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_notifications_screen.dart';
@@ -250,20 +250,15 @@ class _Greeting extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Row(
     children: [
-      if (profile?.photoBase64.isNotEmpty ?? false)
-        ProfileAvatar(photoBase64: profile!.photoBase64, radius: 23)
-      else
-        CircleAvatar(
-          radius: 23,
-          backgroundColor: const Color(0xFF252525),
-          child: Text(
-            name.characters.first.toUpperCase(),
-            style: const TextStyle(
-              color: ClientDashboardView._yellow,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
+      LiveProfileAvatar(
+        userId: profile?.id ?? '',
+        fallbackName: name,
+        fallbackPhotoBase64: profile?.photoBase64 ?? '',
+        joinedAt: profile?.createdAt,
+        radius: 23,
+        backgroundColor: const Color(0xFF252525),
+        foregroundColor: ClientDashboardView._yellow,
+      ),
       const SizedBox(width: 12),
       Expanded(
         child: Column(

@@ -28,6 +28,28 @@ void main() {
     },
   );
 
+  testWidgets('recent profiles show a green new-member badge', (tester) async {
+    final joinedAt = DateTime.now().subtract(const Duration(days: 7));
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileAvatar(joinedAt: joinedAt)),
+    );
+    expect(find.byKey(const ValueKey('recent-member-badge')), findsOneWidget);
+    final badge = tester.widget<Container>(
+      find.byKey(const ValueKey('recent-member-badge')),
+    );
+    final decoration = badge.decoration! as BoxDecoration;
+    expect(decoration.color, const Color(0xFF20B978));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileAvatar(
+          joinedAt: DateTime.now().subtract(const Duration(days: 15)),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('recent-member-badge')), findsNothing);
+  });
+
   test('saved draft retains its photo and sends it on profile retry', () async {
     SharedPreferences.setMockInitialValues({});
     const draft = ProfileDraft(

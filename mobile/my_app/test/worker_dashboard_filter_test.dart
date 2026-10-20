@@ -56,6 +56,17 @@ void main() {
 
     expect(visible, isEmpty);
   });
+
+  test('dashboard search matches service, client, and location text', () {
+    final request = _request('request-1', DateTime(2026, 10, 10));
+
+    expect(matchesWorkerDashboardSearch(request, 'math'), isTrue);
+    expect(matchesWorkerDashboardSearch(request, 'academic'), isTrue);
+    expect(matchesWorkerDashboardSearch(request, 'client one'), isTrue);
+    expect(matchesWorkerDashboardSearch(request, 'malolos'), isTrue);
+    expect(matchesWorkerDashboardSearch(request, 'plumbing'), isFalse);
+    expect(matchesWorkerDashboardSearch(request, '  '), isTrue);
+  });
 }
 
 ServiceRequest _request(

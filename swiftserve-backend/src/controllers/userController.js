@@ -45,6 +45,7 @@ const createUserProfile = async (req, res) => {
     }
 
     const userRef = db.collection('users').doc(uid);
+    const publicProfileRef = db.collection('public_profiles').doc(uid);
     const duplicateProfiles = await db.collection('users')
       .where('phoneNumber', '==', normalizedPhoneNumber)
       .limit(5)
@@ -96,6 +97,14 @@ const createUserProfile = async (req, res) => {
           ...(!claim.exists ? { createdAt: new Date() } : {}),
         });
         transaction.set(userRef, userData);
+        transaction.set(publicProfileRef, {
+          uid,
+          fullName,
+          role,
+          photoBase64: photo || '',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
         if (role === 'worker') {
           transaction.set(db.collection('worker_profiles').doc(uid), {
             workerId: uid,
@@ -142,7 +151,23 @@ const updateProfilePhoto = async (req, res) => {
     return res.status(400).json({ message: 'Choose a valid, small JPEG or PNG profile photo.' });
   }
   try {
-    await db.collection('users').doc(req.user.uid).update({ photoBase64, updatedAt: new Date() });
+    const userRef = db.collection('users').doc(req.user.uid);
+    const userSnapshot = await userRef.get();
+    if (!userSnapshot.exists) {
+      return res.status(404).json({ message: 'Profile not found.' });
+    }
+    const user = userSnapshot.data();
+    const updatedAt = new Date();
+    const batch = db.batch();
+    batch.update(userRef, { photoBase64, updatedAt });
+    batch.set(db.collection('public_profiles').doc(req.user.uid), {
+      uid: req.user.uid,
+      fullName: user.fullName || 'SwiftServe user',
+      role: user.role === 'worker' ? 'worker' : 'client',
+      photoBase64,
+      updatedAt,
+    }, { merge: true });
+    await batch.commit();
     return res.status(200).json({ message: 'Profile photo updated.' });
   } catch (error) {
     if (error.code === 5) return res.status(404).json({ message: 'Profile not found.' });

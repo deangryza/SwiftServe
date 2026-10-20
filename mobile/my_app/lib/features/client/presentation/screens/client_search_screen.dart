@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../shared/widgets/live_profile_avatar.dart';
+
 class ClientSearchScreen extends StatefulWidget {
   const ClientSearchScreen({super.key});
 
@@ -351,7 +353,10 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
             return Card(
               color: Theme.of(context).colorScheme.surface,
               child: ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person_outline)),
+                leading: LiveProfileAvatar(
+                  userId: workers[index].id,
+                  fallbackName: name,
+                ),
                 title: Text(name),
                 subtitle: Text(
                   '${_skillsText(worker['skills'])}\n'

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/services/google_auth_service.dart';
@@ -16,16 +17,40 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _signedInBeforeKey = 'has_signed_in_before';
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
   bool _resettingPassword = false;
+  bool _hasSignedInBefore = false;
+  bool _showPassword = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGreetingState();
+  }
+
+  Future<void> _loadGreetingState() async {
+    final preferences = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(
+      () =>
+          _hasSignedInBefore = preferences.getBool(_signedInBeforeKey) ?? false,
+    );
+  }
+
+  Future<void> _rememberSuccessfulLogin() async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setBool(_signedInBeforeKey, true);
+  }
 
   Future<void> _loginWithGoogle() async {
     if (_loading) return;
     setState(() => _loading = true);
     try {
       await GoogleAuthService().signIn();
+      await _rememberSuccessfulLogin();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } on GoogleSignInException catch (error) {
       if (mounted && error.code != GoogleSignInExceptionCode.canceled) {
@@ -66,6 +91,7 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: _password.text,
       );
+      await _rememberSuccessfulLogin();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
     } on FirebaseAuthException catch (error) {
       if (mounted) {
@@ -196,7 +222,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       CrossAxisAlignment.stretch,
                                   children: [
                                     Text(
-                                      'Welcome back',
+                                      _hasSignedInBefore
+                                          ? 'Welcome back'
+                                          : 'Welcome',
                                       style: TextStyle(
                                         color: const Color(0xFF111827),
                                         fontSize: 28,
@@ -237,7 +265,24 @@ class _LoginScreenState extends State<LoginScreen> {
                                       key: const ValueKey('login-password'),
                                       controller: _password,
                                       palette: palette,
-                                      obscureText: true,
+                                      obscureText: !_showPassword,
+                                      suffixIcon: IconButton(
+                                        key: const ValueKey(
+                                          'login-password-toggle',
+                                        ),
+                                        tooltip: _showPassword
+                                            ? 'Hide password'
+                                            : 'Show password',
+                                        onPressed: () => setState(
+                                          () => _showPassword = !_showPassword,
+                                        ),
+                                        icon: Icon(
+                                          _showPassword
+                                              ? Icons.visibility_off_outlined
+                                              : Icons.visibility_outlined,
+                                          color: palette.subtle,
+                                        ),
+                                      ),
                                       autofillHints: const [
                                         AutofillHints.password,
                                       ],
@@ -519,6 +564,7 @@ class _LoginField extends StatelessWidget {
     this.autofillHints,
     this.textInputAction,
     this.onSubmitted,
+    this.suffixIcon,
   });
 
   final TextEditingController controller;
@@ -528,6 +574,7 @@ class _LoginField extends StatelessWidget {
   final Iterable<String>? autofillHints;
   final TextInputAction? textInputAction;
   final ValueChanged<String>? onSubmitted;
+  final Widget? suffixIcon;
 
   @override
   Widget build(BuildContext context) => TextField(
@@ -542,6 +589,7 @@ class _LoginField extends StatelessWidget {
       filled: true,
       fillColor: palette.field,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      suffixIcon: suffixIcon,
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide(color: palette.fieldBorder),

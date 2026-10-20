@@ -6,14 +6,27 @@ const { createCanvas } = require('canvas');
 
 const records = {};
 const phoneClaims = {};
-const collections = { users: records, phone_number_claims: phoneClaims };
+const publicProfiles = {};
+const collections = {
+  users: records,
+  phone_number_claims: phoneClaims,
+  public_profiles: publicProfiles,
+};
 const db = {
   collection: name => ({
-    doc: id => ({ name, id, update: async data => {
-      const target = collections[name] || records;
-      if (!target[id]) throw Object.assign(new Error('Missing'), { code: 5 });
-      target[id] = { ...target[id], ...data };
-    } }),
+    doc: id => ({
+      name,
+      id,
+      get: async () => {
+        const value = (collections[name] || {})[id];
+        return { exists: value !== undefined, data: () => value };
+      },
+      update: async data => {
+        const target = collections[name] || records;
+        if (!target[id]) throw Object.assign(new Error('Missing'), { code: 5 });
+        target[id] = { ...target[id], ...data };
+      },
+    }),
     where: (field, _operator, value) => ({
       limit: () => ({
         get: async () => ({
@@ -43,8 +56,16 @@ const db = {
   batch: () => {
     const pending = [];
     return {
-      set: (ref, data) => pending.push([ref, data]),
-      commit: async () => pending.forEach(([ref, data]) => { if (ref.name === 'users') records[ref.id] = data; }),
+      set: (ref, data, options) => pending.push(['set', ref, data, options]),
+      update: (ref, data) => pending.push(['update', ref, data]),
+      commit: async () => pending.forEach(([operation, ref, data, options]) => {
+        const target = collections[ref.name] || (collections[ref.name] = {});
+        if (operation === 'update' || options?.merge) {
+          target[ref.id] = { ...target[ref.id], ...data };
+        } else {
+          target[ref.id] = data;
+        }
+      }),
     };
   },
 };
@@ -62,6 +83,9 @@ test('registration persists a usable thumbnail with the actual name', async () =
     .send({ fullName: 'Alice Santos', email: 'alice@example.com', phoneNumber: '+639171111111', role: 'client', photoBase64: photo }).expect(201);
   assert.equal(records.alice.fullName, 'Alice Santos');
   assert.equal(Buffer.from(records.alice.photoBase64, 'base64')[0], 0xff);
+  assert.equal(publicProfiles.alice.fullName, 'Alice Santos');
+  assert.equal(publicProfiles.alice.role, 'client');
+  assert.equal(publicProfiles.alice.photoBase64, records.alice.photoBase64);
 });
 
 test('photo updates affect only the authenticated profile and preserve its details', async () => {
@@ -72,6 +96,8 @@ test('photo updates affect only the authenticated profile and preserve its detai
   assert.equal(records.bob.fullName, 'Bob');
   assert.equal(records.bob.phoneNumber, '123');
   assert.ok(records.bob.photoBase64);
+  assert.equal(publicProfiles.bob.fullName, 'Bob');
+  assert.equal(publicProfiles.bob.photoBase64, records.bob.photoBase64);
   await request(app).patch('/api/users/profile/photo').set('Authorization', 'Bearer missing')
     .send({ photoBase64: photo }).expect(404);
 });

@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import '../../../../shared/widgets/live_profile_avatar.dart';
+
 const _chatYellow = Color(0xFFFFC72C);
 const _chatCream = Color(0xFFFFF9E9);
 const _chatInk = Color(0xFF242424);
@@ -207,7 +209,10 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                 itemBuilder: (context, index) {
                   final choice = choices[index];
                   return ListTile(
-                    leading: CircleAvatar(child: Text(_initials(choice.name))),
+                    leading: LiveProfileAvatar(
+                      userId: choice.counterpartId,
+                      fallbackName: choice.name,
+                    ),
                     title: Text(choice.name),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.pop(context, choice),
@@ -517,6 +522,9 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                           itemBuilder: (context, index) {
                             final conversation = conversations[index];
                             final data = conversation.data();
+                            final counterpartId =
+                                (data[widget.counterpartIdField] ?? '')
+                                    .toString();
                             final name =
                                 (data[widget.counterpartNameField] ??
                                         'Service user')
@@ -526,6 +534,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                                 unreadFor is List &&
                                 unreadFor.contains(widget.userId);
                             return _ConversationCard(
+                              userId: counterpartId,
                               name: name,
                               message:
                                   (data['lastMessage'] ?? 'Open conversation')
@@ -556,6 +565,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
 
 class _ConversationCard extends StatelessWidget {
   const _ConversationCard({
+    required this.userId,
     required this.name,
     required this.message,
     required this.unread,
@@ -565,6 +575,7 @@ class _ConversationCard extends StatelessWidget {
     required this.onTap,
   });
 
+  final String userId;
   final String name;
   final String message;
   final bool unread;
@@ -591,14 +602,13 @@ class _ConversationCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            CircleAvatar(
+            LiveProfileAvatar(
+              userId: userId,
+              fallbackName: name,
               radius: 25,
               backgroundColor: const Color(0xFFFFF1C8),
               foregroundColor: _chatInk,
-              child: Text(
-                _initials(name),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
+              textStyle: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -654,15 +664,4 @@ class _ConversationCard extends StatelessWidget {
       ),
     ),
   );
-}
-
-String _initials(String name) {
-  final parts = name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((part) => part.isNotEmpty)
-      .toList();
-  if (parts.isEmpty) return 'U';
-  if (parts.length == 1) return parts.first[0].toUpperCase();
-  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }

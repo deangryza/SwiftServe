@@ -4,11 +4,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
-import '../../../../shared/widgets/profile_avatar.dart';
 import '../../../../shared/widgets/client_rating_summary.dart';
+import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../../../../shared/screens/reviews_screen.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_sections.dart' show ClientMessagesScreen;
@@ -129,9 +129,13 @@ class _ProfileView extends StatelessWidget {
                       child: Column(
                         children: [
                           _ProfilePhoto(
+                            userId: user.uid,
                             name: safeName,
                             photoBase64: (data['photoBase64'] ?? '').toString(),
                             photoUrl: user.photoURL,
+                            joinedAt: createdAt is Timestamp
+                                ? createdAt.toDate()
+                                : user.metadata.creationTime,
                           ),
                           const SizedBox(height: 12),
                           Text(
@@ -175,6 +179,15 @@ class _ProfileView extends StatelessWidget {
                                         : '${summary.reviewCount} ratings',
                                     text: text,
                                     muted: muted,
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      clientPageRoute(
+                                        ReviewsScreen(
+                                          userId: user.uid,
+                                          reviewsFor: ReviewsFor.client,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                                 _ProfileStat(
@@ -249,6 +262,33 @@ class _ProfileView extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    Material(
+                      color: surface,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        key: const ValueKey('client-profile-reviews'),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        leading: Icon(Icons.reviews_outlined, color: muted),
+                        title: Text('Reviews', style: TextStyle(color: text)),
+                        subtitle: Text(
+                          'See all reviews you received',
+                          style: TextStyle(color: muted),
+                        ),
+                        trailing: Icon(Icons.chevron_right, color: muted),
+                        onTap: () => Navigator.push(
+                          context,
+                          clientPageRoute(
+                            ReviewsScreen(
+                              userId: user.uid,
+                              reviewsFor: ReviewsFor.client,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     Material(
                       color: surface,
                       borderRadius: BorderRadius.circular(12),
@@ -332,31 +372,45 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
 
   Future<void> _changePhoto() async {
     if (_savingPhoto) return;
-    final bytes = await pickProfilePhoto();
-    if (bytes == null || !mounted) return;
     setState(() => _savingPhoto = true);
     try {
+      final bytes = await pickProfilePhoto();
+      if (bytes == null || !mounted) return;
       final encoded = base64Encode(bytes);
-      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-      if (token == null) throw StateError('Your session has expired.');
-      await ApiService().updateProfilePhoto(
-        idToken: token,
-        photoBase64: encoded,
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw StateError('Your session has expired.');
+      final role = widget.initialData['role'] == 'worker' ? 'worker' : 'client';
+      final name = _nameController.text.trim().isEmpty
+          ? (widget.initialData['fullName'] ?? 'SwiftServe user').toString()
+          : _nameController.text.trim();
+      final timestamp = FieldValue.serverTimestamp();
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(user.uid),
+        {'photoBase64': encoded, 'updatedAt': timestamp},
       );
+      batch.set(
+        FirebaseFirestore.instance.collection('public_profiles').doc(user.uid),
+        {
+          'uid': user.uid,
+          'fullName': name,
+          'role': role,
+          'photoBase64': encoded,
+          'updatedAt': timestamp,
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       if (!mounted) return;
       setState(() => _photoBase64 = encoded);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Profile photo saved.')));
-    } catch (_) {
+    } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Could not save photo. Check your connection and try again.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_profilePhotoErrorMessage(error))));
     } finally {
       if (mounted) setState(() => _savingPhoto = false);
     }
@@ -368,9 +422,29 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     if (user == null || name.isEmpty || _saving) return;
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(
-        {'fullName': name, 'address': _addressController.text.trim()},
+      final role = widget.initialData['role'] == 'worker' ? 'worker' : 'client';
+      final timestamp = FieldValue.serverTimestamp();
+      final batch = FirebaseFirestore.instance.batch();
+      batch.update(
+        FirebaseFirestore.instance.collection('users').doc(user.uid),
+        {
+          'fullName': name,
+          'address': _addressController.text.trim(),
+          'updatedAt': timestamp,
+        },
       );
+      batch.set(
+        FirebaseFirestore.instance.collection('public_profiles').doc(user.uid),
+        {
+          'uid': user.uid,
+          'fullName': name,
+          'role': role,
+          'photoBase64': _photoBase64,
+          'updatedAt': timestamp,
+        },
+        SetOptions(merge: true),
+      );
+      await batch.commit();
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -384,6 +458,18 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  String _profilePhotoErrorMessage(Object error) {
+    if (error is FormatException) return error.message;
+    if (error is FirebaseException) {
+      if (error.code == 'permission-denied') {
+        return 'Profile photo access is not configured yet. Please try again after the app is updated.';
+      }
+      if (error.message?.trim().isNotEmpty ?? false) return error.message!;
+    }
+    if (error is StateError) return error.message;
+    return 'Could not save profile photo. Please try again.';
   }
 
   @override
@@ -413,11 +499,20 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
               children: [
                 Center(
                   child: _ProfilePhoto(
+                    userId: FirebaseAuth.instance.currentUser?.uid ?? '',
                     name: _nameController.text.trim().isEmpty
                         ? 'Client'
                         : _nameController.text.trim(),
                     photoBase64: _photoBase64,
                     photoUrl: widget.photoUrl,
+                    joinedAt: widget.initialData['createdAt'] is Timestamp
+                        ? (widget.initialData['createdAt'] as Timestamp)
+                              .toDate()
+                        : FirebaseAuth
+                              .instance
+                              .currentUser
+                              ?.metadata
+                              .creationTime,
                     radius: 46,
                   ),
                 ),
@@ -517,36 +612,35 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
 
 class _ProfilePhoto extends StatelessWidget {
   const _ProfilePhoto({
+    required this.userId,
     required this.name,
     required this.photoBase64,
     required this.photoUrl,
+    required this.joinedAt,
     this.radius = 42,
   });
 
+  final String userId;
   final String name;
   final String photoBase64;
   final String? photoUrl;
+  final DateTime? joinedAt;
   final double radius;
 
   @override
   Widget build(BuildContext context) {
-    if (photoBase64.isNotEmpty || (photoUrl?.isNotEmpty ?? false)) {
-      return ProfileAvatar(
-        photoBase64: photoBase64,
-        photoUrl: photoUrl,
-        radius: radius,
-      );
-    }
-    return CircleAvatar(
+    return LiveProfileAvatar(
+      userId: userId,
+      fallbackName: name,
+      fallbackPhotoBase64: photoBase64,
+      joinedAt: joinedAt,
       radius: radius,
       backgroundColor: const Color(0xFFE6EDFA),
-      child: Text(
-        name.characters.first.toUpperCase(),
-        style: TextStyle(
-          color: const Color(0xFF21458B),
-          fontSize: radius * 0.62,
-          fontWeight: FontWeight.w700,
-        ),
+      foregroundColor: const Color(0xFF21458B),
+      textStyle: TextStyle(
+        color: const Color(0xFF21458B),
+        fontSize: radius * 0.62,
+        fontWeight: FontWeight.w700,
       ),
     );
   }
@@ -603,28 +697,37 @@ class _ProfileStat extends StatelessWidget {
     required this.label,
     required this.text,
     required this.muted,
+    this.onTap,
   });
 
   final String value;
   final String label;
   final Color text;
   final Color muted;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) => Expanded(
-    child: Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(
-            color: text,
-            fontSize: 17,
-            fontWeight: FontWeight.w700,
-          ),
+    child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: text,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(label, style: TextStyle(color: muted, fontSize: 11)),
+          ],
         ),
-        const SizedBox(height: 2),
-        Text(label, style: TextStyle(color: muted, fontSize: 11)),
-      ],
+      ),
     ),
   );
 }

@@ -5,7 +5,9 @@ import 'package:flutter/material.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/screens/reviews_screen.dart';
 import '../../../../shared/services/client_theme_controller.dart';
+import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_sections.dart';
@@ -44,17 +46,6 @@ String _dateRange(ServiceRequest request) {
   if (from == null) return 'Flexible';
   if (to == null || DateUtils.isSameDay(from, to)) return _formatDate(from);
   return '${_formatDate(from)} – ${_formatDate(to)}';
-}
-
-String _initials(String name) {
-  final parts = name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((part) => part.isNotEmpty)
-      .toList();
-  if (parts.isEmpty) return 'W';
-  if (parts.length == 1) return parts.first[0].toUpperCase();
-  return '${parts.first[0]}${parts.last[0]}'.toUpperCase();
 }
 
 class _BookingPalette {
@@ -808,14 +799,13 @@ class _ApplicationCard extends StatelessWidget {
             ),
             child: Row(
               children: [
-                CircleAvatar(
+                LiveProfileAvatar(
+                  userId: application.workerId,
+                  fallbackName: name,
                   radius: 25,
                   backgroundColor: const Color(0xFFFFF1C8),
                   foregroundColor: _bookingInk,
-                  child: Text(
-                    _initials(name),
-                    style: const TextStyle(fontWeight: FontWeight.w700),
-                  ),
+                  textStyle: const TextStyle(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(width: 13),
                 Expanded(
@@ -1210,16 +1200,15 @@ class _BookingDetailsBody extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    CircleAvatar(
+                    LiveProfileAvatar(
+                      userId: request.workerId ?? '',
+                      fallbackName: name,
                       radius: 38,
                       backgroundColor: const Color(0xFFDCE5FF),
                       foregroundColor: const Color(0xFF24458E),
-                      child: Text(
-                        _initials(name),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      textStyle: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -1693,14 +1682,13 @@ class _AcceptedWorkerCard extends StatelessWidget {
       ),
       child: Row(
         children: [
-          CircleAvatar(
+          LiveProfileAvatar(
+            userId: request.workerId ?? '',
+            fallbackName: name,
             radius: 24,
             backgroundColor: const Color(0xFFFFF1C8),
             foregroundColor: _bookingInk,
-            child: Text(
-              _initials(name),
-              style: const TextStyle(fontWeight: FontWeight.w700),
-            ),
+            textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -1844,7 +1832,6 @@ class _WorkerProfileSheet extends StatelessWidget {
     final skillText = skills is List && skills.isNotEmpty
         ? skills.join(', ')
         : (worker['category'] ?? 'Service provider').toString();
-    final completedJobs = (worker['completedJobs'] as num?)?.toInt() ?? 0;
     return DraggableScrollableSheet(
       initialChildSize: 0.18,
       minChildSize: 0.18,
@@ -1887,16 +1874,15 @@ class _WorkerProfileSheet extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 28),
-            CircleAvatar(
+            LiveProfileAvatar(
+              userId: workerId,
+              fallbackName: name,
               radius: 42,
               backgroundColor: const Color(0xFFFFF1C8),
               foregroundColor: _bookingInk,
-              child: Text(
-                _initials(name),
-                style: const TextStyle(
-                  fontSize: 25,
-                  fontWeight: FontWeight.w800,
-                ),
+              textStyle: const TextStyle(
+                fontSize: 25,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(height: 12),
@@ -1915,28 +1901,53 @@ class _WorkerProfileSheet extends StatelessWidget {
               style: TextStyle(color: palette.muted),
             ),
             const SizedBox(height: 22),
-            Row(
-              children: [
-                Expanded(
-                  child: WorkerRatingBuilder(
-                    workerId: workerId,
-                    builder: (context, summary) => _ProfileStat(
-                      value: summary.displayAverage,
-                      label: summary.reviewCount == 1
-                          ? '1 review'
-                          : '${summary.reviewCount} reviews',
-                      palette: palette,
+            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('service_requests')
+                  .where('workerId', isEqualTo: workerId)
+                  .snapshots(),
+              builder: (context, jobsSnapshot) {
+                final completedJobs =
+                    jobsSnapshot.data?.docs
+                        .where(
+                          (document) =>
+                              document.data()['status'] == 'completed',
+                        )
+                        .length ??
+                    0;
+                return Row(
+                  children: [
+                    Expanded(
+                      child: WorkerRatingBuilder(
+                        workerId: workerId,
+                        builder: (context, summary) => _ProfileStat(
+                          value: summary.displayAverage,
+                          label: summary.reviewCount == 1
+                              ? '1 review'
+                              : '${summary.reviewCount} reviews',
+                          palette: palette,
+                          onTap: () => Navigator.push(
+                            context,
+                            clientPageRoute(
+                              ReviewsScreen(
+                                userId: workerId,
+                                reviewsFor: ReviewsFor.worker,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: _ProfileStat(
-                    value: '$completedJobs',
-                    label: 'Jobs done',
-                    palette: palette,
-                  ),
-                ),
-              ],
+                    Expanded(
+                      child: _ProfileStat(
+                        value: jobsSnapshot.hasData ? '$completedJobs' : '—',
+                        label: 'Jobs done',
+                        palette: palette,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 20),
             _DetailLine(
@@ -1980,25 +1991,35 @@ class _ProfileStat extends StatelessWidget {
     required this.value,
     required this.label,
     required this.palette,
+    this.onTap,
   });
 
   final String value;
   final String label;
   final _BookingPalette palette;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Text(
-        value,
-        style: TextStyle(
-          color: palette.text,
-          fontSize: 19,
-          fontWeight: FontWeight.w800,
-        ),
+  Widget build(BuildContext context) => InkWell(
+    key: onTap == null ? null : const ValueKey('worker-reviews-link'),
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: palette.text,
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(label, style: TextStyle(color: palette.muted, fontSize: 12)),
+        ],
       ),
-      Text(label, style: TextStyle(color: palette.muted, fontSize: 12)),
-    ],
+    ),
   );
 }
 

@@ -6,7 +6,9 @@ import '../../../../shared/models/app_user.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/screens/reviews_screen.dart';
 import '../../../../shared/widgets/client_rating_summary.dart';
+import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import 'worker_verification_screen.dart';
 
@@ -350,16 +352,15 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 18),
-                    CircleAvatar(
+                    LiveProfileAvatar(
+                      userId: request.clientId,
+                      fallbackName: request.clientName,
                       radius: 38,
                       backgroundColor: const Color(0xFFDCE5FF),
                       foregroundColor: const Color(0xFF24458E),
-                      child: Text(
-                        _initials(request.clientName),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      textStyle: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -438,14 +439,13 @@ class _ClientSummaryCard extends StatelessWidget {
     ),
     child: Row(
       children: [
-        CircleAvatar(
+        LiveProfileAvatar(
+          userId: request.clientId,
+          fallbackName: request.clientName,
           radius: 24,
           backgroundColor: const Color(0xFFFFF1C8),
           foregroundColor: _detailsInk,
-          child: Text(
-            _initials(request.clientName),
-            style: const TextStyle(fontWeight: FontWeight.w800),
-          ),
+          textStyle: const TextStyle(fontWeight: FontWeight.w800),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -763,13 +763,15 @@ class _ClientProfileSheet extends StatelessWidget {
             style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 28),
-          CircleAvatar(
+          LiveProfileAvatar(
+            userId: request.clientId,
+            fallbackName: request.clientName,
             radius: 42,
             backgroundColor: const Color(0xFFFFF1C8),
             foregroundColor: _detailsInk,
-            child: Text(
-              _initials(request.clientName),
-              style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
+            textStyle: const TextStyle(
+              fontSize: 25,
+              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 12),
@@ -795,22 +797,12 @@ class _ClientProfileSheet extends StatelessWidget {
                 .snapshots(),
             builder: (context, snapshot) {
               final requests = snapshot.data?.docs ?? const [];
-              final completed = requests
-                  .where((document) => document.data()['status'] == 'completed')
-                  .length;
               return Row(
                 children: [
                   Expanded(
                     child: _ProfileStat(
                       value: snapshot.hasData ? '${requests.length}' : '—',
                       label: 'Jobs posted',
-                      palette: palette,
-                    ),
-                  ),
-                  Expanded(
-                    child: _ProfileStat(
-                      value: snapshot.hasData ? '$completed' : '—',
-                      label: 'Completed',
                       palette: palette,
                     ),
                   ),
@@ -823,6 +815,15 @@ class _ClientProfileSheet extends StatelessWidget {
                             ? '1 rating'
                             : '${summary.reviewCount} ratings',
                         palette: palette,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ReviewsScreen(
+                              userId: request.clientId,
+                              reviewsFor: ReviewsFor.client,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -1278,25 +1279,35 @@ class _ProfileStat extends StatelessWidget {
     required this.value,
     required this.label,
     required this.palette,
+    this.onTap,
   });
 
   final String value;
   final String label;
   final _WorkerDetailsPalette palette;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Column(
-    children: [
-      Text(
-        value,
-        style: TextStyle(
-          color: palette.text,
-          fontSize: 20,
-          fontWeight: FontWeight.w800,
-        ),
+  Widget build(BuildContext context) => InkWell(
+    key: onTap == null ? null : const ValueKey('client-reviews-link'),
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(12),
+    child: Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(
+              color: palette.text,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          Text(label, style: TextStyle(color: palette.muted, fontSize: 12)),
+        ],
       ),
-      Text(label, style: TextStyle(color: palette.muted, fontSize: 12)),
-    ],
+    ),
   );
 }
 
@@ -1325,15 +1336,6 @@ class _WorkerDetailsPalette {
   final Color surface;
   final Color text;
   final Color muted;
-}
-
-String _initials(String name) {
-  final words = name
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((word) => word.isNotEmpty);
-  final initials = words.take(2).map((word) => word[0].toUpperCase()).join();
-  return initials.isEmpty ? 'C' : initials;
 }
 
 String _dateRange(ServiceRequest request) {

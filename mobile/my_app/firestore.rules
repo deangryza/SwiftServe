@@ -16,6 +16,23 @@ service cloud.firestore {
       return !(field in data)
         || (data[field] is string && data[field].size() <= maxLength);
     }
+    function validPublicProfile(uid, data) {
+      return data.keys().hasAll([
+          'uid', 'fullName', 'role', 'photoBase64', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'fullName', 'role', 'photoBase64', 'createdAt', 'updatedAt'
+        ])
+        && data.uid == uid
+        && data.fullName is string
+        && data.fullName.size() > 0
+        && data.fullName.size() <= 120
+        && data.role in ['client', 'worker']
+        && data.photoBase64 is string
+        && data.photoBase64.size() <= 65536
+        && (!('createdAt' in data) || data.createdAt is timestamp)
+        && data.updatedAt == request.time;
+    }
     function validServiceRequest(data) {
       return data.keys().hasAll([
           'clientId', 'clientName', 'title', 'category', 'budget', 'schedule',
@@ -97,7 +114,17 @@ service cloud.firestore {
       allow update: if self(uid)
         && request.resource.data.role == resource.data.role
         && request.resource.data.verificationStatus == resource.data.verificationStatus
-        && request.resource.data.phoneNumber == resource.data.phoneNumber;
+        && request.resource.data.phoneNumber == resource.data.phoneNumber
+        && validOptionalString(request.resource.data, 'photoBase64', 65536);
+    }
+
+    match /public_profiles/{uid} {
+      allow read: if signedIn();
+      allow create: if self(uid) && validPublicProfile(uid, request.resource.data);
+      allow update: if self(uid)
+        && resource.data.role == request.resource.data.role
+        && validPublicProfile(uid, request.resource.data);
+      allow delete: if false;
     }
 
     match /worker_profiles/{uid} {
