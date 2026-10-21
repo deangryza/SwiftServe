@@ -15,6 +15,25 @@ enum ServiceRequestStatus {
   );
 }
 
+enum JobModality {
+  onsite('On-site'),
+  online('Online'),
+  hybrid('Hybrid');
+
+  const JobModality(this.label);
+
+  final String label;
+
+  /// Whether the job needs a physical location pinned on the map.
+  bool get needsLocation => this != JobModality.online;
+
+  // Requests posted before modality existed were all physical jobs.
+  static JobModality fromWire(Object? value) => values.firstWhere(
+    (modality) => modality.name == value,
+    orElse: () => JobModality.onsite,
+  );
+}
+
 class ServiceRequest {
   const ServiceRequest({
     required this.id,
@@ -26,6 +45,7 @@ class ServiceRequest {
     required this.description,
     required this.budget,
     required this.status,
+    this.modality = JobModality.onsite,
     this.areaLatitude,
     this.areaLongitude,
     this.workerId,
@@ -44,6 +64,7 @@ class ServiceRequest {
   final String description;
   final double budget;
   final ServiceRequestStatus status;
+  final JobModality modality;
   final double? areaLatitude;
   final double? areaLongitude;
   final String? workerId;
@@ -52,13 +73,17 @@ class ServiceRequest {
   final DateTime? scheduleFrom;
   final DateTime? scheduleTo;
 
+  /// Short "where" text for cards: the area, prefixed for hybrid jobs.
+  String get placeLabel => switch (modality) {
+    JobModality.online => 'Online',
+    JobModality.hybrid => 'Hybrid · $location',
+    JobModality.onsite => location,
+  };
+
   JobCoordinate? get areaPosition =>
       areaLatitude == null || areaLongitude == null
       ? null
-      : JobCoordinate(
-          latitude: areaLatitude!,
-          longitude: areaLongitude!,
-        );
+      : JobCoordinate(latitude: areaLatitude!, longitude: areaLongitude!);
 
   factory ServiceRequest.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> document,
@@ -79,6 +104,7 @@ class ServiceRequest {
       description: (data['description'] ?? '').toString(),
       budget: (data['budget'] as num?)?.toDouble() ?? 0,
       status: ServiceRequestStatus.fromWire(data['status']),
+      modality: JobModality.fromWire(data['modality']),
       areaLatitude: areaPosition?.latitude,
       areaLongitude: areaPosition?.longitude,
       workerId: data['workerId']?.toString(),

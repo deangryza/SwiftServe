@@ -237,6 +237,73 @@ test('new requests require both a public coordinate and private location', async
   await assertFails(batch.commit());
 });
 
+test('online requests are created without any map location', async () => {
+  const client = environment.authenticatedContext('client-1').firestore();
+
+  await assertSucceeds(
+    setDoc(doc(client, 'service_requests/online-request'), {
+      ...requestData,
+      modality: 'online',
+      location: 'Online',
+      createdAt: serverTimestamp(),
+    }),
+  );
+
+  // An online job must not carry a public pin.
+  await assertFails(
+    setDoc(doc(client, 'service_requests/online-with-pin'), {
+      ...requestData,
+      modality: 'online',
+      location: 'Online',
+      areaPosition: new GeoPoint(14.84, 120.81),
+      createdAt: serverTimestamp(),
+    }),
+  );
+});
+
+test('on-site and hybrid requests still need both locations', async () => {
+  const client = environment.authenticatedContext('client-1').firestore();
+
+  for (const modality of ['onsite', 'hybrid']) {
+    await assertFails(
+      setDoc(doc(client, `service_requests/${modality}-no-pin`), {
+        ...requestData,
+        modality,
+        createdAt: serverTimestamp(),
+      }),
+    );
+
+    const batch = writeBatch(client);
+    batch.set(doc(client, `service_requests/${modality}-pinned`), {
+      ...requestData,
+      modality,
+      areaPosition: new GeoPoint(14.84, 120.81),
+      createdAt: serverTimestamp(),
+    });
+    batch.set(
+      doc(client, `service_requests/${modality}-pinned/private/location`),
+      {
+        position: new GeoPoint(14.8441, 120.8119),
+        address: '123 Example Street, Malolos, Bulacan',
+        createdAt: serverTimestamp(),
+      },
+    );
+    await assertSucceeds(batch.commit());
+  }
+});
+
+test('unknown work types are rejected', async () => {
+  const client = environment.authenticatedContext('client-1').firestore();
+
+  await assertFails(
+    setDoc(doc(client, 'service_requests/remote-request'), {
+      ...requestData,
+      modality: 'remote',
+      createdAt: serverTimestamp(),
+    }),
+  );
+});
+
 test('exact location is private until a worker is selected', async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     await setDoc(

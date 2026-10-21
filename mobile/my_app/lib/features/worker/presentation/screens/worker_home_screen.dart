@@ -141,7 +141,8 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
     await _locationService.openRecoverySettings(error.failure);
   }
 
-  String _distanceLabel(ServiceRequest request) {
+  String? _distanceLabel(ServiceRequest request) {
+    if (!request.modality.needsLocation) return null;
     final jobPosition = request.areaPosition;
     if (jobPosition == null) return 'Distance unavailable';
     if (_loadingLocation) return 'Finding distance…';
@@ -201,7 +202,7 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
             JobOfferCard(
               service: request.title,
               client: request.clientName,
-              location: request.location,
+              location: request.placeLabel,
               price: '₱${request.budget.toStringAsFixed(0)}',
               distanceLabel: _distanceLabel(request),
               onTap: () => _openJob(context, request, widget.worker),

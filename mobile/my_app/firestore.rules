@@ -25,7 +25,7 @@ service cloud.firestore {
           'clientId', 'clientName', 'title', 'category', 'budget', 'schedule',
           'scheduleFrom', 'scheduleTo', 'location', 'description', 'status',
           'areaPosition', 'createdAt', 'workerId', 'workerName', 'acceptedAt',
-          'cancelledAt', 'ongoingAt', 'completedAt'
+          'cancelledAt', 'ongoingAt', 'completedAt', 'modality'
         ])
         && data.clientId is string
         && data.clientId.size() > 0
@@ -51,6 +51,8 @@ service cloud.firestore {
         && data.location.size() > 0
         && data.location.size() <= 300
         && (!('areaPosition' in data) || data.areaPosition is latlng)
+        && (!('modality' in data)
+          || data.modality in ['onsite', 'online', 'hybrid'])
         && data.description is string
         && data.description.size() > 0
         && data.description.size() <= 5000
@@ -128,8 +130,19 @@ service cloud.firestore {
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
-        && request.resource.data.areaPosition is latlng
-        && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location);
+        // Online jobs carry no map pin; on-site and hybrid jobs need both the
+        // public area and the private exact location.
+        && (
+          (
+            request.resource.data.get('modality', 'onsite') == 'online'
+            && !('areaPosition' in request.resource.data)
+            && !existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          ) || (
+            request.resource.data.get('modality', 'onsite') != 'online'
+            && request.resource.data.areaPosition is latlng
+            && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          )
+        );
       allow update: if validServiceRequest(request.resource.data) && (
         (
           self(resource.data.clientId)

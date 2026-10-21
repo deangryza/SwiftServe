@@ -50,6 +50,11 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
     });
 
     final request = widget.request;
+    // Online jobs have no place to measure distance to.
+    if (!request.modality.needsLocation) {
+      setState(() => _loadingLocation = false);
+      return;
+    }
     final canReadExact =
         request.workerId == widget.worker.id &&
         request.status != ServiceRequestStatus.pending &&
@@ -145,7 +150,12 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
         widget.worker.verificationStatus == VerificationStatus.verified;
     final isAssignedWorker = request.workerId == widget.worker.id;
     final displayedPosition = _exactLocation?.position ?? request.areaPosition;
-    final displayedAddress = _exactLocation?.address ?? request.location;
+    final address = _exactLocation?.address ?? request.location;
+    final displayedAddress = switch (request.modality) {
+      JobModality.online => 'Online · done remotely',
+      JobModality.hybrid => 'Hybrid · $address',
+      JobModality.onsite => address,
+    };
     final isApproximate = _exactLocation == null;
     return Scaffold(
       appBar: AppBar(title: const Text('Job details')),
@@ -163,7 +173,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
             const SizedBox(height: 12),
             _JobLocationMapCard(
               position: displayedPosition,
-              address: displayedAddress,
+              address: address,
               approximate: isApproximate,
               workerPosition: _workerPosition,
               loadingDistance: _loadingLocation,

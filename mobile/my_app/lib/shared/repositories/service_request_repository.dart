@@ -26,11 +26,15 @@ class ServiceRequestRepository {
     required DateTime scheduleFrom,
     required DateTime scheduleTo,
     required String description,
-    required JobLocationSelection location,
+    required JobModality modality,
+    JobLocationSelection? location,
   }) async {
+    if (modality.needsLocation && location == null) {
+      throw ArgumentError.notNull('location');
+    }
+    // Online jobs have no physical place, so no pin is stored for them.
+    final pinned = modality.needsLocation ? location : null;
     final requestRef = _firestore.collection('service_requests').doc();
-    final privateLocationRef = requestRef.collection('private').doc('location');
-    final publicPosition = roundToPublicArea(location.position);
     final batch = _firestore.batch();
 
     batch.set(requestRef, {
@@ -42,17 +46,21 @@ class ServiceRequestRepository {
       'schedule': Timestamp.fromDate(scheduleFrom),
       'scheduleFrom': Timestamp.fromDate(scheduleFrom),
       'scheduleTo': Timestamp.fromDate(scheduleTo),
-      'location': location.areaLabel,
-      'areaPosition': publicPosition.toGeoPoint(),
+      'modality': modality.name,
+      'location': pinned?.areaLabel ?? JobModality.online.label,
+      if (pinned != null)
+        'areaPosition': roundToPublicArea(pinned.position).toGeoPoint(),
       'description': description,
       'status': ServiceRequestStatus.pending.name,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    batch.set(privateLocationRef, {
-      'position': location.position.toGeoPoint(),
-      'address': location.exactAddress,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    if (pinned != null) {
+      batch.set(requestRef.collection('private').doc('location'), {
+        'position': pinned.position.toGeoPoint(),
+        'address': pinned.exactAddress,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
     await batch.commit();
   }
 

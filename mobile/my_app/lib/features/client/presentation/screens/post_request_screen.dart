@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../shared/models/job_location.dart';
+import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/widgets/job_location_picker.dart';
 
@@ -95,6 +96,7 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   String? _selectedCategory;
   DateTime? _fromDate;
   DateTime? _toDate;
+  JobModality _modality = JobModality.onsite;
   JobLocationSelection? _selectedLocation;
   bool _isPosting = false;
 
@@ -233,7 +235,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
         scheduleFrom: _fromDate!,
         scheduleTo: _toDate!,
         description: _descriptionController.text.trim(),
-        location: _selectedLocation!,
+        modality: _modality,
+        location: _modality.needsLocation ? _selectedLocation : null,
       );
 
       if (!mounted) return;
@@ -425,26 +428,42 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         ),
                         const SizedBox(height: 20),
 
-                        _label('Location'),
-                        FormField<JobLocationSelection>(
-                          validator: (value) {
-                            if (value == null) {
-                              return 'Choose the service location on the map.';
+                        _label('Work type'),
+                        _ModalitySelector(
+                          value: _modality,
+                          onChanged: (modality) => setState(() {
+                            _modality = modality;
+                            // The picker is rebuilt empty when it reappears.
+                            if (!modality.needsLocation) {
+                              _selectedLocation = null;
                             }
-                            if (value.exactAddress.trim().isEmpty) {
-                              return 'Enter the exact service address.';
-                            }
-                            return null;
-                          },
-                          builder: (field) => JobLocationPicker(
-                            errorText: field.errorText,
-                            onChanged: (value) {
-                              _selectedLocation = value;
-                              field.didChange(value);
-                            },
-                          ),
+                          }),
                         ),
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 20),
+
+                        if (_modality.needsLocation) ...[
+                          _label('Location'),
+                          FormField<JobLocationSelection>(
+                            key: const ValueKey('post-job-location'),
+                            validator: (value) {
+                              if (value == null) {
+                                return 'Choose the service location on the map.';
+                              }
+                              if (value.exactAddress.trim().isEmpty) {
+                                return 'Enter the exact service address.';
+                              }
+                              return null;
+                            },
+                            builder: (field) => JobLocationPicker(
+                              errorText: field.errorText,
+                              onChanged: (value) {
+                                _selectedLocation = value;
+                                field.didChange(value);
+                              },
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                        ],
 
                         _label('Description'),
                         TextFormField(
@@ -494,6 +513,90 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ModalitySelector extends StatelessWidget {
+  const _ModalitySelector({required this.value, required this.onChanged});
+
+  final JobModality value;
+  final ValueChanged<JobModality> onChanged;
+
+  static const _dark = Color(0xFF1D1E21);
+  static const _border = Color(0xFFE2E5EC);
+  static const _hint = Color(0xFF929AAA);
+
+  static IconData _icon(JobModality modality) => switch (modality) {
+    JobModality.onsite => Icons.home_repair_service_outlined,
+    JobModality.online => Icons.laptop_mac_outlined,
+    JobModality.hybrid => Icons.sync_alt,
+  };
+
+  static String _hintFor(JobModality modality) => switch (modality) {
+    JobModality.onsite => 'The worker needs to be there in person.',
+    JobModality.online => 'Can be done remotely. No location needed.',
+    JobModality.hybrid => 'Partly in person, partly remote.',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            for (final modality in JobModality.values) ...[
+              if (modality != JobModality.values.first)
+                const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  key: ValueKey('post-job-modality-${modality.name}'),
+                  onTap: () => onChanged(modality),
+                  borderRadius: BorderRadius.circular(11),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    height: 62,
+                    decoration: BoxDecoration(
+                      color: modality == value
+                          ? _dark
+                          : const Color(0xFFFCFCFE),
+                      borderRadius: BorderRadius.circular(11),
+                      border: Border.all(
+                        color: modality == value ? _dark : _border,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _icon(modality),
+                          size: 20,
+                          color: modality == value ? Colors.white : _dark,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          modality.label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: modality == value ? Colors.white : _dark,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          _hintFor(value),
+          style: const TextStyle(color: _hint, fontSize: 12),
+        ),
+      ],
     );
   }
 }
