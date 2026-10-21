@@ -192,9 +192,19 @@ class _ClientRequestDetailsScreenState
             subtitle: const Text('Requested date range'),
           ),
           ListTile(
-            leading: const Icon(Icons.location_on_outlined),
-            title: Text(request.location),
+            leading: Icon(
+              request.modality.needsLocation
+                  ? Icons.work_outline
+                  : Icons.laptop_mac_outlined,
+            ),
+            title: Text(request.modality.label),
+            subtitle: const Text('Work type'),
           ),
+          if (request.modality.needsLocation)
+            ListTile(
+              leading: const Icon(Icons.location_on_outlined),
+              title: Text(request.location),
+            ),
           ListTile(
             leading: const Icon(Icons.payments_outlined),
             title: Text('₱${request.budget.toStringAsFixed(0)}'),

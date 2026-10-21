@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/app_user.dart';
+import '../models/job_location.dart';
 import '../models/service_application.dart';
 import '../models/service_request.dart';
+import '../utils/job_location_utils.dart';
 
 String conversationIdFor({
   required String clientId,
@@ -14,6 +16,64 @@ class ServiceRequestRepository {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+
+  Future<void> createRequest({
+    required String clientId,
+    required String clientName,
+    required String title,
+    required String category,
+    required double budget,
+    required DateTime scheduleFrom,
+    required DateTime scheduleTo,
+    required String description,
+    required JobModality modality,
+    JobLocationSelection? location,
+  }) async {
+    if (modality.needsLocation && location == null) {
+      throw ArgumentError.notNull('location');
+    }
+    // Online jobs have no physical place, so no pin is stored for them.
+    final pinned = modality.needsLocation ? location : null;
+    final requestRef = _firestore.collection('service_requests').doc();
+    final batch = _firestore.batch();
+
+    batch.set(requestRef, {
+      'clientId': clientId,
+      'clientName': clientName,
+      'title': title,
+      'category': category,
+      'budget': budget,
+      'schedule': Timestamp.fromDate(scheduleFrom),
+      'scheduleFrom': Timestamp.fromDate(scheduleFrom),
+      'scheduleTo': Timestamp.fromDate(scheduleTo),
+      'modality': modality.name,
+      'location': pinned?.areaLabel ?? JobModality.online.label,
+      if (pinned != null)
+        'areaPosition': roundToPublicArea(pinned.position).toGeoPoint(),
+      'description': description,
+      'status': ServiceRequestStatus.pending.name,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    if (pinned != null) {
+      batch.set(requestRef.collection('private').doc('location'), {
+        'position': pinned.position.toGeoPoint(),
+        'address': pinned.exactAddress,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  Future<ExactJobLocation?> getExactLocation(String requestId) async {
+    final document = await _firestore
+        .collection('service_requests')
+        .doc(requestId)
+        .collection('private')
+        .doc('location')
+        .get();
+    final data = document.data();
+    return data == null ? null : ExactJobLocation.fromMap(data);
+  }
 
   Stream<List<ServiceRequest>> watchAvailable() => _firestore
       .collection('service_requests')

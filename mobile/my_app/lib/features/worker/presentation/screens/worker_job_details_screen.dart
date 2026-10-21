@@ -1,14 +1,20 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/screens/reviews_screen.dart';
+import '../../../../shared/services/device_location_service.dart';
+import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/widgets/client_rating_summary.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../../../../shared/widgets/open_street_map_layers.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import 'worker_verification_screen.dart';
 
@@ -31,9 +37,87 @@ class WorkerJobDetailsScreen extends StatefulWidget {
 }
 
 class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
+  static const _locationService = DeviceLocationService();
   bool _savingAction = false;
   bool _savingReview = false;
   bool _savingReport = false;
+  bool _loadingLocation = true;
+  JobCoordinate? _workerPosition;
+  ExactJobLocation? _exactLocation;
+  DeviceLocationException? _locationError;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocationContext();
+  }
+
+  Future<void> _loadLocationContext() async {
+    setState(() {
+      _loadingLocation = true;
+      _locationError = null;
+    });
+
+    final request = widget.request;
+    // Online jobs have no place to measure distance to.
+    if (!request.modality.needsLocation) {
+      setState(() => _loadingLocation = false);
+      return;
+    }
+    final canReadExact =
+        request.workerId == widget.worker.id &&
+        request.status != ServiceRequestStatus.pending &&
+        request.status != ServiceRequestStatus.cancelled;
+
+    if (canReadExact) {
+      try {
+        final exact = await ServiceRequestRepository().getExactLocation(
+          request.id,
+        );
+        if (mounted) setState(() => _exactLocation = exact);
+      } catch (_) {
+        // Legacy jobs and temporarily unavailable private documents retain the
+        // approximate public location rather than blocking the job workflow.
+      }
+    }
+
+    try {
+      final position = await _locationService.currentPosition();
+      if (mounted) setState(() => _workerPosition = position);
+    } on DeviceLocationException catch (error) {
+      if (mounted) setState(() => _locationError = error);
+    } finally {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
+  }
+
+  Future<void> _recoverLocation() async {
+    final error = _locationError;
+    if (error != null &&
+        (error.failure == DeviceLocationFailure.serviceDisabled ||
+            error.failure ==
+                DeviceLocationFailure.permissionPermanentlyDenied)) {
+      await _locationService.openRecoverySettings(error.failure);
+      return;
+    }
+    await _loadLocationContext();
+  }
+
+  Widget? _locationCard(ServiceRequest request, _WorkerDetailsPalette palette) {
+    if (!request.modality.needsLocation) return null;
+    final position = _exactLocation?.position ?? request.areaPosition;
+    if (position == null) return null;
+    return _JobLocationMapCard(
+      position: position,
+      address: _exactLocation?.address ?? request.location,
+      approximate: _exactLocation == null,
+      workerPosition: _workerPosition,
+      loadingDistance: _loadingLocation,
+      locationError: _locationError,
+      onRecoverLocation: _recoverLocation,
+      palette: palette,
+    );
+  }
 
   Future<void> _runAction(
     Future<void> Function() action,
@@ -228,6 +312,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
                   request: request,
                   worker: widget.worker,
                   palette: palette,
+                  locationCard: _locationCard(request, palette),
                   savingAction: _savingAction,
                   savingReview: _savingReview,
                   savingReport: _savingReport,
@@ -291,11 +376,13 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
     required this.onApply,
     required this.onStart,
     required this.onComplete,
+    this.locationCard,
   });
 
   final ServiceRequest request;
   final AppUser worker;
   final _WorkerDetailsPalette palette;
+  final Widget? locationCard;
   final bool savingAction;
   final bool savingReview;
   final bool savingReport;
@@ -382,6 +469,10 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
                     _ClientSummaryCard(request: request, palette: palette),
                     const SizedBox(height: 18),
                     _JobSummaryCard(request: request, palette: palette),
+                    if (locationCard != null) ...[
+                      const SizedBox(height: 18),
+                      locationCard!,
+                    ],
                     const SizedBox(height: 22),
                     _WorkerBookingActions(
                       request: request,
@@ -529,10 +620,20 @@ class _JobSummaryCard extends StatelessWidget {
           palette: palette,
         ),
         _DetailLine(
-          icon: Icons.location_on_outlined,
-          label: request.location,
+          icon: request.modality.needsLocation
+              ? Icons.work_outline
+              : Icons.laptop_mac_outlined,
+          label: request.modality.needsLocation
+              ? request.modality.label
+              : 'Online · done remotely',
           palette: palette,
         ),
+        if (request.modality.needsLocation)
+          _DetailLine(
+            icon: Icons.location_on_outlined,
+            label: request.location,
+            palette: palette,
+          ),
         _DetailLine(
           icon: Icons.info_outline,
           label: request.status.name.toUpperCase(),
@@ -834,7 +935,7 @@ class _ClientProfileSheet extends StatelessWidget {
           const SizedBox(height: 20),
           _DetailLine(
             icon: Icons.location_on_outlined,
-            label: request.location,
+            label: request.placeLabel,
             palette: palette,
           ),
           _DetailLine(
@@ -1323,6 +1424,188 @@ class _DetailsMessage extends StatelessWidget {
       child: Text(message, textAlign: TextAlign.center),
     ),
   );
+}
+
+class _JobLocationMapCard extends StatefulWidget {
+  const _JobLocationMapCard({
+    required this.position,
+    required this.address,
+    required this.approximate,
+    required this.workerPosition,
+    required this.loadingDistance,
+    required this.locationError,
+    required this.onRecoverLocation,
+    required this.palette,
+  });
+
+  final _WorkerDetailsPalette palette;
+
+  final JobCoordinate position;
+  final String address;
+  final bool approximate;
+  final JobCoordinate? workerPosition;
+  final bool loadingDistance;
+  final DeviceLocationException? locationError;
+  final VoidCallback onRecoverLocation;
+
+  @override
+  State<_JobLocationMapCard> createState() => _JobLocationMapCardState();
+}
+
+class _JobLocationMapCardState extends State<_JobLocationMapCard> {
+  bool _mapFailed = false;
+  int _mapErrorCount = 0;
+  int _mapReloadVersion = 0;
+
+  String get _distanceLabel {
+    if (widget.loadingDistance) return 'Finding your distance…';
+    final origin = widget.workerPosition;
+    if (origin == null) return 'Distance unavailable';
+    return formatDistance(
+      distanceMetersBetween(origin, widget.position),
+      approximate: widget.approximate,
+    );
+  }
+
+  void _handleMapTileError(Object error) {
+    if (_mapFailed || !mounted) return;
+    _mapErrorCount += 1;
+    if (_mapErrorCount < 3) return;
+    setState(() => _mapFailed = true);
+  }
+
+  void _retryMap() {
+    setState(() {
+      _mapFailed = false;
+      _mapErrorCount = 0;
+      _mapReloadVersion += 1;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final target = LatLng(widget.position.latitude, widget.position.longitude);
+    final error = widget.locationError;
+    final requiresSettings =
+        error?.failure == DeviceLocationFailure.serviceDisabled ||
+        error?.failure == DeviceLocationFailure.permissionPermanentlyDenied;
+    return Material(
+      color: widget.palette.surface,
+      borderRadius: BorderRadius.circular(18),
+      clipBehavior: Clip.antiAlias,
+      elevation: 2,
+      shadowColor: const Color(0x33000000),
+      textStyle: TextStyle(color: widget.palette.text),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 210,
+            child: Stack(
+              children: [
+                Semantics(
+                  label: widget.approximate
+                      ? 'Map showing the approximate service area.'
+                      : 'Map showing the exact job location.',
+                  child: FlutterMap(
+                    key: ValueKey(
+                      '${widget.position.latitude},${widget.position.longitude}',
+                    ),
+                    options: MapOptions(
+                      initialCenter: target,
+                      initialZoom: widget.approximate ? 13 : 16,
+                      minZoom: 3,
+                      maxZoom: 18,
+                      backgroundColor: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
+                    ),
+                    children: [
+                      SwiftServeMapTiles(
+                        key: ValueKey(_mapReloadVersion),
+                        onError: (_, error, _) => _handleMapTileError(error),
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: target,
+                            width: 48,
+                            height: 48,
+                            alignment: Alignment.bottomCenter,
+                            child: SwiftServeMapPin(
+                              label: widget.approximate
+                                  ? 'Approximate job location'
+                                  : 'Exact job location',
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SwiftServeMapAttribution(),
+                    ],
+                  ),
+                ),
+                if (_mapFailed) MapUnavailableOverlay(onRetry: _retryMap),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      widget.approximate
+                          ? Icons.location_searching_outlined
+                          : Icons.location_on_outlined,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        widget.approximate
+                            ? 'Approximate service area'
+                            : 'Exact job location',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(widget.address),
+                const SizedBox(height: 6),
+                Text(
+                  _distanceLabel,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      error.userMessage,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: widget.onRecoverLocation,
+                    child: Text(
+                      requiresSettings ? 'Open settings' : 'Try again',
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _WorkerDetailsPalette {

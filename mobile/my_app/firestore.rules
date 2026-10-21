@@ -41,8 +41,8 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'clientId', 'clientName', 'title', 'category', 'budget', 'schedule',
           'scheduleFrom', 'scheduleTo', 'location', 'description', 'status',
-          'createdAt', 'workerId', 'workerName', 'acceptedAt', 'cancelledAt',
-          'ongoingAt', 'completedAt'
+          'areaPosition', 'createdAt', 'workerId', 'workerName', 'acceptedAt',
+          'cancelledAt', 'ongoingAt', 'completedAt', 'modality'
         ])
         && data.clientId is string
         && data.clientId.size() > 0
@@ -67,6 +67,9 @@ service cloud.firestore {
         && data.location is string
         && data.location.size() > 0
         && data.location.size() <= 300
+        && (!('areaPosition' in data) || data.areaPosition is latlng)
+        && (!('modality' in data)
+          || data.modality in ['onsite', 'online', 'hybrid'])
         && data.description is string
         && data.description.size() > 0
         && data.description.size() <= 5000
@@ -74,6 +77,15 @@ service cloud.firestore {
         && data.createdAt is timestamp
         && validOptionalString(data, 'workerId', 128)
         && validOptionalString(data, 'workerName', 120);
+    }
+    function validExactLocation(data) {
+      return data.keys().hasAll(['position', 'address', 'createdAt'])
+        && data.keys().hasOnly(['position', 'address', 'createdAt'])
+        && data.position is latlng
+        && data.address is string
+        && data.address.size() > 0
+        && data.address.size() <= 300
+        && data.createdAt is timestamp;
     }
     function validApplication(data) {
       return data.keys().hasAll([
@@ -145,7 +157,20 @@ service cloud.firestore {
         && validServiceRequest(request.resource.data)
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        // Online jobs carry no map pin; on-site and hybrid jobs need both the
+        // public area and the private exact location.
+        && (
+          (
+            request.resource.data.get('modality', 'onsite') == 'online'
+            && !('areaPosition' in request.resource.data)
+            && !existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          ) || (
+            request.resource.data.get('modality', 'onsite') != 'online'
+            && request.resource.data.areaPosition is latlng
+            && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          )
+        );
       allow update: if validServiceRequest(request.resource.data) && (
         (
           self(resource.data.clientId)
@@ -222,6 +247,25 @@ service cloud.firestore {
             )
           );
         allow delete: if false;
+      }
+
+      match /private/{privateDocumentId} {
+        allow read: if privateDocumentId == 'location'
+          && signedIn()
+          && (
+            get(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid
+            || (
+              get(/databases/$(database)/documents/service_requests/$(requestId)).data.workerId == request.auth.uid
+              && get(/databases/$(database)/documents/service_requests/$(requestId)).data.status
+                in ['accepted', 'ongoing', 'completed']
+            )
+          );
+        allow create: if privateDocumentId == 'location'
+          && signedIn()
+          && validExactLocation(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid;
+        allow update, delete: if false;
       }
     }
 

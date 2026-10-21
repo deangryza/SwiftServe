@@ -5,6 +5,7 @@ class JobOfferCard extends StatelessWidget {
   final String client;
   final String location;
   final String price;
+  final String? distanceLabel;
   final VoidCallback onTap;
 
   const JobOfferCard({
@@ -13,6 +14,7 @@ class JobOfferCard extends StatelessWidget {
     required this.client,
     required this.location,
     required this.price,
+    this.distanceLabel,
     required this.onTap,
   });
 
@@ -25,7 +27,11 @@ class JobOfferCard extends StatelessWidget {
           service,
           style: const TextStyle(fontWeight: FontWeight.w700),
         ),
-        subtitle: Text('$client\n$location • $price'),
+        subtitle: Text(
+          '$client\n$location • $price${distanceLabel == null ? '' : '\n$distanceLabel'}',
+          maxLines: 3,
+          overflow: TextOverflow.ellipsis,
+        ),
         isThreeLine: true,
         trailing: FilledButton(onPressed: onTap, child: const Text('View')),
       ),

@@ -1,67 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
-class MapTrackingCard extends StatefulWidget {
+import '../../../../../shared/widgets/open_street_map_layers.dart';
+
+class MapTrackingCard extends StatelessWidget {
   const MapTrackingCard({super.key});
 
-  @override
-  State<MapTrackingCard> createState() => _MapTrackingCardState();
-}
-
-class _MapTrackingCardState extends State<MapTrackingCard> {
-  GoogleMapController? mapController;
-
-  // Markers
-  final Set<Marker> markers = {};
-
-  // Polylines
-  final Set<Polyline> polylines = {};
-
-  // Sample Locations
   static const LatLng clientLocation = LatLng(14.844100, 120.811900);
   static const LatLng workerLocation = LatLng(14.846000, 120.814500);
-
-  // Initial Camera Position
-  static const CameraPosition initialPosition = CameraPosition(
-    target: clientLocation,
-    zoom: 15,
-  );
-
-  @override
-  void initState() {
-    super.initState();
-    loadMarkers();
-    loadPolyline();
-  }
-
-  void loadMarkers() {
-    markers.add(
-      const Marker(
-        markerId: MarkerId("client"),
-        position: clientLocation,
-        infoWindow: InfoWindow(title: "Client"),
-      ),
-    );
-
-    markers.add(
-      const Marker(
-        markerId: MarkerId("worker"),
-        position: workerLocation,
-        infoWindow: InfoWindow(title: "Worker"),
-      ),
-    );
-  }
-
-  void loadPolyline() {
-    polylines.add(
-      const Polyline(
-        polylineId: PolylineId("route"),
-        color: Color(0xFF2F80ED),
-        width: 5,
-        points: [workerLocation, clientLocation],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -70,18 +17,51 @@ class _MapTrackingCardState extends State<MapTrackingCard> {
       decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(18),
-        child: GoogleMap(
-          initialCameraPosition: initialPosition,
-          markers: markers,
-          polylines: polylines,
-          onMapCreated: (GoogleMapController controller) {
-            mapController = controller;
-          },
-          myLocationEnabled: false,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          mapToolbarEnabled: false,
-          compassEnabled: false,
+        child: FlutterMap(
+          options: MapOptions(
+            initialCenter: clientLocation,
+            initialZoom: 15,
+            minZoom: 3,
+            maxZoom: 18,
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest,
+          ),
+          children: [
+            const SwiftServeMapTiles(),
+            PolylineLayer(
+              polylines: [
+                Polyline(
+                  points: const [workerLocation, clientLocation],
+                  color: const Color(0xFF2F80ED),
+                  strokeWidth: 5,
+                ),
+              ],
+            ),
+            const MarkerLayer(
+              markers: [
+                Marker(
+                  point: clientLocation,
+                  width: 48,
+                  height: 48,
+                  alignment: Alignment.bottomCenter,
+                  child: SwiftServeMapPin(label: 'Client location'),
+                ),
+                Marker(
+                  point: workerLocation,
+                  width: 42,
+                  height: 42,
+                  alignment: Alignment.bottomCenter,
+                  child: Icon(
+                    Icons.person_pin_circle,
+                    size: 42,
+                    color: Color(0xFF2F80ED),
+                  ),
+                ),
+              ],
+            ),
+            const SwiftServeMapAttribution(),
+          ],
         ),
       ),
     );

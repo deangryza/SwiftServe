@@ -3,6 +3,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../shared/models/job_location.dart';
+import '../../../../shared/models/service_request.dart';
+import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/widgets/job_location_picker.dart';
+
 String? resolvePostCategory(
   List<String> categories,
   String? requestedCategory,
@@ -44,18 +49,18 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _budgetController = TextEditingController();
-  final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   String? _selectedCategory;
   DateTime? _fromDate;
   DateTime? _toDate;
+  JobModality _modality = JobModality.onsite;
+  JobLocationSelection? _selectedLocation;
   bool _isPosting = false;
 
   static const _yellow = Color(0xFFFFC72C);
   static const _ink = Color(0xFF242424);
   static const _cream = Color(0xFFFFF9E9);
-  static const _pink = Color(0xFFFF4F9A);
 
   @override
   void initState() {
@@ -67,7 +72,6 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   void dispose() {
     _titleController.dispose();
     _budgetController.dispose();
-    _locationController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -198,20 +202,18 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ? fullName.trim()
           : 'Client';
 
-      await FirebaseFirestore.instance.collection('service_requests').add({
-        'clientId': user.uid,
-        'clientName': clientName,
-        'title': _titleController.text.trim(),
-        'category': _selectedCategory,
-        'budget': double.parse(_budgetController.text.trim()),
-        'schedule': Timestamp.fromDate(_fromDate!),
-        'scheduleFrom': Timestamp.fromDate(_fromDate!),
-        'scheduleTo': Timestamp.fromDate(_toDate!),
-        'location': _locationController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await ServiceRequestRepository().createRequest(
+        clientId: user.uid,
+        clientName: clientName,
+        title: _titleController.text.trim(),
+        category: _selectedCategory!,
+        budget: double.parse(_budgetController.text.trim()),
+        scheduleFrom: _fromDate!,
+        scheduleTo: _toDate!,
+        description: _descriptionController.text.trim(),
+        modality: _modality,
+        location: _modality.needsLocation ? _selectedLocation : null,
+      );
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -609,38 +611,57 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _label('Location', text),
-                                TextFormField(
-                                  key: const ValueKey('post-job-location'),
-                                  controller: _locationController,
-                                  style: TextStyle(color: text),
-                                  decoration: _inputDecoration(
-                                    hint: 'Enter city and area',
-                                    field: field,
-                                    border: border,
-                                    text: text,
-                                    muted: muted,
-                                    prefixIcon: Container(
-                                      margin: const EdgeInsets.all(7),
-                                      decoration: BoxDecoration(
-                                        color: _pink.withValues(alpha: 0.10),
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      child: const Icon(
-                                        Icons.location_on_outlined,
-                                        color: _pink,
-                                        size: 21,
-                                      ),
-                                    ),
-                                  ),
-                                  validator: (value) =>
-                                      value == null || value.trim().isEmpty
-                                      ? 'Enter a location'
-                                      : null,
+                                _label('Work type', text),
+                                _ModalitySelector(
+                                  value: _modality,
+                                  field: field,
+                                  border: border,
+                                  text: text,
+                                  muted: muted,
+                                  onChanged: (modality) => setState(() {
+                                    _modality = modality;
+                                    // The picker is rebuilt empty when it
+                                    // reappears.
+                                    if (!modality.needsLocation) {
+                                      _selectedLocation = null;
+                                    }
+                                  }),
                                 ),
                               ],
                             ),
                           ),
+                          if (_modality.needsLocation) ...[
+                            const SizedBox(height: 12),
+                            _sectionCard(
+                              surface: surface,
+                              dark: dark,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label('Location', text),
+                                  FormField<JobLocationSelection>(
+                                    key: const ValueKey('post-job-location'),
+                                    validator: (value) {
+                                      if (value == null) {
+                                        return 'Choose the service location on the map.';
+                                      }
+                                      if (value.exactAddress.trim().isEmpty) {
+                                        return 'Enter the exact service address.';
+                                      }
+                                      return null;
+                                    },
+                                    builder: (field) => JobLocationPicker(
+                                      errorText: field.errorText,
+                                      onChanged: (value) {
+                                        _selectedLocation = value;
+                                        field.didChange(value);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           _sectionCard(
                             surface: surface,
@@ -713,6 +734,100 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _ModalitySelector extends StatelessWidget {
+  const _ModalitySelector({
+    required this.value,
+    required this.onChanged,
+    required this.field,
+    required this.border,
+    required this.text,
+    required this.muted,
+  });
+
+  final JobModality value;
+  final ValueChanged<JobModality> onChanged;
+  final Color field;
+  final Color border;
+  final Color text;
+  final Color muted;
+
+  static const _yellow = Color(0xFFFFC72C);
+  static const _pink = Color(0xFFFF4F9A);
+
+  static IconData _icon(JobModality modality) => switch (modality) {
+    JobModality.onsite => Icons.home_repair_service_outlined,
+    JobModality.online => Icons.laptop_mac_outlined,
+    JobModality.hybrid => Icons.sync_alt,
+  };
+
+  static String _hintFor(JobModality modality) => switch (modality) {
+    JobModality.onsite => 'The worker needs to be there in person.',
+    JobModality.online => 'Can be done remotely. No location needed.',
+    JobModality.hybrid => 'Partly in person, partly remote.',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            for (final modality in JobModality.values) ...[
+              if (modality != JobModality.values.first)
+                const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  key: ValueKey('post-job-modality-${modality.name}'),
+                  onTap: () => onChanged(modality),
+                  borderRadius: BorderRadius.circular(12),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 150),
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: modality == value
+                          ? _yellow.withValues(alpha: 0.22)
+                          : field,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: modality == value ? _yellow : border,
+                        width: modality == value ? 1.6 : 1,
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          _icon(modality),
+                          size: 20,
+                          color: modality == value ? _pink : text,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          modality.label,
+                          style: TextStyle(
+                            color: text,
+                            fontSize: 12,
+                            fontWeight: modality == value
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(_hintFor(value), style: TextStyle(color: muted, fontSize: 12)),
+      ],
     );
   }
 }
