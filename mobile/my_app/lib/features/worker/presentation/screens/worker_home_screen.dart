@@ -3,10 +3,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
+import '../../../../shared/services/device_location_service.dart';
+import '../../../../shared/utils/job_location_utils.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import '../models/worker_verification_ui_state.dart';
 import '../widgets/legacy/job_offer_card.dart';
@@ -90,7 +93,7 @@ class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   );
 }
 
-class _WorkerDashboard extends StatelessWidget {
+class _WorkerDashboard extends StatefulWidget {
   const _WorkerDashboard({
     required this.worker,
     required this.verificationState,
@@ -98,6 +101,57 @@ class _WorkerDashboard extends StatelessWidget {
 
   final AppUser worker;
   final WorkerVerificationUiState verificationState;
+
+  @override
+  State<_WorkerDashboard> createState() => _WorkerDashboardState();
+}
+
+class _WorkerDashboardState extends State<_WorkerDashboard> {
+  static const _locationService = DeviceLocationService();
+  JobCoordinate? _workerPosition;
+  DeviceLocationException? _locationError;
+  bool _loadingLocation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocation();
+  }
+
+  Future<void> _loadLocation() async {
+    setState(() {
+      _loadingLocation = true;
+      _locationError = null;
+    });
+    try {
+      final position = await _locationService.currentPosition();
+      if (!mounted) return;
+      setState(() => _workerPosition = position);
+    } on DeviceLocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _locationError = error);
+    } finally {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
+  }
+
+  Future<void> _openLocationSettings() async {
+    final error = _locationError;
+    if (error == null) return;
+    await _locationService.openRecoverySettings(error.failure);
+  }
+
+  String _distanceLabel(ServiceRequest request) {
+    final jobPosition = request.areaPosition;
+    if (jobPosition == null) return 'Distance unavailable';
+    if (_loadingLocation) return 'Finding distance…';
+    final workerPosition = _workerPosition;
+    if (workerPosition == null) return 'Distance unavailable';
+    return formatDistance(
+      distanceMetersBetween(workerPosition, jobPosition),
+      approximate: true,
+    );
+  }
 
   @override
   Widget build(BuildContext context) => StreamBuilder<List<ServiceRequest>>(
@@ -112,18 +166,27 @@ class _WorkerDashboard extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         children: [
           Text(
-            'Hello, ${worker.fullName}!',
+            'Hello, ${widget.worker.fullName}!',
             style: Theme.of(context).textTheme.headlineSmall,
           ),
           const SizedBox(height: 4),
           Text(
             '${requests.length} open request${requests.length == 1 ? '' : 's'} available.',
           ),
-          if (!verificationState.isVerified) ...[
+          if (!widget.verificationState.isVerified) ...[
             const SizedBox(height: 16),
             _VerificationBanner(
-              state: verificationState,
-              onTap: () => _openVerification(context, worker),
+              state: widget.verificationState,
+              onTap: () => _openVerification(context, widget.worker),
+            ),
+          ],
+          if (_locationError != null &&
+              requests.any((request) => request.areaPosition != null)) ...[
+            const SizedBox(height: 12),
+            _LocationStatusBanner(
+              error: _locationError!,
+              onRetry: _loadLocation,
+              onOpenSettings: _openLocationSettings,
             ),
           ],
           const SizedBox(height: 20),
@@ -140,12 +203,65 @@ class _WorkerDashboard extends StatelessWidget {
               client: request.clientName,
               location: request.location,
               price: '₱${request.budget.toStringAsFixed(0)}',
-              onTap: () => _openJob(context, request, worker),
+              distanceLabel: _distanceLabel(request),
+              onTap: () => _openJob(context, request, widget.worker),
             ),
         ],
       );
     },
   );
+}
+
+class _LocationStatusBanner extends StatelessWidget {
+  const _LocationStatusBanner({
+    required this.error,
+    required this.onRetry,
+    required this.onOpenSettings,
+  });
+
+  final DeviceLocationException error;
+  final VoidCallback onRetry;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final requiresSettings =
+        error.failure == DeviceLocationFailure.serviceDisabled ||
+        error.failure == DeviceLocationFailure.permissionPermanentlyDenied;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 10),
+              child: Icon(Icons.location_off_outlined),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Distance unavailable',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(error.userMessage),
+                  const SizedBox(height: 6),
+                  TextButton(
+                    onPressed: requiresSettings ? onOpenSettings : onRetry,
+                    child: Text(requiresSettings ? 'Open settings' : 'Try again'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _WorkerJobs extends StatelessWidget {

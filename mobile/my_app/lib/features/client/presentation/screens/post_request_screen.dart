@@ -3,6 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../shared/models/job_location.dart';
+import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/widgets/job_location_picker.dart';
+
 class PostRequestScreen extends StatefulWidget {
   const PostRequestScreen({super.key});
 
@@ -86,12 +90,12 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
 
   final _titleController = TextEditingController();
   final _budgetController = TextEditingController();
-  final _locationController = TextEditingController();
   final _descriptionController = TextEditingController();
 
   String? _selectedCategory;
   DateTime? _fromDate;
   DateTime? _toDate;
+  JobLocationSelection? _selectedLocation;
   bool _isPosting = false;
 
   static const _dark = Color(0xFF1D1E21);
@@ -102,7 +106,6 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   void dispose() {
     _titleController.dispose();
     _budgetController.dispose();
-    _locationController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -221,20 +224,17 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ? fullName.trim()
           : 'Client';
 
-      await FirebaseFirestore.instance.collection('service_requests').add({
-        'clientId': user.uid,
-        'clientName': clientName,
-        'title': _titleController.text.trim(),
-        'category': _selectedCategory,
-        'budget': double.parse(_budgetController.text.trim()),
-        'schedule': Timestamp.fromDate(_fromDate!),
-        'scheduleFrom': Timestamp.fromDate(_fromDate!),
-        'scheduleTo': Timestamp.fromDate(_toDate!),
-        'location': _locationController.text.trim(),
-        'description': _descriptionController.text.trim(),
-        'status': 'pending',
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      await ServiceRequestRepository().createRequest(
+        clientId: user.uid,
+        clientName: clientName,
+        title: _titleController.text.trim(),
+        category: _selectedCategory!,
+        budget: double.parse(_budgetController.text.trim()),
+        scheduleFrom: _fromDate!,
+        scheduleTo: _toDate!,
+        description: _descriptionController.text.trim(),
+        location: _selectedLocation!,
+      );
 
       if (!mounted) return;
       Navigator.pop(context, true);
@@ -426,19 +426,23 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         const SizedBox(height: 20),
 
                         _label('Location'),
-                        TextFormField(
-                          controller: _locationController,
-                          decoration: _inputDecoration('Enter city and area')
-                              .copyWith(
-                                prefixIcon: const Icon(
-                                  Icons.location_on_outlined,
-                                  color: Color(0xFFEE4C8B),
-                                ),
-                              ),
-                          validator: (value) =>
-                              value == null || value.trim().isEmpty
-                              ? 'Enter a location'
-                              : null,
+                        FormField<JobLocationSelection>(
+                          validator: (value) {
+                            if (value == null) {
+                              return 'Choose the service location on the map.';
+                            }
+                            if (value.exactAddress.trim().isEmpty) {
+                              return 'Enter the exact service address.';
+                            }
+                            return null;
+                          },
+                          builder: (field) => JobLocationPicker(
+                            errorText: field.errorText,
+                            onChanged: (value) {
+                              _selectedLocation = value;
+                              field.didChange(value);
+                            },
+                          ),
                         ),
                         const SizedBox(height: 18),
 

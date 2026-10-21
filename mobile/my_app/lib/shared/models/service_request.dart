@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import 'job_location.dart';
+
 enum ServiceRequestStatus {
   pending,
   accepted,
@@ -24,6 +26,8 @@ class ServiceRequest {
     required this.description,
     required this.budget,
     required this.status,
+    this.areaLatitude,
+    this.areaLongitude,
     this.workerId,
     this.workerName,
     this.schedule,
@@ -40,18 +44,33 @@ class ServiceRequest {
   final String description;
   final double budget;
   final ServiceRequestStatus status;
+  final double? areaLatitude;
+  final double? areaLongitude;
   final String? workerId;
   final String? workerName;
   final DateTime? schedule;
   final DateTime? scheduleFrom;
   final DateTime? scheduleTo;
 
+  JobCoordinate? get areaPosition =>
+      areaLatitude == null || areaLongitude == null
+      ? null
+      : JobCoordinate(
+          latitude: areaLatitude!,
+          longitude: areaLongitude!,
+        );
+
   factory ServiceRequest.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> document,
-  ) {
-    final data = document.data() ?? const <String, dynamic>{};
+  ) => ServiceRequest.fromMap(
+    document.id,
+    document.data() ?? const <String, dynamic>{},
+  );
+
+  factory ServiceRequest.fromMap(String id, Map<String, dynamic> data) {
+    final areaPosition = JobCoordinate.fromGeoPoint(data['areaPosition']);
     return ServiceRequest(
-      id: document.id,
+      id: id,
       clientId: (data['clientId'] ?? '').toString(),
       clientName: (data['clientName'] ?? 'Client').toString(),
       title: (data['title'] ?? 'Untitled request').toString(),
@@ -60,6 +79,8 @@ class ServiceRequest {
       description: (data['description'] ?? '').toString(),
       budget: (data['budget'] as num?)?.toDouble() ?? 0,
       status: ServiceRequestStatus.fromWire(data['status']),
+      areaLatitude: areaPosition?.latitude,
+      areaLongitude: areaPosition?.longitude,
       workerId: data['workerId']?.toString(),
       workerName: data['workerName']?.toString(),
       schedule: (data['schedule'] as Timestamp?)?.toDate(),

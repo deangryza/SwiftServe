@@ -27,6 +27,18 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000
 
 Firebase project: `swiftserve-production`. Do not replace these files with the archived root project configuration.
 
+## Maps and foreground location
+
+SwiftServe uses `flutter_map` with OpenStreetMap tiles for client job pins and
+foreground device location for worker-to-job distance. It does not require a
+Google Maps API key or a billing-enabled Google Cloud project. The standard
+OpenStreetMap tile service is intended for normal interactive viewing only;
+do not add bulk downloading or offline prefetching without changing to a tile
+provider that explicitly permits it.
+
+The app requests location only while it is open. It does not persist worker
+coordinates or request background location access.
+
 Google sign-in uses Firebase Authentication. Existing profiles retain their client/worker routing; new Google users complete a profile through the existing backend API.
 
 Before testing Google sign-in on Android:
