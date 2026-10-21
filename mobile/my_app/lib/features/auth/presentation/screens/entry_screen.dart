@@ -8,6 +8,8 @@ import 'worker_register_screen.dart';
 class EntryScreen extends StatelessWidget {
   const EntryScreen({super.key});
 
+  static const _background = Color(0xFFFFF9E9);
+  static const _yellow = Color(0xFFFFC72C);
   static const _ink = Color(0xFF18181B);
   static const _muted = Color(0xFF71717A);
   static const _border = Color(0xFFE4E4E7);
@@ -19,16 +21,25 @@ class EntryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final background = dark ? const Color(0xFF171717) : _background;
+    final surface = dark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFEFB);
+    final ink = dark ? const Color(0xFFF3F3F3) : _ink;
+    final muted = dark ? const Color(0xFFB8B8B8) : _muted;
+    final border = dark ? const Color(0xFF505050) : _border;
+    final link = dark ? const Color(0xFF66AFFF) : _link;
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: const SystemUiOverlayStyle(
-        statusBarColor: Colors.white,
-        statusBarIconBrightness: Brightness.dark,
-        statusBarBrightness: Brightness.light,
-        systemNavigationBarColor: Colors.white,
-        systemNavigationBarIconBrightness: Brightness.dark,
+      value: SystemUiOverlayStyle(
+        statusBarColor: background,
+        statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+        statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+        systemNavigationBarColor: background,
+        systemNavigationBarIconBrightness: dark
+            ? Brightness.light
+            : Brightness.dark,
       ),
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: background,
         body: SafeArea(
           child: LayoutBuilder(
             builder: (context, constraints) => SingleChildScrollView(
@@ -41,11 +52,11 @@ class EntryScreen extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
+                        Text(
                           'SwiftServe',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: _ink,
+                            color: ink,
                             fontSize: 30,
                             height: 36 / 30,
                             fontWeight: FontWeight.w700,
@@ -53,11 +64,11 @@ class EntryScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        const Text(
+                        Text(
                           'Get help nearby. Earn with your skills.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                            color: _muted,
+                            color: muted,
                             fontSize: 15,
                             height: 22.5 / 15,
                           ),
@@ -70,8 +81,8 @@ class EntryScreen extends StatelessWidget {
                             onPressed: () =>
                                 _open(context, const ClientRegisterScreen()),
                             style: FilledButton.styleFrom(
-                              backgroundColor: _ink,
-                              foregroundColor: Colors.white,
+                              backgroundColor: _yellow,
+                              foregroundColor: _ink,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -92,9 +103,9 @@ class EntryScreen extends StatelessWidget {
                             onPressed: () =>
                                 _open(context, const WorkerRegisterScreen()),
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: _ink,
-                              backgroundColor: Colors.white,
-                              side: const BorderSide(color: _border),
+                              foregroundColor: ink,
+                              backgroundColor: surface,
+                              side: BorderSide(color: border),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(16),
                               ),
@@ -111,7 +122,7 @@ class EntryScreen extends StatelessWidget {
                         TextButton(
                           onPressed: () => _open(context, const LoginScreen()),
                           style: TextButton.styleFrom(
-                            foregroundColor: _link,
+                            foregroundColor: link,
                             padding: EdgeInsets.zero,
                             minimumSize: const Size(0, 20),
                             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -121,7 +132,7 @@ class EntryScreen extends StatelessWidget {
                               fontWeight: FontWeight.w500,
                             ),
                           ),
-                          child: const FittedBox(
+                          child: FittedBox(
                             fit: BoxFit.scaleDown,
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -129,7 +140,7 @@ class EntryScreen extends StatelessWidget {
                                 Text(
                                   'Already have an account? ',
                                   style: TextStyle(
-                                    color: _muted,
+                                    color: muted,
                                     fontWeight: FontWeight.w400,
                                   ),
                                 ),

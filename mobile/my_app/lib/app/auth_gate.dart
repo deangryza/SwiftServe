@@ -5,7 +5,7 @@ import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/google_profile_setup_screen.dart';
 import '../features/auth/presentation/screens/profile_completion_screen.dart';
 import '../features/client/presentation/screens/client_home_screen.dart';
-import '../features/onboarding/presentation/screens/onboarding_screen.dart';
+import '../features/onboarding/presentation/screens/swiftserve_onboarding_screen.dart';
 import '../features/worker/presentation/screens/worker_home_screen.dart';
 import '../shared/models/app_user.dart';
 import '../shared/repositories/profile_repository.dart';
@@ -39,7 +39,9 @@ class _AuthGateState extends State<AuthGate> {
         }
         final firebaseUser = authSnapshot.data;
         if (firebaseUser == null) {
-          return _hasSignedIn ? const LoginScreen() : const OnboardingScreen();
+          return _hasSignedIn
+              ? const LoginScreen()
+              : const SwiftServeOnboardingScreen();
         }
         _hasSignedIn = true;
 

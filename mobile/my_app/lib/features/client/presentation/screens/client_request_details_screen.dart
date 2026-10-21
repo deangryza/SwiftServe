@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/services/client_theme_controller.dart';
+import '../../../../shared/widgets/live_profile_avatar.dart';
 import 'client_sections.dart';
 
 class ClientRequestDetailsScreen extends StatefulWidget {
@@ -104,8 +106,8 @@ class _ClientRequestDetailsScreenState
 
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ClientChatScreen(
+      clientPageRoute(
+        ClientChatScreen(
           conversationId: pairConversation.exists
               ? pairConversationId
               : request.id,
@@ -252,13 +254,13 @@ class _ClientRequestDetailsScreenState
                 }
                 return Column(
                   children: applications.map((application) {
-                    final initial = application.workerName.trim().isEmpty
-                        ? 'W'
-                        : application.workerName.trim()[0].toUpperCase();
                     return Card(
                       margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
                       child: ListTile(
-                        leading: CircleAvatar(child: Text(initial)),
+                        leading: LiveProfileAvatar(
+                          userId: application.workerId,
+                          fallbackName: application.workerName,
+                        ),
                         title: Text(application.workerName),
                         subtitle: Text(
                           application.appliedAt == null

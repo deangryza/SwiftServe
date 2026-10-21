@@ -7,12 +7,16 @@ class ProfileHeader extends StatelessWidget {
     this.name = 'Worker',
     this.verified = false,
     this.verificationLabel,
+    this.rating = '—',
+    this.reviewCount = 0,
   });
 
   final VoidCallback onEdit;
   final String name;
   final bool verified;
   final String? verificationLabel;
+  final String rating;
+  final int reviewCount;
 
   @override
   Widget build(BuildContext context) {
@@ -39,12 +43,15 @@ class ProfileHeader extends StatelessWidget {
               style: TextStyle(color: verified ? Colors.green : Colors.orange),
             ),
             const SizedBox(height: 14),
-            const Row(
+            Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _ProfileStat(value: '-', label: 'Jobs'),
-                _ProfileStat(value: '-', label: 'Rating'),
-                _ProfileStat(value: '-', label: 'Years'),
+                const _ProfileStat(value: '-', label: 'Jobs'),
+                _ProfileStat(
+                  value: rating,
+                  label: reviewCount == 1 ? '1 review' : '$reviewCount reviews',
+                ),
+                const _ProfileStat(value: '-', label: 'Years'),
               ],
             ),
             const SizedBox(height: 12),

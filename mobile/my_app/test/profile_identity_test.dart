@@ -28,6 +28,28 @@ void main() {
     },
   );
 
+  testWidgets('recent profiles show a green new-member badge', (tester) async {
+    final joinedAt = DateTime.now().subtract(const Duration(days: 7));
+    await tester.pumpWidget(
+      MaterialApp(home: ProfileAvatar(joinedAt: joinedAt)),
+    );
+    expect(find.byKey(const ValueKey('recent-member-badge')), findsOneWidget);
+    final badge = tester.widget<Container>(
+      find.byKey(const ValueKey('recent-member-badge')),
+    );
+    final decoration = badge.decoration! as BoxDecoration;
+    expect(decoration.color, const Color(0xFF20B978));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ProfileAvatar(
+          joinedAt: DateTime.now().subtract(const Duration(days: 15)),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('recent-member-badge')), findsNothing);
+  });
+
   test('saved draft retains its photo and sends it on profile retry', () async {
     SharedPreferences.setMockInitialValues({});
     const draft = ProfileDraft(
@@ -72,11 +94,17 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(home: ClientHomeScreen(profile: profile('Alice Santos'))),
     );
-    expect(find.text('Good day, Alice Santos!'), findsOneWidget);
+    expect(find.text('Hello 👋'), findsOneWidget);
+    expect(find.text('Alice Santos'), findsOneWidget);
     await tester.pumpWidget(
       MaterialApp(home: ClientHomeScreen(profile: profile('Alice Cruz'))),
     );
-    expect(find.text('Good day, Alice Cruz!'), findsOneWidget);
-    expect(find.text('Good day, User'), findsNothing);
+    expect(find.text('Alice Cruz'), findsOneWidget);
+    expect(find.text('Alice Santos'), findsNothing);
+    expect(find.text('Most Booked Services'), findsOneWidget);
+    expect(find.text('Other services'), findsOneWidget);
+    expect(find.text('Post what you need help'), findsNothing);
+    expect(find.text('Bookings'), findsOneWidget);
+    expect(find.text('History'), findsNothing);
   });
 }

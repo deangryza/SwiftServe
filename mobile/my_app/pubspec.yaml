@@ -80,6 +80,8 @@ flutter:
     - assets/map.png
     - assets/worker.png
     - assets/registration/
+    - assets/onboarding/
+    - assets/dashboard/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

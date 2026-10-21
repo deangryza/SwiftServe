@@ -11,6 +11,8 @@ import '../../../../shared/services/profile_draft_store.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import 'profile_completion_screen.dart';
 import 'client_account_form.dart';
+import 'worker_account_form.dart';
+import '../widgets/phone_number_field.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
   const ClientRegisterScreen({super.key});
@@ -41,6 +43,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   final _category = TextEditingController();
   bool _acceptedTerms = false;
   bool _loading = false;
+  String _countryCode = '+63';
   Uint8List? _profileImageBytes;
 
   Future<void> _register() async {
@@ -58,7 +61,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     final draft = ProfileDraft(
       fullName: _name.text.trim(),
       email: _email.text.trim(),
-      phoneNumber: _phone.text.trim(),
+      phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
       address: _address.text.trim(),
       role: widget.role,
       category: _category.text.trim(),
@@ -69,12 +72,12 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           ? const []
           : [_category.text.trim()],
     );
+    UserCredential? credential;
     try {
-      final credential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: draft.email,
-            password: _password.text,
-          );
+      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: draft.email,
+        password: _password.text,
+      );
       await credential.user?.updateDisplayName(draft.fullName);
       await ProfileDraftStore().save(draft);
       final token = await credential.user!.getIdToken();
@@ -97,6 +100,26 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         SnackBar(
           content: Text(error.message ?? 'Could not create the account.'),
         ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      if (error.code == 'PHONE_NUMBER_IN_USE') {
+        try {
+          await credential?.user?.delete();
+          await ProfileDraftStore().clear();
+        } catch (_) {}
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+        return;
+      }
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ProfileCompletionScreen()),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Account created. ${error.message}')),
       );
     } on ApiConnectionException catch (error) {
       if (!mounted) return;
@@ -179,6 +202,30 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           profileImage: _profileImageBytes,
           onPickImage: _pickProfileImage,
           onRegister: _register,
+          countryCode: _countryCode,
+          onCountryCodeChanged: (value) => setState(() => _countryCode = value),
+        ),
+      );
+    }
+    if (widget.role == 'worker') {
+      return ClientThemeScope(
+        child: WorkerAccountForm(
+          formKey: _formKey,
+          name: _name,
+          email: _email,
+          phone: _phone,
+          address: _address,
+          password: _password,
+          confirmPassword: _confirmPassword,
+          category: _category,
+          acceptedTerms: _acceptedTerms,
+          onTermsChanged: (value) => setState(() => _acceptedTerms = value),
+          loading: _loading,
+          profileImage: _profileImageBytes,
+          onPickImage: _pickProfileImage,
+          onRegister: _register,
+          countryCode: _countryCode,
+          onCountryCodeChanged: (value) => setState(() => _countryCode = value),
         ),
       );
     }

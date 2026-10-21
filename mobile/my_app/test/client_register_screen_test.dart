@@ -43,4 +43,26 @@ void main() {
     expect(find.text('Alex'), findsOneWidget);
     expect(find.text('Client'), findsOneWidget);
   });
+
+  testWidgets('profile photo overlaps the curved account panel', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(364, 1024);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await tester.pumpWidget(const MaterialApp(home: ClientRegisterScreen()));
+    await tester.pumpAndSettle();
+
+    final avatar = tester.getRect(
+      find.byKey(const ValueKey('client-registration-profile-avatar')),
+    );
+    final panel = tester.getRect(
+      find.byKey(const ValueKey('client-registration-curved-panel')),
+    );
+
+    expect(avatar.top, lessThan(panel.top));
+    expect(avatar.bottom, greaterThan(panel.top));
+  });
 }

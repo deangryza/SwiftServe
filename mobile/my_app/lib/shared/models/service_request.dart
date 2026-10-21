@@ -53,6 +53,7 @@ class ServiceRequest {
     this.schedule,
     this.scheduleFrom,
     this.scheduleTo,
+    this.createdAt,
   });
 
   final String id;
@@ -72,6 +73,7 @@ class ServiceRequest {
   final DateTime? schedule;
   final DateTime? scheduleFrom;
   final DateTime? scheduleTo;
+  final DateTime? createdAt;
 
   /// Short "where" text for cards: the area, prefixed for hybrid jobs.
   String get placeLabel => switch (modality) {
@@ -116,6 +118,7 @@ class ServiceRequest {
       scheduleTo:
           (data['scheduleTo'] as Timestamp?)?.toDate() ??
           (data['schedule'] as Timestamp?)?.toDate(),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
     );
   }
 }
