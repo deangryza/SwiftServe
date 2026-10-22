@@ -1,5 +1,20 @@
 rules_version = '2';
 
+// ===============================================================
+// Messaging data model
+// ===============================================================
+// conversations/{conversationId}
+//   Required: requestId, participantIds[clientId, workerId], clientId,
+//   clientName, workerId, workerName, lastMessage, updatedAt.
+//   Optional: lastMessageId, lastSenderId, unreadFor, hiddenFor.
+// conversations/{conversationId}/messages/{messageId}
+//   Required and immutable: senderId, text, createdAt.
+// user_blocks/{blockerId_blockedId}
+//   Required and immutable: blockerId, blockedId, conversationId, createdAt.
+// All message and block timestamps are server timestamps. Conversation identity
+// and participant fields are immutable after creation.
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
@@ -21,7 +36,8 @@ service cloud.firestore {
           'uid', 'fullName', 'role', 'photoBase64', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'uid', 'fullName', 'role', 'photoBase64', 'createdAt', 'updatedAt'
+          'uid', 'fullName', 'role', 'photoBase64', 'location', 'description',
+          'category', 'skills', 'createdAt', 'updatedAt'
         ])
         && data.uid == uid
         && data.fullName is string
@@ -30,6 +46,11 @@ service cloud.firestore {
         && data.role in ['client', 'worker']
         && data.photoBase64 is string
         && data.photoBase64.size() <= 65536
+        && validOptionalString(data, 'location', 300)
+        && validOptionalString(data, 'description', 1000)
+        && validOptionalString(data, 'category', 100)
+        && (!('skills' in data)
+          || (data.skills is list && data.skills.size() <= 30))
         && (!('createdAt' in data) || data.createdAt is timestamp)
         && data.updatedAt == request.time;
     }
@@ -100,6 +121,126 @@ service cloud.firestore {
         && data.appliedAt is timestamp
         && (!('reviewedAt' in data) || data.reviewedAt is timestamp);
     }
+    function validConversation(data) {
+      return data.keys().hasAll([
+          'requestId', 'participantIds', 'clientId', 'clientName', 'workerId',
+          'workerName', 'lastMessage', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'requestId', 'participantIds', 'clientId', 'clientName', 'workerId',
+          'workerName', 'lastMessage', 'lastMessageId', 'lastSenderId',
+          'unreadFor', 'hiddenFor', 'updatedAt'
+        ])
+        && data.requestId is string
+        && data.requestId.size() > 0
+        && data.requestId.size() <= 128
+        && data.participantIds is list
+        && data.participantIds.size() == 2
+        && data.clientId is string
+        && data.clientId.size() > 0
+        && data.clientId.size() <= 128
+        && data.workerId is string
+        && data.workerId.size() > 0
+        && data.workerId.size() <= 128
+        && data.clientId != data.workerId
+        && data.clientId in data.participantIds
+        && data.workerId in data.participantIds
+        && data.clientName is string
+        && data.clientName.size() <= 120
+        && data.workerName is string
+        && data.workerName.size() <= 120
+        && data.lastMessage is string
+        && data.lastMessage.size() <= 1000
+        && (!('lastMessageId' in data)
+          || (data.lastMessageId is string
+            && data.lastMessageId.size() > 0
+            && data.lastMessageId.size() <= 128))
+        && (!('lastSenderId' in data)
+          || (data.lastSenderId is string
+            && data.lastSenderId in data.participantIds))
+        && (!('unreadFor' in data)
+          || (data.unreadFor is list
+            && data.unreadFor.size() <= 2
+            && data.unreadFor.hasOnly(data.participantIds)))
+        && (!('hiddenFor' in data)
+          || (data.hiddenFor is list
+            && data.hiddenFor.size() <= 2
+            && data.hiddenFor.hasOnly(data.participantIds)))
+        && data.updatedAt is timestamp;
+    }
+    function conversationBlocked(data) {
+      return exists(/databases/$(database)/documents/user_blocks/$(data.clientId + '_' + data.workerId))
+        || exists(/databases/$(database)/documents/user_blocks/$(data.workerId + '_' + data.clientId));
+    }
+    function validMessage(data, conversation) {
+      return data.keys().hasAll(['senderId', 'text', 'createdAt'])
+        && data.keys().hasOnly(['senderId', 'text', 'createdAt'])
+        && data.senderId == request.auth.uid
+        && data.senderId in conversation.participantIds
+        && data.text is string
+        && data.text.size() > 0
+        && data.text.size() <= 1000
+        && data.createdAt == request.time;
+    }
+    function validConversationUpdate(conversationId) {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return signedIn()
+        && request.auth.uid in resource.data.participantIds
+        && validConversation(request.resource.data)
+        && (
+          (
+            !changed.hasAny([
+              'requestId', 'participantIds', 'clientId', 'clientName',
+              'workerId', 'workerName'
+            ])
+            && (
+              changed.hasOnly(['unreadFor', 'hiddenFor'])
+              || (
+                changed.hasOnly([
+                  'lastMessage', 'lastMessageId', 'lastSenderId', 'unreadFor',
+                  'hiddenFor', 'updatedAt'
+                ])
+                // Consecutive messages from the same sender can leave
+                // lastMessage, lastSenderId, and unreadFor unchanged. The new
+                // message id and server timestamp must always advance; the
+                // values of the other metadata fields are validated below.
+                && changed.hasAll(['lastMessageId', 'updatedAt'])
+                && request.resource.data.lastSenderId == request.auth.uid
+                && (!('lastMessageId' in resource.data)
+                  || request.resource.data.lastMessageId != resource.data.lastMessageId)
+                && request.resource.data.updatedAt == request.time
+                && !(request.auth.uid in request.resource.data.unreadFor)
+                && request.resource.data.unreadFor.size() <= 1
+                && !conversationBlocked(resource.data)
+                && existsAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId))
+                && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.senderId == request.auth.uid
+                && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.text == request.resource.data.lastMessage
+                && getAfter(/databases/$(database)/documents/conversations/$(conversationId)/messages/$(request.resource.data.lastMessageId)).data.createdAt == request.time
+              )
+            )
+          )
+          || (
+            !changed.hasAny(['participantIds', 'clientId', 'workerId'])
+            && changed.hasOnly([
+              'requestId', 'clientName', 'workerName', 'lastMessage',
+              'lastMessageId', 'lastSenderId', 'unreadFor', 'hiddenFor',
+              'updatedAt'
+            ])
+            && request.resource.data.lastMessage in [
+              'Application accepted', 'Request accepted'
+            ]
+            && !('lastMessageId' in request.resource.data)
+            && !('lastSenderId' in request.resource.data)
+            && !('unreadFor' in request.resource.data)
+            && !('hiddenFor' in request.resource.data)
+            && request.resource.data.updatedAt == request.time
+            && !conversationBlocked(resource.data)
+            && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.status == 'accepted'
+            && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId == request.resource.data.clientId
+            && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId == request.resource.data.workerId
+          )
+        );
+    }
 
     // Allows a worker to query their own applications across every request.
     // The workerId query constraint is required for Firestore to authorize it.
@@ -112,9 +253,8 @@ service cloud.firestore {
       allow read: if self(uid);
       allow create: if false;
       allow update: if self(uid)
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.verificationStatus == resource.data.verificationStatus
-        && request.resource.data.phoneNumber == resource.data.phoneNumber
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['role', 'verificationStatus', 'phoneNumber']) == false
         && validOptionalString(request.resource.data, 'photoBase64', 65536);
     }
 
@@ -125,6 +265,13 @@ service cloud.firestore {
         && resource.data.role == request.resource.data.role
         && validPublicProfile(uid, request.resource.data);
       allow delete: if false;
+    }
+
+    // Contains only the join timestamp needed to render the NEW badge for
+    // legacy users whose public profile predates the createdAt field.
+    match /member_badges/{uid} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     match /worker_profiles/{uid} {
@@ -226,8 +373,10 @@ service cloud.firestore {
     }
 
     match /conversations/{conversationId} {
-      allow read, update: if signedIn() && request.auth.uid in resource.data.participantIds;
+      allow read: if signedIn() && request.auth.uid in resource.data.participantIds;
+      allow update: if validConversationUpdate(conversationId);
       allow create: if signedIn()
+        && validConversation(request.resource.data)
         && request.resource.data.keys().hasAll([
           'requestId', 'participantIds', 'clientId', 'clientName', 'workerId',
           'workerName', 'lastMessage', 'updatedAt'
@@ -252,6 +401,7 @@ service cloud.firestore {
         && request.resource.data.lastMessage is string
         && request.resource.data.lastMessage.size() <= 1000
         && request.resource.data.updatedAt == request.time
+        && !conversationBlocked(request.resource.data)
         && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.status == 'accepted'
         && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId == request.resource.data.clientId
         && getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId == request.resource.data.workerId;
@@ -259,18 +409,13 @@ service cloud.firestore {
         allow read: if signedIn()
           && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds;
         allow create: if signedIn()
-          && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds
-          && request.resource.data.keys().hasAll(['senderId', 'text', 'createdAt'])
-          && request.resource.data.keys().hasOnly(['senderId', 'text', 'createdAt'])
-          && request.resource.data.senderId == request.auth.uid
-          && request.resource.data.text is string
-          && request.resource.data.text.size() > 0
-          && request.resource.data.text.size() <= 1000
-          && request.resource.data.createdAt == request.time
-          && !exists(/databases/$(database)/documents/user_blocks/$(request.auth.uid + '_' + get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds[0]))
-          && !exists(/databases/$(database)/documents/user_blocks/$(request.auth.uid + '_' + get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds[1]))
-          && !exists(/databases/$(database)/documents/user_blocks/$(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds[0] + '_' + request.auth.uid))
-          && !exists(/databases/$(database)/documents/user_blocks/$(get(/databases/$(database)/documents/conversations/$(conversationId)).data.participantIds[1] + '_' + request.auth.uid));
+          && validMessage(
+            request.resource.data,
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data
+          )
+          && !conversationBlocked(
+            get(/databases/$(database)/documents/conversations/$(conversationId)).data
+          );
       }
     }
 
@@ -301,6 +446,8 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if signedIn() && resource.data.recipientId == request.auth.uid;
+      allow delete: if signedIn()
+        && resource.data.recipientId == request.auth.uid;
       allow update: if signedIn()
         && resource.data.recipientId == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read'])
@@ -312,7 +459,7 @@ service cloud.firestore {
         ])
         && request.resource.data.keys().hasOnly([
           'recipientId', 'senderId', 'requestId', 'title', 'body', 'read',
-          'createdAt'
+          'createdAt', 'type'
         ])
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.recipientId is string
@@ -322,6 +469,13 @@ service cloud.firestore {
         && request.resource.data.body is string
         && request.resource.data.body.size() <= 1000
         && request.resource.data.read == false
+        && (
+          !('type' in request.resource.data)
+          || request.resource.data.type in [
+            'workerApplication', 'applicationAccepted', 'requestAccepted',
+            'reviewReceived'
+          ]
+        )
         && request.resource.data.createdAt == request.time
         && (
           (
@@ -348,15 +502,18 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.keys().hasAll([
-          'requestId', 'clientId', 'workerId', 'workerName', 'rating',
-          'comment', 'createdAt'
+          'requestId', 'clientId', 'clientName', 'workerId', 'workerName',
+          'rating', 'comment', 'createdAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'requestId', 'clientId', 'workerId', 'workerName', 'rating',
-          'comment', 'createdAt'
+          'requestId', 'clientId', 'clientName', 'workerId', 'workerName',
+          'rating', 'comment', 'createdAt'
         ])
         && request.resource.data.requestId == requestId
         && request.resource.data.clientId == request.auth.uid
+        && request.resource.data.clientName is string
+        && request.resource.data.clientName.size() > 0
+        && request.resource.data.clientName.size() <= 120
         && request.resource.data.workerId is string
         && request.resource.data.workerName is string
         && request.resource.data.workerName.size() <= 120
@@ -367,6 +524,7 @@ service cloud.firestore {
         && request.resource.data.comment.size() <= 500
         && request.resource.data.createdAt == request.time
         && get(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid
+        && request.resource.data.clientName == currentUser().fullName
         && get(/databases/$(database)/documents/service_requests/$(requestId)).data.workerId == request.resource.data.workerId
         && get(/databases/$(database)/documents/service_requests/$(requestId)).data.status == 'completed';
     }
@@ -375,15 +533,18 @@ service cloud.firestore {
       allow read: if signedIn();
       allow create: if signedIn()
         && request.resource.data.keys().hasAll([
-          'requestId', 'workerId', 'clientId', 'clientName', 'rating',
-          'comment', 'createdAt'
+          'requestId', 'workerId', 'workerName', 'clientId', 'clientName',
+          'rating', 'comment', 'createdAt'
         ])
         && request.resource.data.keys().hasOnly([
-          'requestId', 'workerId', 'clientId', 'clientName', 'rating',
-          'comment', 'createdAt'
+          'requestId', 'workerId', 'workerName', 'clientId', 'clientName',
+          'rating', 'comment', 'createdAt'
         ])
         && request.resource.data.requestId == requestId
         && request.resource.data.workerId == request.auth.uid
+        && request.resource.data.workerName is string
+        && request.resource.data.workerName.size() > 0
+        && request.resource.data.workerName.size() <= 120
         && request.resource.data.clientId is string
         && request.resource.data.clientName is string
         && request.resource.data.clientName.size() <= 120
@@ -394,6 +555,7 @@ service cloud.firestore {
         && request.resource.data.comment.size() <= 500
         && request.resource.data.createdAt == request.time
         && get(/databases/$(database)/documents/service_requests/$(requestId)).data.workerId == request.auth.uid
+        && request.resource.data.workerName == currentUser().fullName
         && get(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.resource.data.clientId
         && get(/databases/$(database)/documents/service_requests/$(requestId)).data.status == 'completed';
     }

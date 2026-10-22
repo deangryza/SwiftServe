@@ -28,7 +28,9 @@ void main() {
     },
   );
 
-  testWidgets('recent profiles show a green new-member badge', (tester) async {
+  testWidgets('recent profiles show a charcoal new-member badge', (
+    tester,
+  ) async {
     final joinedAt = DateTime.now().subtract(const Duration(days: 7));
     await tester.pumpWidget(
       MaterialApp(home: ProfileAvatar(joinedAt: joinedAt)),
@@ -38,7 +40,7 @@ void main() {
       find.byKey(const ValueKey('recent-member-badge')),
     );
     final decoration = badge.decoration! as BoxDecoration;
-    expect(decoration.color, const Color(0xFF20B978));
+    expect(decoration.color, const Color(0xFF242424));
 
     await tester.pumpWidget(
       MaterialApp(

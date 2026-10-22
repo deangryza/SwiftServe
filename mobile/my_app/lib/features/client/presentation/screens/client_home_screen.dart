@@ -225,7 +225,7 @@ class ClientHomeScreen extends StatelessWidget {
                                 categoryCard(
                                   icon: Icons.auto_awesome_outlined,
                                   title: 'Cleaning',
-                                  iconColor: const Color(0xFF2563EB),
+                                  iconColor: const Color(0xFF8A6500),
                                 ),
 
                                 categoryCard(
@@ -249,7 +249,7 @@ class ClientHomeScreen extends StatelessWidget {
                                   // Other services later
                                 },
                                 style: OutlinedButton.styleFrom(
-                                  backgroundColor: const Color(0xFFF8F9FB),
+                                  backgroundColor: const Color(0xFFFFFFFF),
                                   side: BorderSide.none,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
@@ -441,7 +441,7 @@ class ClientHomeScreen extends StatelessWidget {
                         backgroundColor: colors.surface,
                         elevation: 0,
                         type: BottomNavigationBarType.fixed,
-                        selectedItemColor: const Color(0xFF2563EB),
+                        selectedItemColor: const Color(0xFF8A6500),
                         unselectedItemColor: const Color(0xFF89919F),
                         selectedFontSize: 10,
                         unselectedFontSize: 10,
@@ -492,7 +492,7 @@ class ClientHomeScreen extends StatelessWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFFFAFBFC),
+        color: const Color(0xFFFFFFFF),
         borderRadius: BorderRadius.circular(13),
       ),
       child: Column(

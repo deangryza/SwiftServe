@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/worker/presentation/screens/worker_home_screen.dart';
+import 'package:my_app/features/worker/presentation/screens/worker_search_screen.dart';
 import 'package:my_app/shared/models/service_application.dart';
 import 'package:my_app/shared/models/service_request.dart';
 
@@ -60,12 +61,36 @@ void main() {
   test('dashboard search matches service, client, and location text', () {
     final request = _request('request-1', DateTime(2026, 10, 10));
 
-    expect(matchesWorkerDashboardSearch(request, 'math'), isTrue);
-    expect(matchesWorkerDashboardSearch(request, 'academic'), isTrue);
-    expect(matchesWorkerDashboardSearch(request, 'client one'), isTrue);
-    expect(matchesWorkerDashboardSearch(request, 'malolos'), isTrue);
-    expect(matchesWorkerDashboardSearch(request, 'plumbing'), isFalse);
-    expect(matchesWorkerDashboardSearch(request, '  '), isTrue);
+    expect(matchesWorkerSearchRequest(request, 'math'), isTrue);
+    expect(matchesWorkerSearchRequest(request, 'academic'), isTrue);
+    expect(matchesWorkerSearchRequest(request, 'client one'), isTrue);
+    expect(matchesWorkerSearchRequest(request, 'malolos'), isTrue);
+    expect(matchesWorkerSearchRequest(request, 'plumbing'), isFalse);
+    expect(matchesWorkerSearchRequest(request, '  '), isTrue);
+  });
+
+  test('dashboard search checks all available jobs beyond the recent five', () {
+    final requests = List.generate(
+      7,
+      (index) => _request(
+        'request-$index',
+        DateTime(2026, 10, index + 1),
+        title: index == 0 ? 'Rare piano tuning' : 'House cleaning',
+      ),
+    );
+    final eligible = filterWorkerDashboardRequests(
+      requests: requests,
+      applications: const [],
+      filter: WorkerDashboardRequestFilter.available,
+    );
+
+    final matches = availableWorkerSearchRequests(
+      requests: eligible,
+      applications: const [],
+      query: 'piano',
+    );
+
+    expect(matches.map((request) => request.id), ['request-0']);
   });
 }
 
@@ -73,11 +98,12 @@ ServiceRequest _request(
   String id,
   DateTime createdAt, {
   ServiceRequestStatus status = ServiceRequestStatus.pending,
+  String title = 'Math tutoring',
 }) => ServiceRequest(
   id: id,
   clientId: 'client-1',
   clientName: 'Client One',
-  title: 'Math tutoring',
+  title: title,
   category: 'Academic Help',
   location: 'Malolos',
   description: 'Help with algebra',

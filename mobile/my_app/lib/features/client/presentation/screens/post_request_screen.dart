@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 String? resolvePostCategory(
@@ -52,10 +53,10 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   DateTime? _toDate;
   bool _isPosting = false;
 
-  static const _yellow = Color(0xFFFFC72C);
-  static const _ink = Color(0xFF242424);
-  static const _cream = Color(0xFFFFF9E9);
-  static const _pink = Color(0xFFFF4F9A);
+  static const _yellow = AppTheme.yellow;
+  static const _ink = AppTheme.ink;
+  static const _cream = Color(0xFFFFFFFF);
+  static const _pink = AppTheme.yellow;
 
   @override
   void initState() {
@@ -250,10 +251,10 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
         borderSide: BorderSide(color: text, width: 1.2),
       ),
       errorBorder: outline.copyWith(
-        borderSide: const BorderSide(color: Colors.redAccent),
+        borderSide: const BorderSide(color: AppTheme.ink),
       ),
       focusedErrorBorder: outline.copyWith(
-        borderSide: const BorderSide(color: Colors.redAccent, width: 1.2),
+        borderSide: const BorderSide(color: AppTheme.ink, width: 1.2),
       ),
     );
   }
@@ -269,13 +270,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: dark ? 0.28 : 0.18),
-            blurRadius: 5,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        border: Border.all(
+          color: dark ? const Color(0xFF444444) : AppTheme.line,
+        ),
       ),
       child: child,
     );
@@ -300,415 +297,366 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = dark ? const Color(0xFF171717) : _cream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
-    final field = dark ? const Color(0xFF303030) : const Color(0xFFFCFCFE);
+    final field = dark ? const Color(0xFF303030) : const Color(0xFFFFFFFF);
     final text = dark ? const Color(0xFFF4F4F4) : _ink;
     final muted = dark ? const Color(0xFFB5B5B5) : const Color(0xFF9AA1AE);
     final border = dark ? const Color(0xFF777777) : const Color(0xFFB8BBC2);
 
     return Scaffold(
-      backgroundColor: _yellow,
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        foregroundColor: text,
+        leading: IconButton(
+          key: const ValueKey('post-request-back'),
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('Post need'),
+      ),
       body: SafeArea(
+        top: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                Container(
-                  height: 112,
-                  padding: const EdgeInsets.fromLTRB(20, 25, 20, 18),
-                  color: _yellow,
-                  child: Row(
+            child: Form(
+              key: _formKey,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+                children: [
+                  _sectionCard(
+                    surface: surface,
+                    dark: dark,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Job title', text),
+                        TextFormField(
+                          key: const ValueKey('post-job-title'),
+                          controller: _titleController,
+                          maxLength: 80,
+                          style: TextStyle(color: text),
+                          decoration: _inputDecoration(
+                            hint: 'e.g. Need math tutor for 2 hours',
+                            field: field,
+                            border: border,
+                            text: text,
+                            muted: muted,
+                          ).copyWith(counterText: ''),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Enter a job title'
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    surface: surface,
+                    dark: dark,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Category', text),
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('service_categories')
+                              .where('status', isEqualTo: 'active')
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              return InputDecorator(
+                                decoration:
+                                    _inputDecoration(
+                                      hint: 'Could not load categories',
+                                      field: field,
+                                      border: border,
+                                      text: text,
+                                      muted: muted,
+                                    ).copyWith(
+                                      errorText: 'Could not load categories',
+                                    ),
+                                child: Text(
+                                  'Try again shortly.',
+                                  style: TextStyle(color: text),
+                                ),
+                              );
+                            }
+                            if (!snapshot.hasData) {
+                              return InputDecorator(
+                                decoration: _inputDecoration(
+                                  hint: 'Loading categories...',
+                                  field: field,
+                                  border: border,
+                                  text: text,
+                                  muted: muted,
+                                ),
+                                child: const LinearProgressIndicator(),
+                              );
+                            }
+
+                            final categories =
+                                snapshot.data!.docs
+                                    .map(
+                                      (document) => document
+                                          .data()['name']
+                                          ?.toString()
+                                          .trim(),
+                                    )
+                                    .whereType<String>()
+                                    .where((name) => name.isNotEmpty)
+                                    .toSet()
+                                    .toList()
+                                  ..sort(
+                                    (left, right) => left
+                                        .toLowerCase()
+                                        .compareTo(right.toLowerCase()),
+                                  );
+                            final selectedCategory = resolvePostCategory(
+                              categories,
+                              _selectedCategory,
+                            );
+                            if (selectedCategory != null) {
+                              _selectedCategory = selectedCategory;
+                            }
+
+                            return DropdownButtonFormField<String>(
+                              key: ValueKey(selectedCategory),
+                              initialValue: selectedCategory,
+                              dropdownColor: surface,
+                              style: TextStyle(color: text, fontSize: 14),
+                              decoration: _inputDecoration(
+                                hint: categories.isEmpty
+                                    ? 'No active categories'
+                                    : 'Select category',
+                                field: field,
+                                border: border,
+                                text: text,
+                                muted: muted,
+                              ),
+                              icon: Icon(
+                                Icons.keyboard_arrow_down,
+                                color: muted,
+                              ),
+                              items: categories
+                                  .map(
+                                    (category) => DropdownMenuItem(
+                                      value: category,
+                                      child: Text(category),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: categories.isEmpty
+                                  ? null
+                                  : (value) => setState(
+                                      () => _selectedCategory = value,
+                                    ),
+                              validator: (value) =>
+                                  value == null ? 'Select a category' : null,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Material(
-                        color: const Color(0xFFFFF7D9),
-                        shape: const CircleBorder(),
-                        child: IconButton(
-                          key: const ValueKey('post-request-back'),
-                          onPressed: () => Navigator.pop(context),
-                          icon: const Icon(
-                            Icons.arrow_back,
-                            color: _ink,
-                            size: 21,
+                      Expanded(
+                        flex: 9,
+                        child: _sectionCard(
+                          surface: surface,
+                          dark: dark,
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _label('Budget (₱)', text),
+                              TextFormField(
+                                key: const ValueKey('post-job-budget'),
+                                controller: _budgetController,
+                                style: TextStyle(color: text),
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'^\d*\.?\d{0,2}'),
+                                  ),
+                                ],
+                                decoration: _inputDecoration(
+                                  hint: 'e.g. 200',
+                                  field: field,
+                                  border: border,
+                                  text: text,
+                                  muted: muted,
+                                ),
+                                validator: (value) {
+                                  final amount = double.tryParse(
+                                    value?.trim() ?? '',
+                                  );
+                                  return amount == null || amount <= 0
+                                      ? 'Invalid budget'
+                                      : null;
+                                },
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(width: 18),
-                      const Text(
-                        'Post need',
-                        style: TextStyle(
-                          color: _ink,
-                          fontSize: 21,
-                          fontWeight: FontWeight.w700,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 10,
+                        child: _sectionCard(
+                          surface: surface,
+                          dark: dark,
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              _label('Schedule', text),
+                              Row(
+                                key: const ValueKey('post-job-schedule'),
+                                children: [
+                                  Expanded(
+                                    child: _dateField(
+                                      label: 'FROM',
+                                      value: _fromDate,
+                                      onTap: () =>
+                                          _pickSchedule(pickingFrom: true),
+                                      field: field,
+                                      border: border,
+                                      text: text,
+                                      muted: muted,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: _dateField(
+                                      label: 'TO',
+                                      value: _toDate,
+                                      onTap: () =>
+                                          _pickSchedule(pickingFrom: false),
+                                      field: field,
+                                      border: border,
+                                      text: text,
+                                      muted: muted,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                Expanded(
-                  child: Container(
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(46),
-                      ),
-                    ),
-                    child: Form(
-                      key: _formKey,
-                      child: ListView(
-                        padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
-                        children: [
-                          _sectionCard(
-                            surface: surface,
-                            dark: dark,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label('Job title', text),
-                                TextFormField(
-                                  key: const ValueKey('post-job-title'),
-                                  controller: _titleController,
-                                  maxLength: 80,
-                                  style: TextStyle(color: text),
-                                  decoration: _inputDecoration(
-                                    hint: 'e.g. Need math tutor for 2 hours',
-                                    field: field,
-                                    border: border,
-                                    text: text,
-                                    muted: muted,
-                                  ).copyWith(counterText: ''),
-                                  validator: (value) =>
-                                      value == null || value.trim().isEmpty
-                                      ? 'Enter a job title'
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _sectionCard(
-                            surface: surface,
-                            dark: dark,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label('Category', text),
-                                StreamBuilder<
-                                  QuerySnapshot<Map<String, dynamic>>
-                                >(
-                                  stream: FirebaseFirestore.instance
-                                      .collection('service_categories')
-                                      .where('status', isEqualTo: 'active')
-                                      .snapshots(),
-                                  builder: (context, snapshot) {
-                                    if (snapshot.hasError) {
-                                      return InputDecorator(
-                                        decoration:
-                                            _inputDecoration(
-                                              hint: 'Could not load categories',
-                                              field: field,
-                                              border: border,
-                                              text: text,
-                                              muted: muted,
-                                            ).copyWith(
-                                              errorText:
-                                                  'Could not load categories',
-                                            ),
-                                        child: Text(
-                                          'Try again shortly.',
-                                          style: TextStyle(color: text),
-                                        ),
-                                      );
-                                    }
-                                    if (!snapshot.hasData) {
-                                      return InputDecorator(
-                                        decoration: _inputDecoration(
-                                          hint: 'Loading categories...',
-                                          field: field,
-                                          border: border,
-                                          text: text,
-                                          muted: muted,
-                                        ),
-                                        child: const LinearProgressIndicator(),
-                                      );
-                                    }
-
-                                    final categories =
-                                        snapshot.data!.docs
-                                            .map(
-                                              (document) => document
-                                                  .data()['name']
-                                                  ?.toString()
-                                                  .trim(),
-                                            )
-                                            .whereType<String>()
-                                            .where((name) => name.isNotEmpty)
-                                            .toSet()
-                                            .toList()
-                                          ..sort(
-                                            (left, right) => left
-                                                .toLowerCase()
-                                                .compareTo(right.toLowerCase()),
-                                          );
-                                    final selectedCategory =
-                                        resolvePostCategory(
-                                          categories,
-                                          _selectedCategory,
-                                        );
-                                    if (selectedCategory != null) {
-                                      _selectedCategory = selectedCategory;
-                                    }
-
-                                    return DropdownButtonFormField<String>(
-                                      key: ValueKey(selectedCategory),
-                                      initialValue: selectedCategory,
-                                      dropdownColor: surface,
-                                      style: TextStyle(
-                                        color: text,
-                                        fontSize: 14,
-                                      ),
-                                      decoration: _inputDecoration(
-                                        hint: categories.isEmpty
-                                            ? 'No active categories'
-                                            : 'Select category',
-                                        field: field,
-                                        border: border,
-                                        text: text,
-                                        muted: muted,
-                                      ),
-                                      icon: Icon(
-                                        Icons.keyboard_arrow_down,
-                                        color: muted,
-                                      ),
-                                      items: categories
-                                          .map(
-                                            (category) => DropdownMenuItem(
-                                              value: category,
-                                              child: Text(category),
-                                            ),
-                                          )
-                                          .toList(),
-                                      onChanged: categories.isEmpty
-                                          ? null
-                                          : (value) => setState(
-                                              () => _selectedCategory = value,
-                                            ),
-                                      validator: (value) => value == null
-                                          ? 'Select a category'
-                                          : null,
-                                    );
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                flex: 9,
-                                child: _sectionCard(
-                                  surface: surface,
-                                  dark: dark,
-                                  padding: const EdgeInsets.all(14),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      _label('Budget (₱)', text),
-                                      TextFormField(
-                                        key: const ValueKey('post-job-budget'),
-                                        controller: _budgetController,
-                                        style: TextStyle(color: text),
-                                        keyboardType:
-                                            const TextInputType.numberWithOptions(
-                                              decimal: true,
-                                            ),
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.allow(
-                                            RegExp(r'^\d*\.?\d{0,2}'),
-                                          ),
-                                        ],
-                                        decoration: _inputDecoration(
-                                          hint: 'e.g. 200',
-                                          field: field,
-                                          border: border,
-                                          text: text,
-                                          muted: muted,
-                                        ),
-                                        validator: (value) {
-                                          final amount = double.tryParse(
-                                            value?.trim() ?? '',
-                                          );
-                                          return amount == null || amount <= 0
-                                              ? 'Invalid budget'
-                                              : null;
-                                        },
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    surface: surface,
+                    dark: dark,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Location', text),
+                        TextFormField(
+                          key: const ValueKey('post-job-location'),
+                          controller: _locationController,
+                          style: TextStyle(color: text),
+                          decoration: _inputDecoration(
+                            hint: 'Enter city and area',
+                            field: field,
+                            border: border,
+                            text: text,
+                            muted: muted,
+                            prefixIcon: Container(
+                              margin: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: _pink.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(9),
                               ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                flex: 10,
-                                child: _sectionCard(
-                                  surface: surface,
-                                  dark: dark,
-                                  padding: const EdgeInsets.all(14),
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      _label('Schedule', text),
-                                      Row(
-                                        key: const ValueKey(
-                                          'post-job-schedule',
-                                        ),
-                                        children: [
-                                          Expanded(
-                                            child: _dateField(
-                                              label: 'FROM',
-                                              value: _fromDate,
-                                              onTap: () => _pickSchedule(
-                                                pickingFrom: true,
-                                              ),
-                                              field: field,
-                                              border: border,
-                                              text: text,
-                                              muted: muted,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Expanded(
-                                            child: _dateField(
-                                              label: 'TO',
-                                              value: _toDate,
-                                              onTap: () => _pickSchedule(
-                                                pickingFrom: false,
-                                              ),
-                                              field: field,
-                                              border: border,
-                                              text: text,
-                                              muted: muted,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                              child: const Icon(
+                                Icons.location_on_outlined,
+                                color: _pink,
+                                size: 21,
                               ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          _sectionCard(
-                            surface: surface,
-                            dark: dark,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label('Location', text),
-                                TextFormField(
-                                  key: const ValueKey('post-job-location'),
-                                  controller: _locationController,
-                                  style: TextStyle(color: text),
-                                  decoration: _inputDecoration(
-                                    hint: 'Enter city and area',
-                                    field: field,
-                                    border: border,
-                                    text: text,
-                                    muted: muted,
-                                    prefixIcon: Container(
-                                      margin: const EdgeInsets.all(7),
-                                      decoration: BoxDecoration(
-                                        color: _pink.withValues(alpha: 0.10),
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      child: const Icon(
-                                        Icons.location_on_outlined,
-                                        color: _pink,
-                                        size: 21,
-                                      ),
-                                    ),
-                                  ),
-                                  validator: (value) =>
-                                      value == null || value.trim().isEmpty
-                                      ? 'Enter a location'
-                                      : null,
-                                ),
-                              ],
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          _sectionCard(
-                            surface: surface,
-                            dark: dark,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label('Description', text),
-                                TextFormField(
-                                  key: const ValueKey('post-job-description'),
-                                  controller: _descriptionController,
-                                  style: TextStyle(color: text),
-                                  minLines: 3,
-                                  maxLines: 5,
-                                  decoration: _inputDecoration(
-                                    hint: 'Describe what you need...',
-                                    field: field,
-                                    border: border,
-                                    text: text,
-                                    muted: muted,
-                                  ),
-                                  validator: (value) =>
-                                      value == null || value.trim().isEmpty
-                                      ? 'Describe the job'
-                                      : null,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          SizedBox(
-                            height: 54,
-                            child: FilledButton(
-                              key: const ValueKey('post-job-submit'),
-                              onPressed: _isPosting ? null : _postJob,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _yellow,
-                                foregroundColor: _ink,
-                                disabledBackgroundColor: _yellow.withValues(
-                                  alpha: 0.55,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 3,
-                                textStyle: const TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              child: _isPosting
-                                  ? const SizedBox.square(
-                                      dimension: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.2,
-                                        color: _ink,
-                                      ),
-                                    )
-                                  : const Text('Post job'),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                        ],
-                      ),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Enter a location'
+                              : null,
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  _sectionCard(
+                    surface: surface,
+                    dark: dark,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _label('Description', text),
+                        TextFormField(
+                          key: const ValueKey('post-job-description'),
+                          controller: _descriptionController,
+                          style: TextStyle(color: text),
+                          minLines: 3,
+                          maxLines: 5,
+                          decoration: _inputDecoration(
+                            hint: 'Describe what you need...',
+                            field: field,
+                            border: border,
+                            text: text,
+                            muted: muted,
+                          ),
+                          validator: (value) =>
+                              value == null || value.trim().isEmpty
+                              ? 'Describe the job'
+                              : null,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    height: 54,
+                    child: FilledButton(
+                      key: const ValueKey('post-job-submit'),
+                      onPressed: _isPosting ? null : _postJob,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: _yellow,
+                        foregroundColor: _ink,
+                        disabledBackgroundColor: _yellow.withValues(
+                          alpha: 0.55,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                        textStyle: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      child: _isPosting
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.2,
+                                color: _ink,
+                              ),
+                            )
+                          : const Text('Post job'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
             ),
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../shared/theme/app_theme.dart';
 
 import '../shared/services/client_theme_controller.dart';
 import 'auth_gate.dart';
@@ -11,11 +12,7 @@ class SwiftServeApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'SwiftServe',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1D1E21)),
-        scaffoldBackgroundColor: const Color(0xFFF8F9FB),
-        useMaterial3: true,
-      ),
+      theme: AppTheme.light,
       builder: (context, child) => ClientThemeScope(child: child!),
       home: const AuthGate(),
     );

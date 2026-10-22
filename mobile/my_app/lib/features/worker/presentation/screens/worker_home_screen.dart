@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
+import '../../../../shared/widgets/notification_swipe_actions.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/models/app_user.dart';
@@ -8,15 +11,15 @@ import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
-import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
-import '../../../../shared/widgets/client_rating_summary.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../../../../shared/screens/reviews_screen.dart';
+import '../../../../shared/screens/swiftserve_settings_screen.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import '../../../client/presentation/widgets/conversation_ui.dart';
 import '../models/worker_verification_ui_state.dart';
 import 'worker_job_details_screen.dart';
+import 'worker_search_screen.dart';
 import 'worker_verification_screen.dart';
 
 class _WorkerPalette {
@@ -39,11 +42,11 @@ class _WorkerPalette {
   factory _WorkerPalette.of(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return _WorkerPalette._(
-      background: dark ? const Color(0xFF171717) : const Color(0xFFFFF9E9),
+      background: dark ? const Color(0xFF171717) : const Color(0xFFFFFFFF),
       surface: dark ? const Color(0xFF2C2C2C) : Colors.white,
-      softSurface: dark ? const Color(0xFF303030) : const Color(0xFFFFFAEE),
-      text: dark ? const Color(0xFFF3F3F3) : const Color(0xFF242424),
-      muted: dark ? const Color(0xFFB8B8B8) : const Color(0xFF737373),
+      softSurface: dark ? const Color(0xFF303030) : AppTheme.softYellow,
+      text: dark ? const Color(0xFFF3F3F3) : AppTheme.ink,
+      muted: dark ? const Color(0xFFB8B8B8) : AppTheme.muted,
       segment: dark ? const Color(0xFF3A3A3A) : const Color(0xFFE1E1E1),
     );
   }
@@ -221,18 +224,6 @@ List<ServiceRequest> filterWorkerDashboardRequests({
       : eligible;
 }
 
-bool matchesWorkerDashboardSearch(ServiceRequest request, String query) {
-  final normalized = query.trim().toLowerCase();
-  if (normalized.isEmpty) return true;
-  return [
-    request.title,
-    request.category,
-    request.clientName,
-    request.description,
-    request.location,
-  ].any((value) => value.toLowerCase().contains(normalized));
-}
-
 class _WorkerDashboard extends StatefulWidget {
   const _WorkerDashboard({
     required this.worker,
@@ -248,14 +239,6 @@ class _WorkerDashboard extends StatefulWidget {
 
 class _WorkerDashboardState extends State<_WorkerDashboard> {
   var _filter = WorkerDashboardRequestFilter.recent;
-  final _searchController = TextEditingController();
-  var _searchQuery = '';
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -285,17 +268,11 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
               applications: applicationSnapshot.data!,
               filter: WorkerDashboardRequestFilter.available,
             );
-            final requests =
-                filterWorkerDashboardRequests(
-                      requests: requestSnapshot.data!,
-                      applications: applicationSnapshot.data!,
-                      filter: _filter,
-                    )
-                    .where(
-                      (request) =>
-                          matchesWorkerDashboardSearch(request, _searchQuery),
-                    )
-                    .toList(growable: false);
+            final requests = filterWorkerDashboardRequests(
+              requests: requestSnapshot.data!,
+              applications: applicationSnapshot.data!,
+              filter: _filter,
+            );
             return ColoredBox(
               color: palette.background,
               child: SafeArea(
@@ -309,23 +286,16 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
                         _WorkerDashboardHeader(worker: widget.worker),
                         const SizedBox(height: 14),
                         _WorkerDashboardSearchField(
-                          controller: _searchController,
-                          onChanged: (query) =>
-                              setState(() => _searchQuery = query),
-                          onClear: () {
-                            _searchController.clear();
-                            setState(() => _searchQuery = '');
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  WorkerSearchScreen(worker: widget.worker),
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 18),
                         const _WorkerHeroBannerCarousel(),
-                        if (_searchQuery.trim().isNotEmpty) ...[
-                          const SizedBox(height: 18),
-                          _WorkerUserSearchResults(
-                            query: _searchQuery,
-                            currentUserId: widget.worker.id,
-                          ),
-                        ],
                         if (!widget.verificationState.isVerified) ...[
                           const SizedBox(height: 14),
                           _VerificationBanner(
@@ -339,9 +309,7 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
                           children: [
                             Expanded(
                               child: Text(
-                                _searchQuery.trim().isEmpty
-                                    ? 'Job Requests'
-                                    : 'Matching Services',
+                                'Job Requests',
                                 style: TextStyle(
                                   color: palette.text,
                                   fontSize: 20,
@@ -401,191 +369,37 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
 }
 
 class _WorkerDashboardSearchField extends StatelessWidget {
-  const _WorkerDashboardSearchField({
-    required this.controller,
-    required this.onChanged,
-    required this.onClear,
-  });
+  const _WorkerDashboardSearchField({required this.onTap});
 
-  final TextEditingController controller;
-  final ValueChanged<String> onChanged;
-  final VoidCallback onClear;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final palette = _WorkerPalette.of(context);
     return Material(
       color: palette.surface,
-      elevation: 2,
-      shadowColor: Colors.black26,
-      borderRadius: BorderRadius.circular(18),
-      child: TextField(
-        key: const ValueKey('worker-dashboard-search'),
-        controller: controller,
-        onChanged: onChanged,
-        textInputAction: TextInputAction.search,
-        style: TextStyle(color: palette.text),
-        decoration: InputDecoration(
-          hintText: 'Search users or services...',
-          hintStyle: TextStyle(color: palette.muted, fontSize: 13),
-          prefixIcon: Icon(Icons.search, color: palette.muted),
-          suffixIcon: controller.text.isEmpty
-              ? null
-              : IconButton(
-                  key: const ValueKey('worker-dashboard-search-clear'),
-                  tooltip: 'Clear search',
-                  onPressed: onClear,
-                  icon: Icon(Icons.close, color: palette.muted),
-                ),
-          filled: true,
-          fillColor: palette.surface,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(18),
-            borderSide: BorderSide.none,
-          ),
-          contentPadding: const EdgeInsets.symmetric(vertical: 15),
-        ),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: Theme.of(context).dividerColor),
       ),
-    );
-  }
-}
-
-class _WorkerUserSearchResults extends StatelessWidget {
-  const _WorkerUserSearchResults({
-    required this.query,
-    required this.currentUserId,
-  });
-
-  final String query;
-  final String currentUserId;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = _WorkerPalette.of(context);
-    final normalized = query.trim().toLowerCase();
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('public_profiles')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Text(
-            'User results are unavailable.',
-            style: TextStyle(color: palette.muted, fontSize: 12),
-          );
-        }
-        if (!snapshot.hasData) {
-          return const Center(child: LinearProgressIndicator());
-        }
-        final users = snapshot.data!.docs
-            .where((document) {
-              if (document.id == currentUserId) return false;
-              final data = document.data();
-              final name = (data['fullName'] ?? '').toString().toLowerCase();
-              final role = (data['role'] ?? '').toString().toLowerCase();
-              return name.contains(normalized) || role.contains(normalized);
-            })
-            .take(5)
-            .toList(growable: false);
-        if (users.isEmpty) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Users',
-              style: TextStyle(
-                color: palette.text,
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 10),
-            for (final user in users) ...[
-              _WorkerUserSearchTile(id: user.id, data: user.data()),
-              const SizedBox(height: 9),
-            ],
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _WorkerUserSearchTile extends StatelessWidget {
-  const _WorkerUserSearchTile({required this.id, required this.data});
-
-  final String id;
-  final Map<String, dynamic> data;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = _WorkerPalette.of(context);
-    final name = (data['fullName'] ?? 'SwiftServe user').toString();
-    final role = data['role'] == 'worker' ? 'Worker' : 'Client';
-    final createdAt = data['createdAt'];
-    final joinedAt = createdAt is Timestamp ? createdAt.toDate() : null;
-    final rating = role == 'Worker'
-        ? WorkerRatingBuilder(
-            workerId: id,
-            builder: (context, summary) => Text(
-              'Worker · ★ ${summary.displayAverage}',
-              style: TextStyle(color: palette.muted, fontSize: 12),
-            ),
-          )
-        : ClientRatingBuilder(
-            clientId: id,
-            builder: (context, summary) => Text(
-              'Client · ★ ${summary.displayAverage}',
-              style: TextStyle(color: palette.muted, fontSize: 12),
-            ),
-          );
-    return Material(
-      color: palette.surface,
-      borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ReviewsScreen(
-              userId: id,
-              reviewsFor: role == 'Worker'
-                  ? ReviewsFor.worker
-                  : ReviewsFor.client,
-            ),
-          ),
-        ),
-        borderRadius: BorderRadius.circular(16),
+        key: const ValueKey('worker-dashboard-search'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(18),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+          padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
           child: Row(
             children: [
-              LiveProfileAvatar(
-                userId: id,
-                fallbackName: name,
-                fallbackPhotoBase64: (data['photoBase64'] ?? '').toString(),
-                joinedAt: joinedAt,
-                radius: 23,
-              ),
-              const SizedBox(width: 12),
+              Icon(Icons.search, color: palette.muted, size: 22),
+              const SizedBox(width: 11),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: palette.text,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    rating,
-                  ],
+                child: Text(
+                  'Search users or services...',
+                  style: TextStyle(color: palette.muted, fontSize: 13),
                 ),
               ),
-              Icon(Icons.chevron_right, color: palette.muted),
+              Icon(Icons.chevron_right, color: palette.muted, size: 20),
             ],
           ),
         ),
@@ -697,8 +511,8 @@ class _WorkerDashboardHeader extends StatelessWidget {
           fallbackPhotoBase64: worker.photoBase64,
           joinedAt: worker.createdAt,
           radius: 24,
-          backgroundColor: const Color(0xFF252525),
-          foregroundColor: const Color(0xFFFFC72C),
+          backgroundColor: AppTheme.ink,
+          foregroundColor: AppTheme.yellow,
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -775,13 +589,13 @@ class _WorkerRequestFilter extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: active ? const Color(0xFF252525) : Colors.transparent,
+                  color: active ? AppTheme.ink : Colors.transparent,
                   borderRadius: BorderRadius.circular(17),
                 ),
                 child: Text(
                   filter == WorkerDashboardRequestFilter.recent
                       ? 'Recent'
-                      : 'Available',
+                      : 'Nearby',
                   style: TextStyle(
                     color: active ? Colors.white : palette.text,
                     fontSize: 12,
@@ -808,9 +622,11 @@ class _WorkerRequestCard extends StatelessWidget {
     final palette = _WorkerPalette.of(context);
     return Material(
       color: palette.softSurface,
-      elevation: 3,
-      shadowColor: const Color(0x55000000),
-      borderRadius: BorderRadius.circular(22),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: Theme.of(context).dividerColor),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(22),
@@ -822,12 +638,12 @@ class _WorkerRequestCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFFF0BD),
+                  color: AppTheme.softYellow,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.work_outline_rounded,
-                  color: Color(0xFF252525),
+                  color: AppTheme.ink,
                 ),
               ),
               const SizedBox(width: 14),
@@ -865,7 +681,7 @@ class _WorkerRequestCard extends StatelessWidget {
               FilledButton(
                 onPressed: onTap,
                 style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFC72C),
+                  backgroundColor: AppTheme.yellow,
                   foregroundColor: const Color(0xFF171717),
                   elevation: 0,
                   minimumSize: const Size(70, 40),
@@ -993,33 +809,32 @@ class _WorkerJobsState extends State<_WorkerJobs> {
 
   @override
   Widget build(BuildContext context) {
-    const ink = Color(0xFF242424);
     final palette = _WorkerPalette.of(context);
     return ColoredBox(
-      color: const Color(0xFFFFC72C),
+      color: palette.background,
       child: SafeArea(
         bottom: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
             child: ColoredBox(
-              color: const Color(0xFFFFC72C),
+              color: palette.background,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(32, 28, 32, 16),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 22, 20, 16),
                     child: Text(
                       'Bookings',
                       style: TextStyle(
-                        color: ink,
+                        color: palette.text,
                         fontSize: 22,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _WorkerBookingsSearch(
                       controller: _searchController,
                       onChanged: (value) =>
@@ -1028,7 +843,7 @@ class _WorkerJobsState extends State<_WorkerJobs> {
                   ),
                   const SizedBox(height: 10),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 30),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: _WorkerBookingsFilter(
                       selected: _filter,
                       onChanged: (filter) => setState(() => _filter = filter),
@@ -1041,9 +856,7 @@ class _WorkerJobsState extends State<_WorkerJobs> {
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: palette.background,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(48),
-                        ),
+                        borderRadius: BorderRadius.zero,
                       ),
                       child: StreamBuilder<List<ServiceApplication>>(
                         stream: ServiceRequestRepository()
@@ -1190,8 +1003,8 @@ class _WorkerBookingsSearch extends StatelessWidget {
     final palette = _WorkerPalette.of(context);
     return Material(
       color: palette.surface,
-      elevation: 3,
-      borderRadius: BorderRadius.circular(24),
+      elevation: 0,
+      borderRadius: BorderRadius.circular(14),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
@@ -1207,12 +1020,12 @@ class _WorkerBookingsSearch extends StatelessWidget {
           suffixIcon: Container(
             margin: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: const Color(0xFFFFC72C),
+              color: AppTheme.yellow,
               borderRadius: BorderRadius.circular(13),
             ),
             child: const Icon(
               Icons.tune_rounded,
-              color: Color(0xFF242424),
+              color: AppTheme.ink,
               size: 20,
             ),
           ),
@@ -1220,8 +1033,8 @@ class _WorkerBookingsSearch extends StatelessWidget {
           fillColor: palette.surface,
           contentPadding: const EdgeInsets.symmetric(vertical: 13),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(24),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: Theme.of(context).dividerColor),
           ),
         ),
       ),
@@ -1245,7 +1058,8 @@ class _WorkerBookingsFilter extends StatelessWidget {
       height: 42,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: palette.segment,
+        color: palette.surface,
+        border: Border.all(color: Theme.of(context).dividerColor),
         borderRadius: BorderRadius.circular(13),
       ),
       child: Row(
@@ -1260,7 +1074,7 @@ class _WorkerBookingsFilter extends StatelessWidget {
                 duration: const Duration(milliseconds: 180),
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: active ? const Color(0xFF252525) : Colors.transparent,
+                  color: active ? AppTheme.yellow : Colors.transparent,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
@@ -1268,7 +1082,7 @@ class _WorkerBookingsFilter extends StatelessWidget {
                       ? 'Recent'
                       : 'Completed',
                   style: TextStyle(
-                    color: active ? Colors.white : palette.text,
+                    color: active ? AppTheme.ink : palette.text,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1292,13 +1106,15 @@ class _WorkerBookingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = _WorkerPalette.of(context);
     final request = entry.request;
-    final (statusLabel, statusColor) = _workerBookingStatus(entry);
+    final (statusLabel, _) = _workerBookingStatus(entry);
     final date = request.scheduleFrom ?? request.schedule ?? request.createdAt;
     return Material(
       color: palette.surface,
-      elevation: 3,
-      shadowColor: const Color(0x44000000),
-      borderRadius: BorderRadius.circular(16),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Theme.of(context).dividerColor),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
@@ -1339,7 +1155,7 @@ class _WorkerBookingCard extends StatelessWidget {
                       Text(
                         statusLabel,
                         style: TextStyle(
-                          color: statusColor,
+                          color: palette.text,
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1382,7 +1198,7 @@ class _WorkerBookingsEmptyState extends StatelessWidget {
             ? 'No completed bookings yet.'
             : 'No recent bookings yet.',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: Color(0xFF737373)),
+        style: const TextStyle(color: AppTheme.muted),
       ),
     ),
   );
@@ -1391,18 +1207,18 @@ class _WorkerBookingsEmptyState extends StatelessWidget {
 (String, Color) _workerBookingStatus(_WorkerBookingEntry entry) {
   final requestStatus = entry.request.status;
   if (requestStatus == ServiceRequestStatus.completed) {
-    return ('COMPLETED', const Color(0xFF20B978));
+    return ('COMPLETED', AppTheme.ink);
   }
   if (requestStatus == ServiceRequestStatus.cancelled) {
-    return ('CANCELLED', const Color(0xFFFF675B));
+    return ('CANCELLED', AppTheme.ink);
   }
   if (requestStatus == ServiceRequestStatus.ongoing) {
-    return ('ONGOING', const Color(0xFFE3A500));
+    return ('ONGOING', AppTheme.ink);
   }
   return switch (entry.application.status) {
-    ServiceApplicationStatus.accepted => ('ACCEPTED', const Color(0xFF647CFF)),
-    ServiceApplicationStatus.rejected => ('REJECTED', const Color(0xFFFF675B)),
-    ServiceApplicationStatus.pending => ('PENDING', const Color(0xFF20B978)),
+    ServiceApplicationStatus.accepted => ('ACCEPTED', AppTheme.ink),
+    ServiceApplicationStatus.rejected => ('REJECTED', AppTheme.ink),
+    ServiceApplicationStatus.pending => ('PENDING', AppTheme.ink),
   };
 }
 
@@ -1513,10 +1329,10 @@ class _WorkerProfileView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final background = dark ? const Color(0xFF1B1B1B) : const Color(0xFFFFF9E9);
+    final background = dark ? const Color(0xFF1B1B1B) : const Color(0xFFFFFFFF);
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
-    final text = dark ? const Color(0xFFF2F2F2) : const Color(0xFF242424);
-    final muted = dark ? const Color(0xFFB6B6B6) : const Color(0xFF697386);
+    final text = dark ? const Color(0xFFF2F2F2) : AppTheme.ink;
+    final muted = dark ? const Color(0xFFB6B6B6) : AppTheme.muted;
     final name = worker.fullName.trim().isEmpty ? 'Worker' : worker.fullName;
     final createdAt = data['createdAt'];
     final since = createdAt is Timestamp
@@ -1526,14 +1342,7 @@ class _WorkerProfileView extends StatelessWidget {
               '—');
 
     return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [const Color(0xFFFFC72C), background, background],
-          stops: const [0, 0.34, 1],
-        ),
-      ),
+      decoration: BoxDecoration(color: background),
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 430),
@@ -1543,7 +1352,7 @@ class _WorkerProfileView extends StatelessWidget {
               const Text(
                 'Profile',
                 style: TextStyle(
-                  color: Color(0xFF242424),
+                  color: AppTheme.ink,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1749,10 +1558,10 @@ class _WorkerProfilePhoto extends StatelessWidget {
       fallbackPhotoBase64: worker.photoBase64,
       joinedAt: worker.createdAt,
       radius: 42,
-      backgroundColor: const Color(0xFFE6EDFA),
-      foregroundColor: const Color(0xFF21458B),
+      backgroundColor: AppTheme.softYellow,
+      foregroundColor: AppTheme.ink,
       textStyle: const TextStyle(
-        color: Color(0xFF21458B),
+        color: AppTheme.ink,
         fontSize: 26,
         fontWeight: FontWeight.w700,
       ),
@@ -1767,9 +1576,7 @@ class _WorkerVerificationBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = state.isVerified
-        ? const Color(0xFF20B978)
-        : const Color(0xFFE3A500);
+    final color = state.isVerified ? AppTheme.ink : AppTheme.ink;
     return InkWell(
       onTap: state.isVerified
           ? null
@@ -1897,63 +1704,22 @@ class _WorkerContactRow extends StatelessWidget {
 BoxDecoration _workerProfileCardDecoration(Color surface) => BoxDecoration(
   color: surface,
   borderRadius: BorderRadius.circular(18),
-  boxShadow: const [
-    BoxShadow(color: Color(0x26000000), blurRadius: 5, offset: Offset(0, 3)),
-  ],
+  border: Border.all(
+    color: surface.computeLuminance() < 0.5
+        ? const Color(0xFF494949)
+        : AppTheme.line,
+  ),
 );
 
 class _WorkerSettingsScreen extends StatelessWidget {
   const _WorkerSettingsScreen();
 
   @override
-  Widget build(BuildContext context) {
-    final palette = _WorkerPalette.of(context);
-    return Scaffold(
-      backgroundColor: palette.background,
-      appBar: AppBar(
-        backgroundColor: const Color(0xFFFFC72C),
-        foregroundColor: const Color(0xFF242424),
-        title: const Text('Settings'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          ValueListenableBuilder<bool>(
-            valueListenable: ClientThemeController.darkMode,
-            builder: (context, darkMode, _) => Card(
-              color: palette.surface,
-              child: SwitchListTile(
-                key: const ValueKey('worker-dark-mode-toggle'),
-                secondary: const Icon(Icons.dark_mode_outlined),
-                title: Text('Dark mode', style: TextStyle(color: palette.text)),
-                subtitle: Text(
-                  'Use the dark theme across worker screens',
-                  style: TextStyle(color: palette.muted),
-                ),
-                value: darkMode,
-                activeThumbColor: const Color(0xFFFFC72C),
-                onChanged: ClientThemeController.setDarkMode,
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          Card(
-            color: palette.surface,
-            child: ListTile(
-              leading: const Icon(Icons.logout),
-              title: Text('Log out', style: TextStyle(color: palette.text)),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () async {
-                await FirebaseAuth.instance.signOut();
-                if (!context.mounted) return;
-                Navigator.of(context).popUntil((route) => route.isFirst);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => const SwiftServeSettingsScreen(
+    darkModeTitle: 'Dark mode',
+    darkModeSubtitle: 'Use the dark theme across worker screens',
+    darkModeToggleKey: ValueKey('worker-dark-mode-toggle'),
+  );
 }
 
 class _WorkerBottomNavigation extends StatelessWidget {
@@ -1984,13 +1750,7 @@ class _WorkerBottomNavigation extends StatelessWidget {
               decoration: BoxDecoration(
                 color: palette.surface,
                 borderRadius: BorderRadius.circular(22),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x33000000),
-                    blurRadius: 6,
-                    offset: Offset(0, 3),
-                  ),
-                ],
+                border: Border.all(color: Theme.of(context).dividerColor),
               ),
               child: Row(
                 children: [
@@ -2064,7 +1824,7 @@ class _WorkerNavItem extends StatelessWidget {
               width: 40,
               height: 28,
               decoration: BoxDecoration(
-                color: selected ? const Color(0xFFFFC72C) : null,
+                color: selected ? AppTheme.yellow : null,
                 borderRadius: BorderRadius.circular(15),
               ),
               alignment: Alignment.center,
@@ -2115,13 +1875,54 @@ class _WorkerNotifications extends StatelessWidget {
 
   final AppUser worker;
 
+  Future<void> _deleteNotification(
+    BuildContext context,
+    QueryDocumentSnapshot<Map<String, dynamic>> notification,
+  ) async {
+    final confirmed = await showActionConfirmation(
+      context,
+      title: 'Delete notification?',
+      message:
+          'Are you sure you want to delete this notification? This action cannot be undone.',
+      confirmLabel: 'Delete',
+      icon: Icons.delete_outline_rounded,
+    );
+    if (!confirmed) return;
+    try {
+      await notification.reference.delete();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Notification deleted.')));
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not delete notification: $error')),
+      );
+    }
+  }
+
   Future<void> _openNotification(
     BuildContext context,
     QueryDocumentSnapshot<Map<String, dynamic>> notification,
   ) async {
-    final requestId = notification.data()['requestId']?.toString();
+    final data = notification.data();
+    final requestId = data['requestId']?.toString();
+    final type = data['type']?.toString();
     try {
-      await notification.reference.update({'read': true});
+      if (type == 'reviewReceived' ||
+          (type == null && data['title'] == 'New review received')) {
+        await notification.reference.update({'read': true});
+        if (!context.mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                ReviewsScreen(userId: worker.id, reviewsFor: ReviewsFor.worker),
+          ),
+        );
+        return;
+      }
       if (requestId == null || requestId.isEmpty) {
         throw StateError('This notification has no linked request.');
       }
@@ -2132,6 +1933,7 @@ class _WorkerNotifications extends StatelessWidget {
       if (!requestDocument.exists) {
         throw StateError('This service request is no longer available.');
       }
+      await notification.reference.update({'read': true});
       if (!context.mounted) return;
       Navigator.push(
         context,
@@ -2153,137 +1955,93 @@ class _WorkerNotifications extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final background = dark ? const Color(0xFF171717) : const Color(0xFFFFF9E9);
+    final background = dark ? const Color(0xFF171717) : const Color(0xFFFFFFFF);
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
-    final text = dark ? const Color(0xFFF3F3F3) : const Color(0xFF242424);
-    final muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF737373);
+    final text = dark ? const Color(0xFFF3F3F3) : AppTheme.ink;
+    final muted = dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFC72C),
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        foregroundColor: text,
+        leading: IconButton(
+          key: const ValueKey('worker-notifications-back'),
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('Notifications'),
+      ),
       body: SafeArea(
+        top: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 112,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 28, 18, 18),
-                    child: Row(
-                      children: [
-                        Material(
-                          color: const Color(0xFFFFF7D9),
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            key: const ValueKey('worker-notifications-back'),
-                            onPressed: () => Navigator.pop(context),
-                            constraints: const BoxConstraints.tightFor(
-                              width: 38,
-                              height: 38,
-                            ),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: Color(0xFF242424),
-                              size: 19,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Notifications',
-                          style: TextStyle(
-                            color: Color(0xFF242424),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(48),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection('notifications')
+                  .where('recipientId', isEqualTo: worker.id)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(
+                        'Could not load notifications:\n'
+                        '${snapshot.error}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: text),
                       ),
                     ),
-                    child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
-                          .collection('notifications')
-                          .where('recipientId', isEqualTo: worker.id)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return Center(
-                            child: Padding(
-                              padding: const EdgeInsets.all(24),
-                              child: Text(
-                                'Could not load notifications:\n'
-                                '${snapshot.error}',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: text),
-                              ),
-                            ),
-                          );
-                        }
-                        if (!snapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                        final notifications = snapshot.data!.docs.toList()
-                          ..sort((left, right) {
-                            final leftTime =
-                                left.data()['createdAt'] as Timestamp?;
-                            final rightTime =
-                                right.data()['createdAt'] as Timestamp?;
-                            return (rightTime?.millisecondsSinceEpoch ?? 0)
-                                .compareTo(
-                                  leftTime?.millisecondsSinceEpoch ?? 0,
-                                );
-                          });
-                        if (notifications.isEmpty) {
-                          return Center(
-                            child: Text(
-                              'No notifications yet.',
-                              style: TextStyle(color: muted),
-                            ),
-                          );
-                        }
-                        return ListView.separated(
-                          padding: const EdgeInsets.fromLTRB(18, 32, 18, 28),
-                          itemCount: notifications.length,
-                          separatorBuilder: (_, _) =>
-                              const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final notification = notifications[index];
-                            final data = notification.data();
-                            return _WorkerNotificationCard(
-                              key: ValueKey(
-                                'worker-notification-${notification.id}',
-                              ),
-                              title: (data['title'] ?? 'Update').toString(),
-                              body: (data['body'] ?? '').toString(),
-                              opened: data['read'] == true,
-                              surface: surface,
-                              text: text,
-                              muted: muted,
-                              onTap: () =>
-                                  _openNotification(context, notification),
-                            );
-                          },
-                        );
-                      },
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final notifications = snapshot.data!.docs.toList()
+                  ..sort((left, right) {
+                    final leftTime = left.data()['createdAt'] as Timestamp?;
+                    final rightTime = right.data()['createdAt'] as Timestamp?;
+                    return (rightTime?.millisecondsSinceEpoch ?? 0).compareTo(
+                      leftTime?.millisecondsSinceEpoch ?? 0,
+                    );
+                  });
+                if (notifications.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'No notifications yet.',
+                      style: TextStyle(color: muted),
                     ),
-                  ),
-                ),
-              ],
+                  );
+                }
+                return ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
+                  itemCount: notifications.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final notification = notifications[index];
+                    final data = notification.data();
+                    return NotificationSwipeActions(
+                      key: ValueKey('worker-notification-${notification.id}'),
+                      actionKeyPrefix: 'worker-notification-${notification.id}',
+                      onViewDetails: () =>
+                          _openNotification(context, notification),
+                      onDelete: () =>
+                          _deleteNotification(context, notification),
+                      child: _WorkerNotificationCard(
+                        title: (data['title'] ?? 'Update').toString(),
+                        body: (data['body'] ?? '').toString(),
+                        opened: data['read'] == true,
+                        surface: surface,
+                        text: text,
+                        muted: muted,
+                        onTap: () => _openNotification(context, notification),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           ),
         ),
@@ -2294,7 +2052,6 @@ class _WorkerNotifications extends StatelessWidget {
 
 class _WorkerNotificationCard extends StatelessWidget {
   const _WorkerNotificationCard({
-    super.key,
     required this.title,
     required this.body,
     required this.opened,
@@ -2315,9 +2072,11 @@ class _WorkerNotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: surface,
-    elevation: 3,
-    shadowColor: Colors.black38,
-    borderRadius: BorderRadius.circular(20),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(20),
+      side: BorderSide(color: Theme.of(context).dividerColor),
+    ),
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
@@ -2333,7 +2092,7 @@ class _WorkerNotificationCard extends StatelessWidget {
                   opened
                       ? Icons.notifications_none_rounded
                       : Icons.notifications_rounded,
-                  color: opened ? muted : const Color(0xFFFFD14E),
+                  color: opened ? muted : AppTheme.yellow,
                   size: 24,
                 ),
               ),

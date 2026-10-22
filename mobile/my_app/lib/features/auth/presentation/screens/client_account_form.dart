@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/phone_number_field.dart';
@@ -53,7 +54,7 @@ class ClientAccountForm extends StatefulWidget {
 }
 
 class _ClientAccountFormState extends State<ClientAccountForm> {
-  static const _yellow = Color(0xFFFFC72C);
+  static const _yellow = AppTheme.yellow;
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
@@ -79,13 +80,11 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   }
 
   bool get _dark => ClientThemeController.darkMode.value;
-  Color get _surface =>
-      _dark ? const Color(0xFF242424) : const Color(0xFFFFF9E9);
-  Color get _field => _dark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFEFB);
-  Color get _text => _dark ? const Color(0xFFF2F2F2) : const Color(0xFF07182A);
-  Color get _muted => _dark ? const Color(0xFFB8B8B8) : const Color(0xFF555960);
-  Color get _border =>
-      _dark ? const Color(0xFF777777) : const Color(0xFFC4C6CD);
+  Color get _surface => _dark ? AppTheme.ink : const Color(0xFFFFFFFF);
+  Color get _field => _dark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFFFF);
+  Color get _text => _dark ? const Color(0xFFF2F2F2) : AppTheme.ink;
+  Color get _muted => _dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
+  Color get _border => _dark ? const Color(0xFF777777) : AppTheme.line;
 
   @override
   void dispose() {
@@ -207,13 +206,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           color: _field,
           shape: BoxShape.circle,
           border: Border.all(color: _border, width: 1.5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x26000000),
-              blurRadius: 3,
-              offset: Offset(0, 2),
-            ),
-          ],
+          boxShadow: const [],
           image: widget.profileImage == null
               ? null
               : DecorationImage(
@@ -236,7 +229,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
             padding: EdgeInsets.zero,
             style: IconButton.styleFrom(
               backgroundColor: _yellow,
-              foregroundColor: const Color(0xFF242424),
+              foregroundColor: AppTheme.ink,
             ),
             icon: const Icon(Icons.camera_alt_outlined, size: 12),
           ),
@@ -282,7 +275,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
                   const SizedBox(
                     width: double.infinity,
                     height: 3,
-                    child: ColoredBox(color: Color(0xFFFFF4D0)),
+                    child: ColoredBox(color: AppTheme.softYellow),
                   ),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -306,13 +299,13 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
                               radius: 11,
                               backgroundColor: index <= active
                                   ? const Color(0xFF3D4148)
-                                  : const Color(0xFFFFF9E9),
+                                  : const Color(0xFFFFFFFF),
                               child: Text(
                                 '${index + 1}',
                                 style: TextStyle(
                                   color: index <= active
                                       ? Colors.white
-                                      : const Color(0xFF555960),
+                                      : AppTheme.muted,
                                   fontSize: 10,
                                 ),
                               ),
@@ -422,7 +415,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
               ),
               child: const Icon(
                 Icons.badge_outlined,
-                color: Color(0xFF242424),
+                color: AppTheme.ink,
                 size: 17,
               ),
             ),
@@ -454,7 +447,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
               onPressed:
                   widget.onChangeRole ?? () => Navigator.maybePop(context),
               style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFF242424),
+                foregroundColor: AppTheme.ink,
                 backgroundColor: _yellow,
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                 minimumSize: const Size(0, 24),
@@ -693,7 +686,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           children: [
             const Icon(Icons.badge_outlined, color: _yellow),
             const SizedBox(height: 8),
-            const Text('PENDING', style: TextStyle(color: Color(0xFFBD8500))),
+            const Text('PENDING', style: TextStyle(color: AppTheme.ink)),
             const SizedBox(height: 14),
             Text('Identity Check', style: TextStyle(color: _text)),
             Text(
@@ -765,7 +758,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
                         onPressed: widget.loading ? null : _continue,
                         style: FilledButton.styleFrom(
                           backgroundColor: _yellow,
-                          foregroundColor: const Color(0xFF161616),
+                          foregroundColor: AppTheme.ink,
                           minimumSize: const Size.fromHeight(52),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14),

@@ -133,6 +133,7 @@ class ServiceRequestRepository {
         'recipientId': request.clientId,
         'senderId': worker.id,
         'requestId': request.id,
+        'type': 'workerApplication',
         'title': 'New worker application',
         'body': '${worker.fullName} applied for ${request.title}.',
         'read': false,
@@ -195,11 +196,12 @@ class ServiceRequestRepository {
         'workerName': application.workerName,
         'lastMessage': 'Application accepted',
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
       transaction.set(notificationRef, {
         'recipientId': application.workerId,
         'senderId': request.clientId,
         'requestId': request.id,
+        'type': 'applicationAccepted',
         'title': 'Application accepted',
         'body': '${request.clientName} selected you for ${request.title}.',
         'read': false,
@@ -252,6 +254,7 @@ class ServiceRequestRepository {
         'recipientId': request.clientId,
         'senderId': workerId,
         'requestId': request.id,
+        'type': 'requestAccepted',
         'title': 'Request accepted',
         'body': '$workerName accepted ${request.title}.',
         'read': false,

@@ -86,6 +86,9 @@ test('registration persists a usable thumbnail with the actual name', async () =
   assert.equal(publicProfiles.alice.fullName, 'Alice Santos');
   assert.equal(publicProfiles.alice.role, 'client');
   assert.equal(publicProfiles.alice.photoBase64, records.alice.photoBase64);
+  assert.equal(publicProfiles.alice.location, '');
+  assert.equal(publicProfiles.alice.description, '');
+  assert.deepEqual(publicProfiles.alice.skills, []);
 });
 
 test('photo updates affect only the authenticated profile and preserve its details', async () => {

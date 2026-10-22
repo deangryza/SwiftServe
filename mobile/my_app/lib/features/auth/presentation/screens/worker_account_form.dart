@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../widgets/phone_number_field.dart';
 
@@ -54,7 +55,7 @@ class WorkerAccountForm extends StatefulWidget {
 }
 
 class _WorkerAccountFormState extends State<WorkerAccountForm> {
-  static const _yellow = Color(0xFFFFC72C);
+  static const _yellow = AppTheme.yellow;
   static const _fallbackCategories = [
     'Electrical',
     'Repair',
@@ -87,13 +88,11 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
   }
 
   bool get _dark => Theme.of(context).brightness == Brightness.dark;
-  Color get _surface =>
-      _dark ? const Color(0xFF242424) : const Color(0xFFFFF9E9);
+  Color get _surface => _dark ? AppTheme.ink : const Color(0xFFFFFFFF);
   Color get _field => _dark ? const Color(0xFF2C2C2C) : Colors.white;
-  Color get _text => _dark ? const Color(0xFFF2F2F2) : const Color(0xFF07182A);
-  Color get _muted => _dark ? const Color(0xFFB8B8B8) : const Color(0xFF555960);
-  Color get _border =>
-      _dark ? const Color(0xFF777777) : const Color(0xFFC4C6CD);
+  Color get _text => _dark ? const Color(0xFFF2F2F2) : AppTheme.ink;
+  Color get _muted => _dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
+  Color get _border => _dark ? const Color(0xFF777777) : AppTheme.line;
 
   @override
   void dispose() {
@@ -173,13 +172,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
           color: _field,
           shape: BoxShape.circle,
           border: Border.all(color: _border, width: 1.5),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x26000000),
-              blurRadius: 3,
-              offset: Offset(0, 2),
-            ),
-          ],
+          boxShadow: const [],
           image: widget.profileImage == null
               ? null
               : DecorationImage(
@@ -202,7 +195,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
             padding: EdgeInsets.zero,
             style: IconButton.styleFrom(
               backgroundColor: _yellow,
-              foregroundColor: const Color(0xFF242424),
+              foregroundColor: AppTheme.ink,
             ),
             icon: const Icon(Icons.camera_alt_outlined, size: 12),
           ),
@@ -255,7 +248,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                     child: Divider(
                       height: 3,
                       thickness: 3,
-                      color: Color(0xFFFFF4D0),
+                      color: AppTheme.softYellow,
                     ),
                   ),
                   Positioned(
@@ -281,13 +274,13 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                         radius: 11,
                         backgroundColor: index <= active
                             ? const Color(0xFF3D4148)
-                            : const Color(0xFFFFF9E9),
+                            : const Color(0xFFFFFFFF),
                         child: Text(
                           '${index + 1}',
                           style: TextStyle(
                             color: index <= active
                                 ? Colors.white
-                                : const Color(0xFF555960),
+                                : AppTheme.muted,
                             fontSize: 10,
                           ),
                         ),
@@ -486,11 +479,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       ],
       Row(
         children: [
-          const Icon(
-            Icons.check_circle_outline,
-            color: Color(0xFF22B65F),
-            size: 15,
-          ),
+          const Icon(Icons.check_circle_outline, color: AppTheme.ink, size: 15),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -658,7 +647,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
             margin: const EdgeInsets.symmetric(horizontal: 2),
             decoration: BoxDecoration(
               color: available
-                  ? const Color(0xFFE9A400)
+                  ? AppTheme.ink
                   : _dark
                   ? Colors.transparent
                   : const Color(0xFF999999),
@@ -765,9 +754,9 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: const Color(0xFFFFF8E5),
+            color: AppTheme.softYellow,
             borderRadius: BorderRadius.circular(11),
-            border: Border.all(color: const Color(0xFFE3D8B8)),
+            border: Border.all(color: AppTheme.line),
           ),
           child: const Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -778,7 +767,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                 child: Text(
                   'Your documents are encrypted and only used for identity verification.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Color(0xFF555960), fontSize: 11),
+                  style: TextStyle(color: AppTheme.muted, fontSize: 11),
                 ),
               ),
             ],
@@ -826,9 +815,9 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         style: TextStyle(color: _muted, height: 1.5),
       ),
       const SizedBox(height: 28),
-      _reviewCard('Identity Check', 'VERIFIED', const Color(0xFF22B65F)),
+      _reviewCard('Identity Check', 'VERIFIED', AppTheme.ink),
       const SizedBox(height: 16),
-      _reviewCard('Certificates', 'REVIEWING', const Color(0xFFC58A00)),
+      _reviewCard('Certificates', 'REVIEWING', AppTheme.ink),
       const SizedBox(height: 86),
     ],
   );
@@ -934,7 +923,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                               onPressed: widget.loading ? null : _continue,
                               style: FilledButton.styleFrom(
                                 backgroundColor: _yellow,
-                                foregroundColor: const Color(0xFF161616),
+                                foregroundColor: AppTheme.ink,
                                 padding: EdgeInsets.zero,
                                 shape: const CircleBorder(),
                               ),
@@ -948,7 +937,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                           onPressed: widget.loading ? null : _continue,
                           style: FilledButton.styleFrom(
                             backgroundColor: _yellow,
-                            foregroundColor: const Color(0xFF161616),
+                            foregroundColor: AppTheme.ink,
                             minimumSize: const Size.fromHeight(52),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(14),

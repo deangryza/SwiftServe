@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ClientThemeController {
@@ -116,38 +117,33 @@ class ClientThemeScope extends StatelessWidget {
   Widget build(BuildContext context) => ValueListenableBuilder<bool>(
     valueListenable: ClientThemeController.darkMode,
     builder: (context, darkMode, child) =>
-        Theme(data: darkMode ? _darkTheme : _lightTheme, child: child!),
+        Theme(data: darkMode ? _darkTheme : AppTheme.light, child: child!),
     child: child,
-  );
-
-  static final _lightTheme = ThemeData(
-    brightness: Brightness.light,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFFFFC72C),
-      brightness: Brightness.light,
-    ),
-    scaffoldBackgroundColor: const Color(0xFFFFF9E9),
-    cardTheme: const CardThemeData(
-      color: Colors.white,
-      surfaceTintColor: Colors.transparent,
-    ),
-    dialogTheme: const DialogThemeData(
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-    ),
-    bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: Colors.white,
-      surfaceTintColor: Colors.transparent,
-    ),
-    useMaterial3: true,
   );
 
   static final _darkTheme = ThemeData(
     brightness: Brightness.dark,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFFFFC72C),
-      brightness: Brightness.dark,
-      surface: const Color(0xFF242424),
+    colorScheme: const ColorScheme.dark(
+      primary: AppTheme.yellow,
+      onPrimary: AppTheme.ink,
+      primaryContainer: Color(0xFF393323),
+      onPrimaryContainer: Color(0xFFF3F3F3),
+      secondary: AppTheme.yellow,
+      onSecondary: AppTheme.ink,
+      secondaryContainer: Color(0xFF393323),
+      onSecondaryContainer: Color(0xFFF3F3F3),
+      tertiary: Color(0xFFB8B8B8),
+      onTertiary: AppTheme.ink,
+      surface: AppTheme.ink,
+      onSurface: Color(0xFFF3F3F3),
+      onSurfaceVariant: Color(0xFFB8B8B8),
+      outline: Color(0xFFB8B8B8),
+      outlineVariant: Color(0xFF494949),
+      error: Color(0xFFF3F3F3),
+      onError: AppTheme.ink,
+      errorContainer: Color(0xFF393323),
+      onErrorContainer: Color(0xFFF3F3F3),
+      surfaceTint: Colors.transparent,
     ),
     scaffoldBackgroundColor: const Color(0xFF171717),
     cardColor: const Color(0xFF2C2C2C),
@@ -155,6 +151,12 @@ class ClientThemeScope extends StatelessWidget {
     cardTheme: const CardThemeData(
       color: Color(0xFF2C2C2C),
       surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(18)),
+        side: BorderSide(color: Color(0xFF444444)),
+      ),
     ),
     dialogTheme: const DialogThemeData(
       backgroundColor: Color(0xFF2C2C2C),
@@ -167,8 +169,8 @@ class ClientThemeScope extends StatelessWidget {
       contentTextStyle: TextStyle(color: Color(0xFFB8B8B8)),
     ),
     bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: Color(0xFF242424),
-      modalBackgroundColor: Color(0xFF242424),
+      backgroundColor: AppTheme.ink,
+      modalBackgroundColor: AppTheme.ink,
       surfaceTintColor: Colors.transparent,
     ),
     snackBarTheme: const SnackBarThemeData(
@@ -180,13 +182,14 @@ class ClientThemeScope extends StatelessWidget {
       surfaceTintColor: Colors.transparent,
     ),
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF242424),
+      backgroundColor: AppTheme.ink,
       foregroundColor: Color(0xFFF2F2F2),
       surfaceTintColor: Colors.transparent,
     ),
     navigationBarTheme: const NavigationBarThemeData(
-      backgroundColor: Color(0xFF242424),
-      indicatorColor: Color(0xFFFFC72C),
+      backgroundColor: AppTheme.ink,
+      indicatorColor: AppTheme.yellow,
+      elevation: 0,
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -194,6 +197,27 @@ class ClientThemeScope extends StatelessWidget {
       labelStyle: const TextStyle(color: Color(0xFFB8B8B8)),
       hintStyle: const TextStyle(color: Color(0xFF9E9E9E)),
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(16)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        borderSide: BorderSide(color: Color(0xFF494949)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.all(Radius.circular(14)),
+        borderSide: BorderSide(color: AppTheme.yellow, width: 1.4),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        backgroundColor: WidgetStatePropertyAll(AppTheme.yellow),
+        foregroundColor: WidgetStatePropertyAll(AppTheme.ink),
+        elevation: WidgetStatePropertyAll(0),
+        minimumSize: WidgetStatePropertyAll(Size.fromHeight(50)),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.all(Radius.circular(14)),
+          ),
+        ),
+      ),
     ),
     useMaterial3: true,
   );

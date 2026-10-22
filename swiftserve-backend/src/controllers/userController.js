@@ -27,6 +27,7 @@ const createUserProfile = async (req, res) => {
       role,
       category,
       skills,
+      description,
       photoBase64,
     } = req.body;
 
@@ -75,6 +76,7 @@ const createUserProfile = async (req, res) => {
       role,
       category: category || '',
       skills: Array.isArray(skills) ? skills : [],
+      description: description || '',
       ...(photo ? { photoBase64: photo } : {}),
       verificationStatus: role === 'worker' ? 'pending' : 'not_required',
       createdAt: new Date(),
@@ -102,6 +104,10 @@ const createUserProfile = async (req, res) => {
           fullName,
           role,
           photoBase64: photo || '',
+          location: address || '',
+          description: description || '',
+          category: role === 'worker' ? category || '' : '',
+          skills: role === 'worker' && Array.isArray(skills) ? skills : [],
           createdAt: new Date(),
           updatedAt: new Date(),
         });
@@ -112,6 +118,7 @@ const createUserProfile = async (req, res) => {
             category: category || '',
             skills: Array.isArray(skills) ? skills : [],
             location: address || '',
+            description: description || '',
             verificationStatus: 'pending',
             rating: 0,
             completedJobs: 0,

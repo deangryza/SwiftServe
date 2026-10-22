@@ -1,11 +1,12 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 import '../widgets/live_profile_avatar.dart';
 
-const _reviewsYellow = Color(0xFFFFC72C);
-const _reviewsCream = Color(0xFFFFF9E9);
-const _reviewsInk = Color(0xFF242424);
+const _reviewsYellow = AppTheme.yellow;
+const _reviewsCream = Color(0xFFFFFFFF);
+const _reviewsInk = AppTheme.ink;
 
 enum ReviewsFor { client, worker }
 
@@ -28,6 +29,9 @@ class ReviewsScreen extends StatelessWidget {
   String get _reviewerField =>
       reviewsFor == ReviewsFor.worker ? 'clientId' : 'workerId';
 
+  String get _reviewerNameField =>
+      reviewsFor == ReviewsFor.worker ? 'clientName' : 'workerName';
+
   String get _reviewerFallback =>
       reviewsFor == ReviewsFor.worker ? 'Client' : 'Worker';
 
@@ -37,160 +41,111 @@ class ReviewsScreen extends StatelessWidget {
     final background = dark ? const Color(0xFF181818) : _reviewsCream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
     final text = dark ? const Color(0xFFF4F4F4) : _reviewsInk;
-    final muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF737373);
+    final muted = dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
 
     return Scaffold(
-      backgroundColor: _reviewsYellow,
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        foregroundColor: text,
+        leading: IconButton(
+          key: const ValueKey('reviews-back'),
+          onPressed: () => Navigator.maybePop(context),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('Reviews and Ratings'),
+      ),
       body: SafeArea(
-        bottom: false,
+        top: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                _ReviewsHeader(onBack: () => Navigator.maybePop(context)),
-                Expanded(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(34),
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: FirebaseFirestore.instance
+                  .collection(_collection)
+                  .where(_recipientField, isEqualTo: userId)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return _ReviewsMessage(
+                    icon: Icons.cloud_off_outlined,
+                    title: 'Reviews are unavailable',
+                    message: 'Please check your connection and try again.',
+                    text: text,
+                    muted: muted,
+                  );
+                }
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(color: _reviewsYellow),
+                  );
+                }
+
+                final reviews =
+                    snapshot.data!.docs
+                        .map(
+                          (document) => _ReviewEntry.fromDocument(
+                            document,
+                            reviewerField: _reviewerField,
+                            reviewerNameField: _reviewerNameField,
+                          ),
+                        )
+                        .toList()
+                      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+                if (reviews.isEmpty) {
+                  return _ReviewsMessage(
+                    icon: Icons.reviews_outlined,
+                    title: 'No reviews yet',
+                    message:
+                        'Reviews from completed bookings will appear here.',
+                    text: text,
+                    muted: muted,
+                  );
+                }
+
+                final average =
+                    reviews
+                        .map((review) => review.rating)
+                        .fold<int>(0, (total, rating) => total + rating) /
+                    reviews.length;
+
+                return ListView.builder(
+                  key: const ValueKey('reviews-list'),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+                  itemCount: reviews.length + 1,
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: _RatingOverview(
+                          average: average,
+                          count: reviews.length,
+                          surface: surface,
+                          text: text,
+                          muted: muted,
+                        ),
+                      );
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: _ReviewCard(
+                        review: reviews[index - 1],
+                        fallbackName: _reviewerFallback,
+                        surface: surface,
+                        text: text,
+                        muted: muted,
                       ),
-                    ),
-                    child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
-                          .collection(_collection)
-                          .where(_recipientField, isEqualTo: userId)
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return _ReviewsMessage(
-                            icon: Icons.cloud_off_outlined,
-                            title: 'Reviews are unavailable',
-                            message:
-                                'Please check your connection and try again.',
-                            text: text,
-                            muted: muted,
-                          );
-                        }
-                        if (!snapshot.hasData) {
-                          return const Center(
-                            child: CircularProgressIndicator(
-                              color: _reviewsYellow,
-                            ),
-                          );
-                        }
-
-                        final reviews =
-                            snapshot.data!.docs
-                                .map(
-                                  (document) => _ReviewEntry.fromDocument(
-                                    document,
-                                    reviewerField: _reviewerField,
-                                  ),
-                                )
-                                .toList()
-                              ..sort(
-                                (a, b) => b.createdAt.compareTo(a.createdAt),
-                              );
-
-                        if (reviews.isEmpty) {
-                          return _ReviewsMessage(
-                            icon: Icons.reviews_outlined,
-                            title: 'No reviews yet',
-                            message:
-                                'Reviews from completed bookings will appear here.',
-                            text: text,
-                            muted: muted,
-                          );
-                        }
-
-                        final average =
-                            reviews
-                                .map((review) => review.rating)
-                                .fold<int>(
-                                  0,
-                                  (total, rating) => total + rating,
-                                ) /
-                            reviews.length;
-
-                        return ListView.builder(
-                          key: const ValueKey('reviews-list'),
-                          padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
-                          itemCount: reviews.length + 1,
-                          itemBuilder: (context, index) {
-                            if (index == 0) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: _RatingOverview(
-                                  average: average,
-                                  count: reviews.length,
-                                  surface: surface,
-                                  text: text,
-                                  muted: muted,
-                                ),
-                              );
-                            }
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: _ReviewCard(
-                                review: reviews[index - 1],
-                                fallbackName: _reviewerFallback,
-                                surface: surface,
-                                text: text,
-                                muted: muted,
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                  ),
-                ),
-              ],
+                    );
+                  },
+                );
+              },
             ),
           ),
         ),
       ),
     );
   }
-}
-
-class _ReviewsHeader extends StatelessWidget {
-  const _ReviewsHeader({required this.onBack});
-
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 112,
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
-      child: Row(
-        children: [
-          Material(
-            color: _reviewsCream,
-            shape: const CircleBorder(),
-            child: IconButton(
-              key: const ValueKey('reviews-back'),
-              onPressed: onBack,
-              icon: const Icon(Icons.arrow_back_rounded),
-              color: _reviewsInk,
-            ),
-          ),
-          const SizedBox(width: 14),
-          const Text(
-            'Reviews',
-            style: TextStyle(
-              color: _reviewsInk,
-              fontSize: 25,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 class _RatingOverview extends StatelessWidget {
@@ -257,20 +212,52 @@ class _ReviewCard extends StatelessWidget {
   final Color text;
   final Color muted;
 
+  Future<String> _resolveReviewerName() async {
+    if (review.reviewerId.isNotEmpty) {
+      try {
+        final publicProfile = await FirebaseFirestore.instance
+            .collection('public_profiles')
+            .doc(review.reviewerId)
+            .get();
+        final currentName = (publicProfile.data()?['fullName'] ?? '')
+            .toString()
+            .trim();
+        if (currentName.isNotEmpty) return currentName;
+      } catch (_) {
+        // Continue with the review and booking snapshots for legacy records.
+      }
+    }
+
+    if (review.reviewerName.isNotEmpty) return review.reviewerName;
+
+    if (review.requestId.isNotEmpty && review.reviewerId.isNotEmpty) {
+      try {
+        final request = await FirebaseFirestore.instance
+            .collection('service_requests')
+            .doc(review.requestId)
+            .get();
+        final data = request.data();
+        if ((data?[review.reviewerIdField] ?? '').toString() ==
+            review.reviewerId) {
+          final bookingName = (data?[review.reviewerNameField] ?? '')
+              .toString()
+              .trim();
+          if (bookingName.isNotEmpty) return bookingName;
+        }
+      } catch (_) {
+        // The generic role name remains available as the final fallback.
+      }
+    }
+
+    return fallbackName;
+  }
+
   @override
-  Widget build(
-    BuildContext context,
-  ) => FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-    future: review.reviewerId.isEmpty
-        ? null
-        : FirebaseFirestore.instance
-              .collection('users')
-              .doc(review.reviewerId)
-              .get(),
+  Widget build(BuildContext context) => FutureBuilder<String>(
+    future: _resolveReviewerName(),
     builder: (context, profileSnapshot) {
-      final profile = profileSnapshot.data?.data() ?? const <String, dynamic>{};
-      final profileName = (profile['fullName'] ?? '').toString().trim();
-      final reviewerName = profileName.isEmpty ? fallbackName : profileName;
+      final reviewerName =
+          profileSnapshot.data ?? review.reviewerName.ifEmpty(fallbackName);
       return Container(
         padding: const EdgeInsets.all(17),
         decoration: _reviewCardDecoration(surface),
@@ -284,7 +271,7 @@ class _ReviewCard extends StatelessWidget {
                   userId: review.reviewerId,
                   fallbackName: reviewerName,
                   radius: 23,
-                  backgroundColor: const Color(0xFFFFE8A3),
+                  backgroundColor: AppTheme.softYellow,
                   foregroundColor: _reviewsInk,
                   textStyle: const TextStyle(fontWeight: FontWeight.w800),
                 ),
@@ -404,7 +391,11 @@ class _ReviewsMessage extends StatelessWidget {
 
 class _ReviewEntry {
   const _ReviewEntry({
+    required this.requestId,
     required this.reviewerId,
+    required this.reviewerIdField,
+    required this.reviewerName,
+    required this.reviewerNameField,
     required this.rating,
     required this.comment,
     required this.createdAt,
@@ -413,12 +404,17 @@ class _ReviewEntry {
   factory _ReviewEntry.fromDocument(
     QueryDocumentSnapshot<Map<String, dynamic>> document, {
     required String reviewerField,
+    required String reviewerNameField,
   }) {
     final data = document.data();
     final ratingValue = data['rating'];
     final timestamp = data['createdAt'];
     return _ReviewEntry(
+      requestId: (data['requestId'] ?? document.id).toString(),
       reviewerId: (data[reviewerField] ?? '').toString(),
+      reviewerIdField: reviewerField,
+      reviewerName: (data[reviewerNameField] ?? '').toString().trim(),
+      reviewerNameField: reviewerNameField,
       rating: ratingValue is num ? ratingValue.round().clamp(1, 5) : 1,
       comment: (data['comment'] ?? '').toString().trim(),
       createdAt: timestamp is Timestamp
@@ -427,18 +423,28 @@ class _ReviewEntry {
     );
   }
 
+  final String requestId;
   final String reviewerId;
+  final String reviewerIdField;
+  final String reviewerName;
+  final String reviewerNameField;
   final int rating;
   final String comment;
   final DateTime createdAt;
 }
 
+extension on String {
+  String ifEmpty(String fallback) => isEmpty ? fallback : this;
+}
+
 BoxDecoration _reviewCardDecoration(Color surface) => BoxDecoration(
   color: surface,
   borderRadius: BorderRadius.circular(18),
-  boxShadow: const [
-    BoxShadow(color: Color(0x24000000), blurRadius: 7, offset: Offset(0, 3)),
-  ],
+  border: Border.all(
+    color: surface.computeLuminance() < 0.5
+        ? const Color(0xFF444444)
+        : AppTheme.line,
+  ),
 );
 
 String _formatDate(DateTime date) {

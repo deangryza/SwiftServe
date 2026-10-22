@@ -63,6 +63,8 @@ test('a user can create and update only their own valid public profile', async (
       fullName: 'Client One',
       role: 'client',
       photoBase64: 'photo',
+      location: 'Malolos, Bulacan',
+      description: 'Posts clear household service requests.',
       updatedAt: serverTimestamp(),
     }),
   );
@@ -70,6 +72,7 @@ test('a user can create and update only their own valid public profile', async (
     updateDoc(doc(client.firestore(), 'public_profiles/client-1'), {
       fullName: 'Client Updated',
       photoBase64: 'new-photo',
+      location: 'Guiguinto, Bulacan',
       updatedAt: serverTimestamp(),
     }),
   );
@@ -92,6 +95,31 @@ test('public profiles reject role changes and oversized photos', async () => {
   await assertFails(
     updateDoc(doc(worker.firestore(), 'public_profiles/worker-1'), {
       photoBase64: 'A'.repeat(65537),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+});
+
+test('public profiles accept safe professional fields and reject oversized data', async () => {
+  const worker = environment.authenticatedContext('worker-1');
+  await assertSucceeds(
+    updateDoc(doc(worker.firestore(), 'public_profiles/worker-1'), {
+      location: 'Malolos, Bulacan',
+      description: 'Experienced home repair specialist.',
+      category: 'Home Services',
+      skills: ['Plumbing', 'Painting'],
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(worker.firestore(), 'public_profiles/worker-1'), {
+      description: 'A'.repeat(1001),
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(worker.firestore(), 'public_profiles/worker-1'), {
+      skills: Array.from({ length: 31 }, (_, index) => 'Skill ' + index),
       updatedAt: serverTimestamp(),
     }),
   );

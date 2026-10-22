@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_draft_store.dart';
@@ -101,7 +102,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                     Text(
                       _error!,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.red),
+                      style: const TextStyle(color: AppTheme.ink),
                     ),
                   ],
                   const SizedBox(height: 20),

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/client_theme_controller.dart';
@@ -253,7 +254,7 @@ class _RoleOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: selected
-        ? const Color(0xFFFFC72C).withValues(alpha: 0.18)
+        ? AppTheme.yellow.withValues(alpha: 0.18)
         : Theme.of(context).colorScheme.surfaceContainerHighest,
     borderRadius: BorderRadius.circular(16),
     child: InkWell(
@@ -264,8 +265,8 @@ class _RoleOption extends StatelessWidget {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: const Color(0xFFFFC72C),
-              foregroundColor: const Color(0xFF242424),
+              backgroundColor: AppTheme.yellow,
+              foregroundColor: AppTheme.ink,
               child: Icon(icon),
             ),
             const SizedBox(width: 14),
@@ -282,7 +283,7 @@ class _RoleOption extends StatelessWidget {
               ),
             ),
             if (selected)
-              const Icon(Icons.check_circle, color: Color(0xFFFFC72C)),
+              const Icon(Icons.check_circle, color: AppTheme.yellow),
           ],
         ),
       ),

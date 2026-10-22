@@ -63,7 +63,7 @@ void main() {
     expect(scaffold.backgroundColor, const Color(0xFF242424));
     expect(
       tester.widget<Text>(find.text('Welcome back')).style?.color,
-      const Color(0xFF111827),
+      const Color(0xFF242424),
     );
     final email = tester.widget<TextField>(
       find.descendant(

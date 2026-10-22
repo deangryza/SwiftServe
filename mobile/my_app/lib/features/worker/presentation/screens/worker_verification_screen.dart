@@ -3,9 +3,11 @@ import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/repositories/verification_repository.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../models/worker_verification_ui_state.dart';
 import 'face_capture_screens.dart';
 
@@ -161,7 +163,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             'Your verification was submitted successfully. An administrator '
             'will review your ID and notify you of the decision. You can '
             'return here to check its review status.',
-        accentColor: Colors.blue,
+        accentColor: AppTheme.ink,
       );
     }
 
@@ -171,7 +173,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
         icon: Icons.verified_outlined,
         title: 'Verification complete',
         description: 'Your identity is verified. You can now accept jobs.',
-        accentColor: Colors.green,
+        accentColor: AppTheme.ink,
       );
     }
 
@@ -183,7 +185,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
         description:
             'Your documents were submitted successfully. We will '
             'notify you when the review is complete.',
-        accentColor: Colors.orange,
+        accentColor: AppTheme.ink,
       );
     }
 
@@ -198,7 +200,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             ? 'Verification was not approved'
             : 'New submission required',
         description: state.description,
-        accentColor: Colors.redAccent,
+        accentColor: AppTheme.ink,
         action: FilledButton(
           key: const ValueKey('verification_resubmit_button'),
           onPressed: _startFreshWizard,
@@ -628,27 +630,16 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
   Future<bool> _confirmDiscard() async {
     if (!_draft.hasProgress) return true;
-    return await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Discard verification?'),
-            content: const Text(
-              'Your entered details and captured photos will be deleted.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Keep editing'),
-              ),
-              FilledButton(
-                key: const ValueKey('verification_confirm_discard'),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Discard'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    return showActionConfirmation(
+      context,
+      title: 'Discard verification?',
+      message:
+          'Are you sure you want to discard this verification? Your entered details and captured photos will be deleted.',
+      confirmLabel: 'Discard',
+      cancelLabel: 'Keep editing',
+      icon: Icons.delete_outline_rounded,
+      confirmButtonKey: const ValueKey('verification_confirm_discard'),
+    );
   }
 
   Future<void> _discardDraft() async {
@@ -859,7 +850,7 @@ class _PhotoPreview extends StatelessWidget {
             file,
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) => const ColoredBox(
-              color: Color(0xFFE4E7EB),
+              color: AppTheme.line,
               child: Center(child: Icon(Icons.broken_image_outlined, size: 40)),
             ),
           ),
@@ -896,7 +887,7 @@ class _ReviewPhoto extends StatelessWidget {
             const AspectRatio(
               aspectRatio: 4 / 3,
               child: ColoredBox(
-                color: Color(0xFFE4E7EB),
+                color: AppTheme.line,
                 child: Center(child: Icon(Icons.add_a_photo_outlined)),
               ),
             ),

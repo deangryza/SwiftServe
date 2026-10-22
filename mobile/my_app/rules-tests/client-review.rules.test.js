@@ -25,14 +25,17 @@ beforeEach(async () => {
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
     await setDoc(doc(db, 'users/client-1'), {
+      fullName: 'Client One',
       role: 'client',
       verificationStatus: 'pending',
     });
     await setDoc(doc(db, 'users/worker-1'), {
+      fullName: 'Worker One',
       role: 'worker',
       verificationStatus: 'verified',
     });
     await setDoc(doc(db, 'users/worker-2'), {
+      fullName: 'Worker Two',
       role: 'worker',
       verificationStatus: 'verified',
     });
@@ -57,10 +60,11 @@ after(async () => {
   await environment.cleanup();
 });
 
-function reviewData(workerId = 'worker-1') {
+function reviewData(workerId = 'worker-1', workerName = 'Worker One') {
   return {
     requestId: 'request-1',
     workerId,
+    workerName,
     clientId: 'client-1',
     clientName: 'Client One',
     rating: 5,
@@ -79,13 +83,22 @@ test('assigned worker can rate the client after completion', async () => {
 test('booking client cannot rate themselves', async () => {
   const client = environment.authenticatedContext('client-1').firestore();
   await assertFails(
-    setDoc(doc(client, 'client_reviews/request-1'), reviewData('client-1')),
+    setDoc(doc(client, 'client_reviews/request-1'), reviewData('client-1', 'Client One')),
   );
 });
 
 test('unrelated worker cannot rate the client', async () => {
   const worker = environment.authenticatedContext('worker-2').firestore();
   await assertFails(
-    setDoc(doc(worker, 'client_reviews/request-1'), reviewData('worker-2')),
+    setDoc(doc(worker, 'client_reviews/request-1'), reviewData('worker-2', 'Worker Two')),
+  );
+});
+test('worker cannot spoof the reviewer name', async () => {
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  await assertFails(
+    setDoc(
+      doc(worker, 'client_reviews/request-1'),
+      reviewData('worker-1', 'Fake Name'),
+    ),
   );
 });

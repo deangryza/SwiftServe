@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 
 class ProfileAvatar extends StatelessWidget {
   const ProfileAvatar({
@@ -91,7 +92,7 @@ class RecentMemberAvatarBadge extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFF20B978),
+                color: AppTheme.ink,
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(color: Colors.white, width: 1.5),
               ),

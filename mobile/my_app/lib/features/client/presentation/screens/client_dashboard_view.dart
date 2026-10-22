@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/models/app_user.dart';
@@ -16,8 +17,8 @@ class ClientDashboardView extends StatelessWidget {
 
   final AppUser? profile;
 
-  static const _yellow = Color(0xFFFFC72C);
-  static const _cream = Color(0xFFFFF9E9);
+  static const _yellow = AppTheme.yellow;
+  static const _cream = Color(0xFFFFFFFF);
   static const _ink = Color(0xFF171717);
 
   @override
@@ -26,7 +27,7 @@ class ClientDashboardView extends StatelessWidget {
     final background = dark ? const Color(0xFF171717) : _cream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
     final text = dark ? const Color(0xFFF2F2F2) : _ink;
-    final muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF666666);
+    final muted = dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
     final name = profile?.fullName.trim();
 
     return ClientTabSwipeRegion(
@@ -100,7 +101,7 @@ class ClientDashboardView extends StatelessWidget {
                               _ServiceCard(
                                 icon: Icons.home_outlined,
                                 title: 'Home Services',
-                                tint: const Color(0xFFFFE9A8),
+                                tint: AppTheme.softYellow,
                                 surface: surface,
                                 textColor: text,
                                 onTap: () => _open(
@@ -113,7 +114,7 @@ class ClientDashboardView extends StatelessWidget {
                               _ServiceCard(
                                 icon: Icons.school_outlined,
                                 title: 'Academic Help',
-                                tint: const Color(0xFFFFDDD5),
+                                tint: AppTheme.softYellow,
                                 surface: surface,
                                 textColor: text,
                                 onTap: () => _open(
@@ -126,7 +127,7 @@ class ClientDashboardView extends StatelessWidget {
                               _ServiceCard(
                                 icon: Icons.handyman_outlined,
                                 title: 'Repairs',
-                                tint: const Color(0xFFF4ECD3),
+                                tint: AppTheme.softYellow,
                                 surface: surface,
                                 textColor: text,
                                 onTap: () => _open(
@@ -139,7 +140,7 @@ class ClientDashboardView extends StatelessWidget {
                               _ServiceCard(
                                 icon: Icons.shopping_bag_outlined,
                                 title: 'Errands',
-                                tint: const Color(0xFFDDF4E9),
+                                tint: AppTheme.softYellow,
                                 surface: surface,
                                 textColor: text,
                                 onTap: () => _open(
@@ -152,7 +153,7 @@ class ClientDashboardView extends StatelessWidget {
                               _ServiceCard(
                                 icon: Icons.auto_awesome_outlined,
                                 title: 'Cleaning',
-                                tint: const Color(0xFFFFE9A8),
+                                tint: AppTheme.softYellow,
                                 surface: surface,
                                 textColor: text,
                                 onTap: () => _open(
@@ -165,7 +166,7 @@ class ClientDashboardView extends StatelessWidget {
                               _ServiceCard(
                                 icon: Icons.content_cut_outlined,
                                 title: 'Beauty',
-                                tint: const Color(0xFFFFDDD5),
+                                tint: AppTheme.softYellow,
                                 surface: surface,
                                 textColor: text,
                                 onTap: () => _open(
@@ -256,7 +257,7 @@ class _Greeting extends StatelessWidget {
         fallbackPhotoBase64: profile?.photoBase64 ?? '',
         joinedAt: profile?.createdAt,
         radius: 23,
-        backgroundColor: const Color(0xFF252525),
+        backgroundColor: AppTheme.ink,
         foregroundColor: ClientDashboardView._yellow,
       ),
       const SizedBox(width: 12),
@@ -311,9 +312,11 @@ class _SearchButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: surface,
-    elevation: 2,
-    shadowColor: Colors.black26,
-    borderRadius: BorderRadius.circular(18),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(18),
+      side: BorderSide(color: Theme.of(context).dividerColor),
+    ),
     child: InkWell(
       key: const ValueKey('client-home-search'),
       onTap: onTap,
@@ -331,16 +334,7 @@ class _SearchButton extends StatelessWidget {
                 style: TextStyle(color: textColor, fontSize: 13),
               ),
             ),
-            Container(
-              width: 42,
-              height: 42,
-              margin: const EdgeInsets.only(right: 6),
-              decoration: BoxDecoration(
-                color: ClientDashboardView._yellow,
-                borderRadius: BorderRadius.circular(13),
-              ),
-              child: const Icon(Icons.tune, color: ClientDashboardView._ink),
-            ),
+            const SizedBox(width: 16),
           ],
         ),
       ),
@@ -474,9 +468,11 @@ class _ServiceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: surface,
-    elevation: 2,
-    shadowColor: Colors.black26,
-    borderRadius: BorderRadius.circular(16),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: Theme.of(context).dividerColor),
+    ),
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
@@ -535,13 +531,7 @@ class _ClientNavigation extends StatelessWidget {
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 5,
-            offset: Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         children: [

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 import '../../../auth/presentation/screens/entry_screen.dart';
@@ -15,10 +16,10 @@ class SwiftServeOnboardingScreen extends StatefulWidget {
 
 class _SwiftServeOnboardingScreenState
     extends State<SwiftServeOnboardingScreen> {
-  static const _background = Color(0xFFFFF9E9);
-  static const _yellow = Color(0xFFFFC72C);
-  static const _ink = Color(0xFF07182A);
-  static const _muted = Color(0xFF555960);
+  static const _background = Color(0xFFFFFFFF);
+  static const _yellow = AppTheme.yellow;
+  static const _ink = AppTheme.ink;
+  static const _muted = AppTheme.muted;
 
   final _controller = PageController();
   var _page = 0;
@@ -71,9 +72,7 @@ class _SwiftServeOnboardingScreenState
     final ink = dark ? const Color(0xFFF3F3F3) : _ink;
     final muted = dark ? const Color(0xFFB8B8B8) : _muted;
     final divider = dark ? const Color(0xFF444444) : const Color(0xFFE3DDCD);
-    final inactiveDot = dark
-        ? const Color(0xFF666666)
-        : const Color(0xFFD9D9D9);
+    final inactiveDot = dark ? AppTheme.muted : const Color(0xFFD9D9D9);
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: background,

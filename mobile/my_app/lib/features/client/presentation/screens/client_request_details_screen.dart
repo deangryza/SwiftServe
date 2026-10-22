@@ -6,6 +6,7 @@ import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/services/client_theme_controller.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import 'client_sections.dart';
 
@@ -33,6 +34,15 @@ class _ClientRequestDetailsScreenState
   }
 
   Future<void> _cancel() async {
+    final confirmed = await showActionConfirmation(
+      context,
+      title: 'Cancel this booking?',
+      message:
+          'Are you sure you want to cancel ${widget.request.title}? This action cannot be undone.',
+      confirmLabel: 'Cancel booking',
+      icon: Icons.event_busy_outlined,
+    );
+    if (!confirmed || _saving) return;
     setState(() => _saving = true);
     try {
       await FirebaseFirestore.instance
@@ -49,27 +59,15 @@ class _ClientRequestDetailsScreenState
   }
 
   Future<void> _acceptApplicant(ServiceApplication application) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Accept this worker?'),
-        content: Text(
-          'Choose ${application.workerName} for this request? '
-          'Other applications will be declined.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Accept worker'),
-          ),
-        ],
-      ),
+    final confirmed = await showActionConfirmation(
+      context,
+      title: 'Accept this worker?',
+      message:
+          'Choose ${application.workerName} for this request? Other applications will be declined.',
+      confirmLabel: 'Accept worker',
+      icon: Icons.person_add_alt_1_rounded,
     );
-    if (confirmed != true || _saving) return;
+    if (!confirmed || _saving) return;
 
     setState(() => _saving = true);
     try {
@@ -148,14 +146,26 @@ class _ClientRequestDetailsScreenState
       ),
     );
     if (selected == null) return;
+    final user = FirebaseAuth.instance.currentUser!;
+    final profile = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+    final reviewerName =
+        (profile.data()?['fullName'] ?? widget.request.clientName)
+            .toString()
+            .trim();
     await FirebaseFirestore.instance
         .collection('reviews')
         .doc(widget.request.id)
         .set({
           'requestId': widget.request.id,
-          'clientId': FirebaseAuth.instance.currentUser!.uid,
+          'clientId': user.uid,
+          'clientName': reviewerName,
           'workerId': widget.request.workerId,
+          'workerName': widget.request.workerName ?? '',
           'rating': selected,
+          'comment': '',
           'createdAt': FieldValue.serverTimestamp(),
         });
     if (mounted) {

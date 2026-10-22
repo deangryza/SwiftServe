@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
 
@@ -231,14 +232,14 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     }
     final isWorker = widget.role == 'worker';
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
+      backgroundColor: const Color(0xFFFFFFFF),
       appBar: AppBar(
-        backgroundColor: const Color(0xFFF8F9FF),
+        backgroundColor: const Color(0xFFFFFFFF),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         toolbarHeight: 64,
         leadingWidth: 44,
-        shape: const Border(bottom: BorderSide(color: Color(0xFFC4C6CD))),
+        shape: const Border(bottom: BorderSide(color: AppTheme.line)),
         leading: IconButton(
           onPressed: () => Navigator.maybePop(context),
           icon: SvgPicture.asset('assets/registration/back.svg'),
@@ -247,7 +248,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         title: const Text(
           'SwiftServe',
           style: TextStyle(
-            color: Color(0xFF041627),
+            color: AppTheme.ink,
             fontSize: 16,
             height: 24 / 16,
             fontWeight: FontWeight.w400,
@@ -269,7 +270,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                       'Create Account',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        color: Color(0xFF041627),
+                        color: AppTheme.ink,
                         fontSize: 24,
                         height: 32 / 24,
                         fontWeight: FontWeight.w700,
@@ -296,10 +297,10 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                             height: 96,
                             padding: const EdgeInsets.all(2),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFDCE9FF),
+                              color: AppTheme.softYellow,
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: const Color(0xFFC4C6CD),
+                                color: AppTheme.line,
                                 width: 2,
                               ),
                               boxShadow: const [
@@ -332,7 +333,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                                 onPressed: _pickProfileImage,
                                 style: FilledButton.styleFrom(
                                   padding: const EdgeInsets.all(8),
-                                  backgroundColor: const Color(0xFF0058BE),
+                                  backgroundColor: AppTheme.ink,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(12),
                                   ),
@@ -350,9 +351,9 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEFF4FF),
+                        color: AppTheme.softYellow,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFC4C6CD)),
+                        border: Border.all(color: AppTheme.line),
                       ),
                       child: Row(
                         children: [
@@ -375,7 +376,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                                 Text(
                                   'Signing up as ${isWorker ? 'Worker' : 'Client'}',
                                   style: const TextStyle(
-                                    color: Color(0xFF041627),
+                                    color: AppTheme.ink,
                                     fontSize: 14,
                                     height: 20 / 14,
                                     fontWeight: FontWeight.w600,
@@ -387,7 +388,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                           TextButton(
                             onPressed: () => Navigator.maybePop(context),
                             style: TextButton.styleFrom(
-                              foregroundColor: const Color(0xFF0058BE),
+                              foregroundColor: AppTheme.ink,
                               padding: EdgeInsets.zero,
                               minimumSize: Size.zero,
                               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -406,9 +407,9 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF10B981),
+                        color: AppTheme.ink,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                        border: Border.all(color: AppTheme.line),
                       ),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,7 +533,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                             value: _acceptedTerms,
                             onChanged: (value) =>
                                 setState(() => _acceptedTerms = value ?? false),
-                            side: const BorderSide(color: Color(0xFFC4C6CD)),
+                            side: const BorderSide(color: AppTheme.line),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(2),
                             ),
@@ -551,12 +552,12 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                                 TextSpan(text: 'I agree to the '),
                                 TextSpan(
                                   text: 'Terms and Conditions',
-                                  style: TextStyle(color: Color(0xFF0058BE)),
+                                  style: TextStyle(color: AppTheme.ink),
                                 ),
                                 TextSpan(text: ' and '),
                                 TextSpan(
                                   text: 'Privacy Policy.',
-                                  style: TextStyle(color: Color(0xFF0058BE)),
+                                  style: TextStyle(color: AppTheme.ink),
                                 ),
                               ],
                             ),
@@ -570,11 +571,11 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                       child: FilledButton(
                         onPressed: _loading ? null : _register,
                         style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFF18181B),
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: const Color(0xA618181B),
+                          backgroundColor: AppTheme.yellow,
+                          foregroundColor: AppTheme.ink,
+                          disabledBackgroundColor: AppTheme.softYellow,
                           shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
+                            borderRadius: BorderRadius.circular(24),
                           ),
                           textStyle: const TextStyle(
                             fontSize: 20,
@@ -587,7 +588,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                             ? const SizedBox.square(
                                 dimension: 22,
                                 child: CircularProgressIndicator(
-                                  color: Colors.white,
+                                  color: AppTheme.ink,
                                   strokeWidth: 2,
                                 ),
                               )
@@ -601,6 +602,10 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                                     const SizedBox(width: 8),
                                     SvgPicture.asset(
                                       'assets/registration/arrow.svg',
+                                      colorFilter: const ColorFilter.mode(
+                                        AppTheme.ink,
+                                        BlendMode.srcIn,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -611,7 +616,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     TextButton(
                       onPressed: () => Navigator.maybePop(context),
                       style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF0058BE),
+                        foregroundColor: AppTheme.ink,
                         padding: EdgeInsets.zero,
                         minimumSize: const Size(0, 20),
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -677,7 +682,7 @@ class _RegistrationField extends StatelessWidget {
           child: Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF0B1C30),
+              color: AppTheme.ink,
               fontSize: 14,
               height: 20 / 14,
               fontWeight: FontWeight.w600,
@@ -693,11 +698,11 @@ class _RegistrationField extends StatelessWidget {
           textInputAction: textInputAction,
           onFieldSubmitted: onFieldSubmitted,
           autofillHints: autofillHints,
-          style: const TextStyle(color: Color(0xFF041627), fontSize: 16),
+          style: const TextStyle(color: AppTheme.ink, fontSize: 16),
           decoration: InputDecoration(
             hintText: hintText,
             hintStyle: const TextStyle(
-              color: Color(0xFFC4C6CD),
+              color: AppTheme.line,
               fontSize: 16,
               fontWeight: FontWeight.w400,
             ),
@@ -707,25 +712,19 @@ class _RegistrationField extends StatelessWidget {
             contentPadding: const EdgeInsets.fromLTRB(16, 15, 17, 15),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFC4C6CD)),
+              borderSide: const BorderSide(color: AppTheme.line),
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(
-                color: Color(0xFF0058BE),
-                width: 1.5,
-              ),
+              borderSide: const BorderSide(color: AppTheme.ink, width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFFBA1A1A)),
+              borderSide: const BorderSide(color: AppTheme.ink),
             ),
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(
-                color: Color(0xFFBA1A1A),
-                width: 1.5,
-              ),
+              borderSide: const BorderSide(color: AppTheme.ink, width: 1.5),
             ),
           ),
         ),
