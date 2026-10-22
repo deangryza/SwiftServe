@@ -72,6 +72,17 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           ? const []
           : [_category.text.trim()],
     );
+    try {
+      await ApiService().checkReachable();
+    } on ApiConnectionException catch (error) {
+      if (mounted) {
+        setState(() => _loading = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
+      return;
+    }
     UserCredential? credential;
     try {
       credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(

@@ -45,3 +45,37 @@ android {
 flutter {
     source = "../.."
 }
+
+// Debug builds forward each connected device's port 5000 to this computer, so
+// the app's default API_BASE_URL (http://127.0.0.1:5000) reaches the local
+// backend with a plain `flutter run`, over USB or wireless debugging.
+val adbPath = provider { android.adbExecutable.absolutePath }
+val forwardLocalApi by tasks.registering {
+    doLast {
+        val adb = adbPath.get()
+        val devices = try {
+            ProcessBuilder(adb, "devices").start().inputStream.bufferedReader()
+                .readLines()
+                .drop(1)
+                .map { it.split("\t") }
+                .filter { it.size == 2 && it[1] == "device" }
+                .map { it[0] }
+        } catch (error: Exception) {
+            logger.warn("Skipping adb reverse: ${error.message}")
+            emptyList()
+        }
+        devices.forEach { device ->
+            val exitCode = ProcessBuilder(adb, "-s", device, "reverse", "tcp:5000", "tcp:5000")
+                .start()
+                .waitFor()
+            if (exitCode == 0) {
+                logger.lifecycle("Forwarded port 5000 to the local backend on $device")
+            } else {
+                logger.warn("adb reverse failed on $device")
+            }
+        }
+    }
+}
+tasks.matching { it.name == "preDebugBuild" }.configureEach {
+    dependsOn(forwardLocalApi)
+}
