@@ -2,22 +2,26 @@
 
 The canonical Flutter application targets Android and iOS. Its Dart source uses feature-first folders under `lib/features`, application startup under `lib/app`, and shared models/repositories/services under `lib/shared`.
 
-Provide the profile API URL at build time:
-
-For a physical Android phone connected by USB, start the backend, then run:
+For a physical Android phone, connected by USB cable or wireless debugging,
+start the backend, then run:
 
 ```powershell
-adb reverse tcp:5000 tcp:5000
-flutter run --dart-define=API_BASE_URL=http://127.0.0.1:5000
+flutter run
 ```
 
-Repeat `adb reverse` after reconnecting the phone. Keep USB connected while using
-the local API. Rebuild the app when changing `API_BASE_URL`; hot reload does not
-change this build-time setting. Debug Android builds allow local HTTP traffic.
-Release builds should use a reachable HTTPS backend.
+The app's default API address is `http://127.0.0.1:5000`. Every Android debug
+build runs `adb reverse tcp:5000 tcp:5000` on each connected device (see
+`android/app/build.gradle.kts`), so that address reaches the backend on this
+computer. If the phone reconnects while the app is running, stop and run
+`flutter run` again to restore the forward.
 
-The default API address is `http://127.0.0.1:5000`. Both VS Code mobile launch
-configurations automatically forward port 5000 through ADB before launching.
+USB checklist: enable Developer options and USB debugging on the phone, accept
+the "Allow USB debugging?" prompt, and confirm `adb devices` lists the phone as
+`device` (not `unauthorized`).
+
+Rebuild the app when changing `API_BASE_URL`; hot reload does not change this
+build-time setting. Debug Android builds allow local HTTP traffic. Release
+builds should use a reachable HTTPS backend.
 
 For an Android emulator:
 

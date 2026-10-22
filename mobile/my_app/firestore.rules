@@ -146,7 +146,8 @@ service cloud.firestore {
     }
 
     match /service_categories/{categoryId} {
-      allow read: if signedIn();
+      // Public so the registration form can list categories before sign-in.
+      allow read: if true;
       // Category management is restricted to the authenticated admin backend.
       allow create, update, delete: if false;
     }

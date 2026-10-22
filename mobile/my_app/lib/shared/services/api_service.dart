@@ -11,6 +11,30 @@ class ApiService {
   final http.Client _client;
   static const _requestTimeout = Duration(seconds: 8);
 
+  /// Throws [ApiConnectionException] when the backend cannot be reached, so
+  /// sign-up can stop before creating a Firebase account without a profile.
+  Future<void> checkReachable() async {
+    late final http.Response response;
+    try {
+      response = await _client
+          .get(Uri.parse('${ApiConfig.baseUrl}/api/health'))
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const ApiConnectionException(
+        'The SwiftServe server did not respond. Make sure the backend is running and try again.',
+      );
+    } on http.ClientException {
+      throw const ApiConnectionException(
+        'The SwiftServe server could not be reached. Check the backend connection and try again.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw const ApiConnectionException(
+        'The SwiftServe server is not ready. Try again in a moment.',
+      );
+    }
+  }
+
   Future<void> createUserProfile({
     required String idToken,
     required String fullName,
