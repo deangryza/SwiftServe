@@ -37,10 +37,20 @@ class JobLocationSelection {
 }
 
 class ExactJobLocation {
-  const ExactJobLocation({required this.position, required this.address});
+  const ExactJobLocation({
+    required this.position,
+    required this.address,
+    this.dropoffPosition,
+    this.dropoffAddress,
+  });
 
+  /// The job site, or the pickup point for errands.
   final JobCoordinate position;
   final String address;
+
+  /// Errands only.
+  final JobCoordinate? dropoffPosition;
+  final String? dropoffAddress;
 
   factory ExactJobLocation.fromMap(Map<String, dynamic> data) {
     final position = JobCoordinate.fromGeoPoint(data['position']);
@@ -50,6 +60,8 @@ class ExactJobLocation {
     return ExactJobLocation(
       position: position,
       address: (data['address'] ?? '').toString(),
+      dropoffPosition: JobCoordinate.fromGeoPoint(data['dropoffPosition']),
+      dropoffAddress: data['dropoffAddress']?.toString(),
     );
   }
 }

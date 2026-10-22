@@ -18,7 +18,8 @@ enum ServiceRequestStatus {
 enum JobModality {
   onsite('On-site'),
   online('Online'),
-  hybrid('Hybrid');
+  hybrid('Hybrid'),
+  errand('Errand');
 
   const JobModality(this.label);
 
@@ -32,6 +33,30 @@ enum JobModality {
     (modality) => modality.name == value,
     orElse: () => JobModality.onsite,
   );
+}
+
+/// Where the rider is within an ongoing errand. Delivery is the request's
+/// `completed` status, so it has no stage of its own.
+enum ErrandStage {
+  headingToPickup('Heading to pickup'),
+  pickedUp('Picked up'),
+  delivering('On the way');
+
+  const ErrandStage(this.label);
+
+  final String label;
+
+  ErrandStage? get next {
+    final nextIndex = index + 1;
+    return nextIndex < values.length ? values[nextIndex] : null;
+  }
+
+  static ErrandStage? fromWire(Object? value) {
+    for (final stage in values) {
+      if (stage.name == value) return stage;
+    }
+    return null;
+  }
 }
 
 class ServiceRequest {
@@ -54,6 +79,13 @@ class ServiceRequest {
     this.scheduleFrom,
     this.scheduleTo,
     this.createdAt,
+    this.dropoffLocation,
+    this.dropoffLatitude,
+    this.dropoffLongitude,
+    this.errandItems,
+    this.itemCostEstimate,
+    this.distanceKm,
+    this.errandStage,
   });
 
   final String id;
@@ -75,17 +107,35 @@ class ServiceRequest {
   final DateTime? scheduleTo;
   final DateTime? createdAt;
 
+  // Errand-only fields. For errands, [location] and [areaPosition] are the
+  // pickup point, so code that only knows about one place keeps working.
+  final String? dropoffLocation;
+  final double? dropoffLatitude;
+  final double? dropoffLongitude;
+  final String? errandItems;
+  final double? itemCostEstimate;
+  final double? distanceKm;
+  final ErrandStage? errandStage;
+
+  bool get isErrand => modality == JobModality.errand;
+
   /// Short "where" text for cards: the area, prefixed for hybrid jobs.
   String get placeLabel => switch (modality) {
     JobModality.online => 'Online',
     JobModality.hybrid => 'Hybrid · $location',
     JobModality.onsite => location,
+    JobModality.errand => '$location → ${dropoffLocation ?? 'Drop-off'}',
   };
 
   JobCoordinate? get areaPosition =>
       areaLatitude == null || areaLongitude == null
       ? null
       : JobCoordinate(latitude: areaLatitude!, longitude: areaLongitude!);
+
+  JobCoordinate? get dropoffAreaPosition =>
+      dropoffLatitude == null || dropoffLongitude == null
+      ? null
+      : JobCoordinate(latitude: dropoffLatitude!, longitude: dropoffLongitude!);
 
   factory ServiceRequest.fromDocument(
     DocumentSnapshot<Map<String, dynamic>> document,
@@ -96,6 +146,9 @@ class ServiceRequest {
 
   factory ServiceRequest.fromMap(String id, Map<String, dynamic> data) {
     final areaPosition = JobCoordinate.fromGeoPoint(data['areaPosition']);
+    final dropoffAreaPosition = JobCoordinate.fromGeoPoint(
+      data['dropoffAreaPosition'],
+    );
     return ServiceRequest(
       id: id,
       clientId: (data['clientId'] ?? '').toString(),
@@ -119,6 +172,13 @@ class ServiceRequest {
           (data['scheduleTo'] as Timestamp?)?.toDate() ??
           (data['schedule'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      dropoffLocation: data['dropoffLocation']?.toString(),
+      dropoffLatitude: dropoffAreaPosition?.latitude,
+      dropoffLongitude: dropoffAreaPosition?.longitude,
+      errandItems: data['errandItems']?.toString(),
+      itemCostEstimate: (data['itemCostEstimate'] as num?)?.toDouble(),
+      distanceKm: (data['distanceKm'] as num?)?.toDouble(),
+      errandStage: ErrandStage.fromWire(data['errandStage']),
     );
   }
 }

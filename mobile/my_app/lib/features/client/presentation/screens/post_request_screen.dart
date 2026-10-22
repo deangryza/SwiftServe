@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/utils/errand_pricing.dart';
 import '../../../../shared/widgets/job_location_picker.dart';
 
 String? resolvePostCategory(
@@ -36,6 +37,12 @@ String? resolvePostCategory(
   return null;
 }
 
+/// Errand categories default the work type to [JobModality.errand].
+bool isErrandCategory(String? category) {
+  final normalized = category?.trim().toLowerCase() ?? '';
+  return normalized.contains('errand') || normalized.contains('deliver');
+}
+
 class PostRequestScreen extends StatefulWidget {
   const PostRequestScreen({super.key, this.initialCategory});
 
@@ -50,13 +57,26 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   final _titleController = TextEditingController();
   final _budgetController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _errandItemsController = TextEditingController();
+  final _itemCostController = TextEditingController();
 
   String? _selectedCategory;
   DateTime? _fromDate;
   DateTime? _toDate;
   JobModality _modality = JobModality.onsite;
   JobLocationSelection? _selectedLocation;
+  JobLocationSelection? _dropoffLocation;
   bool _isPosting = false;
+
+  bool get _isErrand => _modality == JobModality.errand;
+
+  /// Estimated km between pickup and drop-off, once both are pinned.
+  double? get _errandDistanceKm {
+    final pickup = _selectedLocation;
+    final dropoff = _dropoffLocation;
+    if (pickup == null || dropoff == null) return null;
+    return errandDistanceKm(pickup.position, dropoff.position);
+  }
 
   static const _yellow = Color(0xFFFFC72C);
   static const _ink = Color(0xFF242424);
@@ -66,6 +86,7 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   void initState() {
     super.initState();
     _selectedCategory = widget.initialCategory?.trim();
+    if (isErrandCategory(_selectedCategory)) _modality = JobModality.errand;
   }
 
   @override
@@ -73,6 +94,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     _titleController.dispose();
     _budgetController.dispose();
     _descriptionController.dispose();
+    _errandItemsController.dispose();
+    _itemCostController.dispose();
     super.dispose();
   }
 
@@ -202,17 +225,31 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ? fullName.trim()
           : 'Client';
 
+      final distanceKm = _isErrand ? _errandDistanceKm! : null;
+      final itemCost = double.tryParse(_itemCostController.text.trim());
       await ServiceRequestRepository().createRequest(
         clientId: user.uid,
         clientName: clientName,
         title: _titleController.text.trim(),
         category: _selectedCategory!,
-        budget: double.parse(_budgetController.text.trim()),
+        budget: distanceKm != null
+            ? errandDeliveryFee(distanceKm)
+            : double.parse(_budgetController.text.trim()),
         scheduleFrom: _fromDate!,
         scheduleTo: _toDate!,
         description: _descriptionController.text.trim(),
         modality: _modality,
         location: _modality.needsLocation ? _selectedLocation : null,
+        errand: distanceKm == null
+            ? null
+            : ErrandDetails(
+                dropoff: _dropoffLocation!,
+                items: _errandItemsController.text.trim(),
+                distanceKm: double.parse(distanceKm.toStringAsFixed(2)),
+                itemCostEstimate: itemCost != null && itemCost > 0
+                    ? itemCost
+                    : null,
+              ),
       );
 
       if (!mounted) return;
@@ -492,9 +529,12 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                           .toList(),
                                       onChanged: categories.isEmpty
                                           ? null
-                                          : (value) => setState(
-                                              () => _selectedCategory = value,
-                                            ),
+                                          : (value) => setState(() {
+                                              _selectedCategory = value;
+                                              if (isErrandCategory(value)) {
+                                                _modality = JobModality.errand;
+                                              }
+                                            }),
                                       validator: (value) => value == null
                                           ? 'Select a category'
                                           : null,
@@ -518,36 +558,50 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.start,
                                     children: [
-                                      _label('Budget (₱)', text),
-                                      TextFormField(
-                                        key: const ValueKey('post-job-budget'),
-                                        controller: _budgetController,
-                                        style: TextStyle(color: text),
-                                        keyboardType:
-                                            const TextInputType.numberWithOptions(
-                                              decimal: true,
-                                            ),
-                                        inputFormatters: [
-                                          FilteringTextInputFormatter.allow(
-                                            RegExp(r'^\d*\.?\d{0,2}'),
-                                          ),
-                                        ],
-                                        decoration: _inputDecoration(
-                                          hint: 'e.g. 200',
-                                          field: field,
-                                          border: border,
+                                      _label(
+                                        _isErrand
+                                            ? 'Delivery fee'
+                                            : 'Budget (₱)',
+                                        text,
+                                      ),
+                                      if (_isErrand)
+                                        _ErrandFeePreview(
+                                          distanceKm: _errandDistanceKm,
                                           text: text,
                                           muted: muted,
+                                        )
+                                      else
+                                        TextFormField(
+                                          key: const ValueKey(
+                                            'post-job-budget',
+                                          ),
+                                          controller: _budgetController,
+                                          style: TextStyle(color: text),
+                                          keyboardType:
+                                              const TextInputType.numberWithOptions(
+                                                decimal: true,
+                                              ),
+                                          inputFormatters: [
+                                            FilteringTextInputFormatter.allow(
+                                              RegExp(r'^\d*\.?\d{0,2}'),
+                                            ),
+                                          ],
+                                          decoration: _inputDecoration(
+                                            hint: 'e.g. 200',
+                                            field: field,
+                                            border: border,
+                                            text: text,
+                                            muted: muted,
+                                          ),
+                                          validator: (value) {
+                                            final amount = double.tryParse(
+                                              value?.trim() ?? '',
+                                            );
+                                            return amount == null || amount <= 0
+                                                ? 'Invalid budget'
+                                                : null;
+                                          },
                                         ),
-                                        validator: (value) {
-                                          final amount = double.tryParse(
-                                            value?.trim() ?? '',
-                                          );
-                                          return amount == null || amount <= 0
-                                              ? 'Invalid budget'
-                                              : null;
-                                        },
-                                      ),
                                     ],
                                   ),
                                 ),
@@ -625,6 +679,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                     if (!modality.needsLocation) {
                                       _selectedLocation = null;
                                     }
+                                    if (modality != JobModality.errand) {
+                                      _dropoffLocation = null;
+                                    }
                                   }),
                                 ),
                               ],
@@ -638,24 +695,126 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _label('Location', text),
+                                  _label(
+                                    _isErrand ? 'Pickup' : 'Location',
+                                    text,
+                                  ),
                                   FormField<JobLocationSelection>(
                                     key: const ValueKey('post-job-location'),
                                     validator: (value) {
                                       if (value == null) {
-                                        return 'Choose the service location on the map.';
+                                        return _isErrand
+                                            ? 'Choose the pickup point on the map.'
+                                            : 'Choose the service location on the map.';
                                       }
                                       if (value.exactAddress.trim().isEmpty) {
-                                        return 'Enter the exact service address.';
+                                        return _isErrand
+                                            ? 'Enter the pickup address.'
+                                            : 'Enter the exact service address.';
                                       }
                                       return null;
                                     },
                                     builder: (field) => JobLocationPicker(
                                       errorText: field.errorText,
                                       onChanged: (value) {
-                                        _selectedLocation = value;
+                                        setState(
+                                          () => _selectedLocation = value,
+                                        );
                                         field.didChange(value);
                                       },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          if (_isErrand) ...[
+                            const SizedBox(height: 12),
+                            _sectionCard(
+                              surface: surface,
+                              dark: dark,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label('Drop-off', text),
+                                  FormField<JobLocationSelection>(
+                                    key: const ValueKey('post-job-dropoff'),
+                                    validator: (value) {
+                                      if (value == null) {
+                                        return 'Choose the drop-off point on the map.';
+                                      }
+                                      if (value.exactAddress.trim().isEmpty) {
+                                        return 'Enter the drop-off address.';
+                                      }
+                                      return null;
+                                    },
+                                    builder: (field) => JobLocationPicker(
+                                      errorText: field.errorText,
+                                      onChanged: (value) {
+                                        setState(
+                                          () => _dropoffLocation = value,
+                                        );
+                                        field.didChange(value);
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _sectionCard(
+                              surface: surface,
+                              dark: dark,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _label('What to buy or pick up', text),
+                                  TextFormField(
+                                    key: const ValueKey(
+                                      'post-job-errand-items',
+                                    ),
+                                    controller: _errandItemsController,
+                                    style: TextStyle(color: text),
+                                    minLines: 2,
+                                    maxLines: 4,
+                                    maxLength: 500,
+                                    decoration: _inputDecoration(
+                                      hint: 'e.g. 2 kg rice and 1 dozen eggs',
+                                      field: field,
+                                      border: border,
+                                      text: text,
+                                      muted: muted,
+                                    ).copyWith(counterText: ''),
+                                    validator: (value) =>
+                                        value == null || value.trim().isEmpty
+                                        ? 'List the items or package'
+                                        : null,
+                                  ),
+                                  const SizedBox(height: 10),
+                                  _label(
+                                    'Item cost estimate (₱, optional)',
+                                    text,
+                                  ),
+                                  TextFormField(
+                                    key: const ValueKey('post-job-item-cost'),
+                                    controller: _itemCostController,
+                                    style: TextStyle(color: text),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    inputFormatters: [
+                                      FilteringTextInputFormatter.allow(
+                                        RegExp(r'^\d*\.?\d{0,2}'),
+                                      ),
+                                    ],
+                                    decoration: _inputDecoration(
+                                      hint:
+                                          'Paid back to the rider on delivery',
+                                      field: field,
+                                      border: border,
+                                      text: text,
+                                      muted: muted,
                                     ),
                                   ),
                                 ],
@@ -762,12 +921,15 @@ class _ModalitySelector extends StatelessWidget {
     JobModality.onsite => Icons.home_repair_service_outlined,
     JobModality.online => Icons.laptop_mac_outlined,
     JobModality.hybrid => Icons.sync_alt,
+    JobModality.errand => Icons.delivery_dining_outlined,
   };
 
   static String _hintFor(JobModality modality) => switch (modality) {
     JobModality.onsite => 'The worker needs to be there in person.',
     JobModality.online => 'Can be done remotely. No location needed.',
     JobModality.hybrid => 'Partly in person, partly remote.',
+    JobModality.errand =>
+      'A rider picks something up and delivers it. Track them live.',
   };
 
   @override
@@ -828,6 +990,52 @@ class _ModalitySelector extends StatelessWidget {
         const SizedBox(height: 8),
         Text(_hintFor(value), style: TextStyle(color: muted, fontSize: 12)),
       ],
+    );
+  }
+}
+
+class _ErrandFeePreview extends StatelessWidget {
+  const _ErrandFeePreview({
+    required this.distanceKm,
+    required this.text,
+    required this.muted,
+  });
+
+  final double? distanceKm;
+  final Color text;
+  final Color muted;
+
+  @override
+  Widget build(BuildContext context) {
+    final km = distanceKm;
+    return SizedBox(
+      key: const ValueKey('post-job-errand-fee'),
+      height: 52,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: km == null
+            ? [
+                Text(
+                  'Pin pickup and drop-off',
+                  style: TextStyle(color: muted, fontSize: 12),
+                ),
+              ]
+            : [
+                Text(
+                  '₱${errandDeliveryFee(km).toStringAsFixed(0)}',
+                  style: TextStyle(
+                    color: text,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  '~${km.toStringAsFixed(1)} km',
+                  style: TextStyle(color: muted, fontSize: 11),
+                ),
+              ],
+      ),
     );
   }
 }

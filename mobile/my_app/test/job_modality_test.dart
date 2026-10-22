@@ -41,6 +41,35 @@ void main() {
     );
   });
 
+  test('errands parse pickup, drop-off and stage', () {
+    final errand = _request({
+      'modality': 'errand',
+      'location': 'Malolos',
+      'areaPosition': const GeoPoint(14.84, 120.81),
+      'dropoffLocation': 'Bulakan',
+      'dropoffAreaPosition': const GeoPoint(14.79, 120.88),
+      'errandItems': '2 kg rice',
+      'distanceKm': 5.1,
+      'itemCostEstimate': 120,
+      'errandStage': 'pickedUp',
+    });
+    expect(errand.isErrand, isTrue);
+    expect(JobModality.errand.needsLocation, isTrue);
+    expect(errand.placeLabel, 'Malolos → Bulakan');
+    expect(errand.dropoffAreaPosition?.latitude, 14.79);
+    expect(errand.errandItems, '2 kg rice');
+    expect(errand.distanceKm, 5.1);
+    expect(errand.itemCostEstimate, 120);
+    expect(errand.errandStage, ErrandStage.pickedUp);
+    expect(_request({'errandStage': 'teleporting'}).errandStage, isNull);
+  });
+
+  test('errand stages advance in order and end before delivery', () {
+    expect(ErrandStage.headingToPickup.next, ErrandStage.pickedUp);
+    expect(ErrandStage.pickedUp.next, ErrandStage.delivering);
+    expect(ErrandStage.delivering.next, isNull);
+  });
+
   test('online jobs have no map position', () {
     final online = _request({'modality': 'online', 'location': 'Online'});
     final onsite = _request({
