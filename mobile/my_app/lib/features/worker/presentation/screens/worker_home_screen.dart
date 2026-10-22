@@ -302,10 +302,14 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
     if (_loadingLocation) return 'Finding distance…';
     final workerPosition = _workerPosition;
     if (workerPosition == null) return 'Distance unavailable';
-    return formatDistance(
+    final toJob = formatDistance(
       distanceMetersBetween(workerPosition, jobPosition),
       approximate: true,
     );
+    // For errands, the job position is the pickup.
+    final tripKm = request.distanceKm;
+    if (!request.isErrand || tripKm == null) return toJob;
+    return '$toJob to pickup · ${tripKm.toStringAsFixed(1)} km trip';
   }
 
   @override

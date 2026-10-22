@@ -11,8 +11,10 @@ import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/screens/reviews_screen.dart';
 import '../../../../shared/services/device_location_service.dart';
+import '../../../../shared/services/rider_location_service.dart';
 import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/widgets/client_rating_summary.dart';
+import '../../../../shared/widgets/errand_map_layers.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 import '../../../client/presentation/screens/client_sections.dart';
@@ -111,6 +113,10 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
       position: position,
       address: _exactLocation?.address ?? request.location,
       approximate: _exactLocation == null,
+      dropoffPosition: request.isErrand
+          ? _exactLocation?.dropoffPosition ?? request.dropoffAreaPosition
+          : null,
+      dropoffAddress: _exactLocation?.dropoffAddress ?? request.dropoffLocation,
       workerPosition: _workerPosition,
       loadingDistance: _loadingLocation,
       locationError: _locationError,
@@ -340,7 +346,15 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
                       to: ServiceRequestStatus.ongoing,
                       workerId: widget.worker.id,
                     ),
-                    'Work started.',
+                    request.isErrand ? 'Errand started.' : 'Work started.',
+                  ),
+                  onAdvanceStage: (stage) => _runAction(
+                    () => ServiceRequestRepository().advanceErrandStage(
+                      requestId: request.id,
+                      from: stage,
+                      workerId: widget.worker.id,
+                    ),
+                    'Customer updated: ${stage.next?.label ?? ''}.',
                   ),
                   onComplete: () => _runAction(
                     () => ServiceRequestRepository().transition(
@@ -349,7 +363,9 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
                       to: ServiceRequestStatus.completed,
                       workerId: widget.worker.id,
                     ),
-                    'Booking marked completed.',
+                    request.isErrand
+                        ? 'Errand delivered.'
+                        : 'Booking marked completed.',
                   ),
                 );
               },
@@ -375,6 +391,7 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
     required this.onVerify,
     required this.onApply,
     required this.onStart,
+    required this.onAdvanceStage,
     required this.onComplete,
     this.locationCard,
   });
@@ -392,11 +409,16 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
   final VoidCallback onVerify;
   final VoidCallback onApply;
   final VoidCallback onStart;
+  final ValueChanged<ErrandStage> onAdvanceStage;
   final VoidCallback onComplete;
 
   @override
   Widget build(BuildContext context) {
     final isAssignedWorker = request.workerId == worker.id;
+    final sharesLocation =
+        request.isErrand &&
+        isAssignedWorker &&
+        request.status == ServiceRequestStatus.ongoing;
     return Stack(
       children: [
         Column(
@@ -473,6 +495,14 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
                       const SizedBox(height: 18),
                       locationCard!,
                     ],
+                    if (sharesLocation) ...[
+                      const SizedBox(height: 18),
+                      _RiderSharingBanner(
+                        key: ValueKey('rider-sharing-${request.id}'),
+                        requestId: request.id,
+                        palette: palette,
+                      ),
+                    ],
                     const SizedBox(height: 22),
                     _WorkerBookingActions(
                       request: request,
@@ -486,6 +516,7 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
                       onVerify: onVerify,
                       onApply: onApply,
                       onStart: onStart,
+                      onAdvanceStage: onAdvanceStage,
                       onComplete: onComplete,
                     ),
                   ],
@@ -559,7 +590,7 @@ class _ClientSummaryCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              'Budget',
+              request.isErrand ? 'Delivery fee' : 'Budget',
               style: TextStyle(color: palette.muted, fontSize: 11),
             ),
             Text(
@@ -628,7 +659,38 @@ class _JobSummaryCard extends StatelessWidget {
               : 'Online · done remotely',
           palette: palette,
         ),
-        if (request.modality.needsLocation)
+        if (request.isErrand) ...[
+          _DetailLine(
+            icon: Icons.storefront_outlined,
+            label: 'Pickup: ${request.location}',
+            palette: palette,
+          ),
+          _DetailLine(
+            icon: Icons.flag_outlined,
+            label: 'Drop-off: ${request.dropoffLocation ?? 'Not set'}',
+            palette: palette,
+          ),
+          if (request.distanceKm != null)
+            _DetailLine(
+              icon: Icons.route_outlined,
+              label: '~${request.distanceKm!.toStringAsFixed(1)} km trip',
+              palette: palette,
+            ),
+          if (request.errandItems?.isNotEmpty ?? false)
+            _DetailLine(
+              icon: Icons.shopping_bag_outlined,
+              label: request.errandItems!,
+              palette: palette,
+            ),
+          if (request.itemCostEstimate != null)
+            _DetailLine(
+              icon: Icons.payments_outlined,
+              label:
+                  'Items ~₱${request.itemCostEstimate!.toStringAsFixed(0)} '
+                  '(paid back on delivery)',
+              palette: palette,
+            ),
+        ] else if (request.modality.needsLocation)
           _DetailLine(
             icon: Icons.location_on_outlined,
             label: request.location,
@@ -636,7 +698,11 @@ class _JobSummaryCard extends StatelessWidget {
           ),
         _DetailLine(
           icon: Icons.info_outline,
-          label: request.status.name.toUpperCase(),
+          label:
+              request.status == ServiceRequestStatus.ongoing &&
+                  request.errandStage != null
+              ? 'ONGOING · ${request.errandStage!.label.toUpperCase()}'
+              : request.status.name.toUpperCase(),
           palette: palette,
         ),
         const SizedBox(height: 10),
@@ -662,6 +728,7 @@ class _WorkerBookingActions extends StatelessWidget {
     required this.onVerify,
     required this.onApply,
     required this.onStart,
+    required this.onAdvanceStage,
     required this.onComplete,
   });
 
@@ -669,6 +736,7 @@ class _WorkerBookingActions extends StatelessWidget {
   final AppUser worker;
   final _WorkerDetailsPalette palette;
   final bool isAssignedWorker;
+  final ValueChanged<ErrandStage> onAdvanceStage;
   final bool saving;
   final bool savingReview;
   final VoidCallback onMessage;
@@ -787,7 +855,11 @@ class _WorkerBookingActions extends StatelessWidget {
         if (request.status == ServiceRequestStatus.accepted) ...[
           const SizedBox(height: 12),
           _DetailsButton(
-            label: saving ? 'Starting...' : 'Start work',
+            label: saving
+                ? 'Starting...'
+                : request.isErrand
+                ? 'Start errand'
+                : 'Start work',
             onPressed: saving ? null : onStart,
             palette: palette,
             yellow: true,
@@ -795,14 +867,136 @@ class _WorkerBookingActions extends StatelessWidget {
         ],
         if (request.status == ServiceRequestStatus.ongoing) ...[
           const SizedBox(height: 12),
-          _DetailsButton(
-            label: saving ? 'Completing...' : 'Mark completed',
-            onPressed: saving ? null : onComplete,
-            palette: palette,
-            yellow: true,
-          ),
+          _ongoingButton(),
         ],
       ],
+    );
+  }
+}
+
+extension on _WorkerBookingActions {
+  Widget _ongoingButton() {
+    if (!request.isErrand) {
+      return _DetailsButton(
+        label: saving ? 'Completing...' : 'Mark completed',
+        onPressed: saving ? null : onComplete,
+        palette: palette,
+        yellow: true,
+      );
+    }
+    final stage = request.errandStage;
+    final next = stage?.next;
+    // Errands started before stages existed go straight to delivered.
+    if (stage == null || next == null) {
+      return _DetailsButton(
+        key: const ValueKey('errand-next-stage'),
+        label: saving ? 'Updating...' : 'Mark delivered',
+        onPressed: saving ? null : onComplete,
+        palette: palette,
+        yellow: true,
+      );
+    }
+    return _DetailsButton(
+      key: const ValueKey('errand-next-stage'),
+      label: saving
+          ? 'Updating...'
+          : switch (next) {
+              ErrandStage.pickedUp => 'Picked up items',
+              _ => 'On the way to drop-off',
+            },
+      onPressed: saving ? null : () => onAdvanceStage(stage),
+      palette: palette,
+      yellow: true,
+    );
+  }
+}
+
+class _RiderSharingBanner extends StatefulWidget {
+  const _RiderSharingBanner({
+    super.key,
+    required this.requestId,
+    required this.palette,
+  });
+
+  final String requestId;
+  final _WorkerDetailsPalette palette;
+
+  @override
+  State<_RiderSharingBanner> createState() => _RiderSharingBannerState();
+}
+
+class _RiderSharingBannerState extends State<_RiderSharingBanner>
+    with WidgetsBindingObserver {
+  late final _publisher = RiderLocationPublisher(requestId: widget.requestId);
+  DeviceLocationException? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _start();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _publisher.stop();
+    super.dispose();
+  }
+
+  // Sharing only runs while the app is in the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _start();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _publisher.stop();
+      if (mounted) setState(() {});
+    }
+  }
+
+  Future<void> _start() async {
+    try {
+      await _publisher.start();
+      if (mounted) setState(() => _error = null);
+    } on DeviceLocationException catch (error) {
+      if (mounted) setState(() => _error = error);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final error = _error;
+    return Container(
+      key: const ValueKey('rider-sharing-banner'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: error == null
+            ? _detailsYellow.withValues(alpha: 0.18)
+            : Theme.of(context).colorScheme.errorContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            error == null ? Icons.my_location : Icons.location_disabled,
+            color: widget.palette.text,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              error?.userMessage ??
+                  (_publisher.isRunning
+                      ? 'Sharing your location with the customer. Keep the app open.'
+                      : 'Starting location sharing…'),
+              style: TextStyle(color: widget.palette.text, fontSize: 13),
+            ),
+          ),
+          if (error != null)
+            TextButton(onPressed: _start, child: const Text('Retry')),
+        ],
+      ),
     );
   }
 }
@@ -1436,13 +1630,18 @@ class _JobLocationMapCard extends StatefulWidget {
     required this.locationError,
     required this.onRecoverLocation,
     required this.palette,
+    this.dropoffPosition,
+    this.dropoffAddress,
   });
 
   final _WorkerDetailsPalette palette;
 
+  /// The job site, or the pickup point for errands.
   final JobCoordinate position;
   final String address;
   final bool approximate;
+  final JobCoordinate? dropoffPosition;
+  final String? dropoffAddress;
   final JobCoordinate? workerPosition;
   final bool loadingDistance;
   final DeviceLocationException? locationError;
@@ -1485,6 +1684,7 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
   @override
   Widget build(BuildContext context) {
     final target = LatLng(widget.position.latitude, widget.position.longitude);
+    final dropoff = widget.dropoffPosition;
     final error = widget.locationError;
     final requiresSettings =
         error?.failure == DeviceLocationFailure.serviceDisabled ||
@@ -1514,6 +1714,9 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                     options: MapOptions(
                       initialCenter: target,
                       initialZoom: widget.approximate ? 13 : 16,
+                      initialCameraFit: dropoff == null
+                          ? null
+                          : errandCameraFit([widget.position, dropoff]),
                       minZoom: 3,
                       maxZoom: 18,
                       backgroundColor: Theme.of(
@@ -1525,21 +1728,28 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                         key: ValueKey(_mapReloadVersion),
                         onError: (_, error, _) => _handleMapTileError(error),
                       ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: target,
-                            width: 48,
-                            height: 48,
-                            alignment: Alignment.bottomCenter,
-                            child: SwiftServeMapPin(
-                              label: widget.approximate
-                                  ? 'Approximate job location'
-                                  : 'Exact job location',
+                      if (dropoff != null)
+                        ...errandMapLayers(
+                          pickup: widget.position,
+                          dropoff: dropoff,
+                          routeColor: _detailsInk,
+                        )
+                      else
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: target,
+                              width: 48,
+                              height: 48,
+                              alignment: Alignment.bottomCenter,
+                              child: SwiftServeMapPin(
+                                label: widget.approximate
+                                    ? 'Approximate job location'
+                                    : 'Exact job location',
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
                       const SwiftServeMapAttribution(),
                     ],
                   ),
@@ -1563,17 +1773,31 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        widget.approximate
-                            ? 'Approximate service area'
-                            : 'Exact job location',
-                        style: Theme.of(context).textTheme.titleSmall,
-                      ),
+                      child: Text(switch ((
+                        widget.approximate,
+                        dropoff != null,
+                      )) {
+                        (true, true) => 'Approximate pickup area',
+                        (false, true) => 'Pickup',
+                        (true, false) => 'Approximate service area',
+                        (false, false) => 'Exact job location',
+                      }, style: Theme.of(context).textTheme.titleSmall),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
                 Text(widget.address),
+                if (dropoff != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    widget.approximate
+                        ? 'Approximate drop-off area'
+                        : 'Drop-off',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(widget.dropoffAddress ?? ''),
+                ],
                 const SizedBox(height: 6),
                 Text(
                   _distanceLabel,
