@@ -40,7 +40,9 @@ class JobGeocodingService implements JobAddressResolver {
       placemark.administrativeArea,
       placemark.postalCode,
     ];
+    // Barangay first, so nearby pickup and drop-off areas read differently.
     final areaParts = <String?>[
+      placemark.subLocality,
       placemark.locality,
       placemark.subAdministrativeArea,
       placemark.administrativeArea,
