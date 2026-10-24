@@ -156,7 +156,9 @@ class _ClientRequestDetailsScreenState
           'requestId': widget.request.id,
           'clientId': FirebaseAuth.instance.currentUser!.uid,
           'workerId': widget.request.workerId,
+          'workerName': widget.request.workerName ?? '',
           'rating': selected,
+          'comment': '',
           'createdAt': FieldValue.serverTimestamp(),
         });
     if (mounted) {

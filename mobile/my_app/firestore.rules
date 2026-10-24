@@ -155,11 +155,22 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if self(uid);
       allow create: if false;
+      // Users edit only these fields; role, phone and verification stay with
+      // the backend. An allowlist also works for older accounts that lack
+      // fields such as verificationStatus, which an equality check cannot read.
       allow update: if self(uid)
-        && request.resource.data.role == resource.data.role
-        && request.resource.data.verificationStatus == resource.data.verificationStatus
-        && request.resource.data.phoneNumber == resource.data.phoneNumber
-        && validOptionalString(request.resource.data, 'photoBase64', 65536);
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['fullName', 'address', 'photoBase64', 'updatedAt'])
+        && (!('fullName' in request.resource.data.diff(resource.data).affectedKeys())
+          || (request.resource.data.fullName is string
+            && request.resource.data.fullName.size() > 0
+            && request.resource.data.fullName.size() <= 120))
+        && (!('address' in request.resource.data.diff(resource.data).affectedKeys())
+          || validOptionalString(request.resource.data, 'address', 300))
+        && (!('photoBase64' in request.resource.data.diff(resource.data).affectedKeys())
+          || validOptionalString(request.resource.data, 'photoBase64', 65536))
+        && (!('updatedAt' in request.resource.data.diff(resource.data).affectedKeys())
+          || request.resource.data.updatedAt == request.time);
     }
 
     match /public_profiles/{uid} {

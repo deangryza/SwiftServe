@@ -89,3 +89,30 @@ test('unrelated worker cannot rate the client', async () => {
     setDoc(doc(worker, 'client_reviews/request-1'), reviewData('worker-2')),
   );
 });
+
+// Mirrors the quick star rating in client_request_details_screen.dart.
+function workerReviewData(overrides = {}) {
+  return {
+    requestId: 'request-1',
+    clientId: 'client-1',
+    workerId: 'worker-1',
+    workerName: 'Worker One',
+    rating: 4,
+    comment: '',
+    createdAt: serverTimestamp(),
+    ...overrides,
+  };
+}
+
+test('booking client can rate the worker after completion', async () => {
+  const client = environment.authenticatedContext('client-1').firestore();
+  await assertSucceeds(
+    setDoc(doc(client, 'reviews/request-1'), workerReviewData()),
+  );
+});
+
+test('worker reviews need the worker name and comment fields', async () => {
+  const client = environment.authenticatedContext('client-1').firestore();
+  const { workerName, comment, ...incomplete } = workerReviewData();
+  await assertFails(setDoc(doc(client, 'reviews/request-1'), incomplete));
+});
