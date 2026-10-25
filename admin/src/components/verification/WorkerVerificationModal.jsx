@@ -28,6 +28,20 @@ async function openProtectedDocument(url) {
   window.open(URL.createObjectURL(blob), "_blank", "noopener");
 }
 
+const BAND_LABELS = {
+  strong: "Strong match",
+  borderline: "Borderline — review photos",
+  mismatch: "No match",
+};
+
+// Older records stored the threshold as a 0-1 distance; newer ones store a
+// 0-100 similarity.
+function formatPercent(value, digits = 0) {
+  if (value == null) return "—";
+  const number = Number(value);
+  return `${(number <= 1 ? number * 100 : number).toFixed(digits)}%`;
+}
+
 function InfoRow({ icon: Icon, label, value }) {
   return (
     <div className="flex items-start gap-2.5">
@@ -127,12 +141,22 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
           </div>
 
           <div className="space-y-6 px-4 py-5 sm:px-6">
-            {/* TODO(face-verification): temporary ID-only banner. Remove once
-                automatic face matching is re-enabled. */}
+            {request.autoVerified && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+                Auto-verified by face match ({formatPercent(request.faceMatchConfidence, 1)}).
+                You can still reject or request resubmission.
+              </div>
+            )}
+            {request.faceReviewFlag === "borderline" && (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Borderline face match — compare the ID and selfie carefully before
+                approving.
+              </div>
+            )}
             {request.faceVerificationProvider === "bypassed" && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Face check bypassed — review the government ID manually before
-                approving.
+                Submitted without a face check — review the government ID manually
+                before approving.
               </div>
             )}
             {/* Worker Information */}
@@ -166,7 +190,18 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                   ) : (
                     request.governmentIdUrl && <a href={request.governmentIdUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open government ID</a>
                   )}
-                  {request.facePhotoUrl && <a href={request.facePhotoUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open face photo</a>}
+                  {request.facePhotoUrl && request.storageBackend === "local" ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDocument(request.facePhotoUrl)}
+                      disabled={openingDocument}
+                      className="text-sm text-blue-600 underline text-left disabled:opacity-50"
+                    >
+                      {openingDocument ? "Opening…" : "Open face photo"}
+                    </button>
+                  ) : (
+                    request.facePhotoUrl && <a href={request.facePhotoUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open face photo</a>
+                  )}
                 </div>
               </section>
             )}
@@ -201,23 +236,21 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                     request.faceVerificationProvider === "bypassed"
                       ? "Bypassed — manual review"
                       : request.faceVerified
-                        ? "Passed"
+                        ? BAND_LABELS[request.faceMatchBand] ?? "Passed"
                         : "Not Verified"
                   }
                 />
                 <InfoRow
                   icon={ScanFace}
-                  label="Match Confidence"
-                  value={request.faceMatchConfidence == null
-                    ? "—"
-                    : `${Number(request.faceMatchConfidence).toFixed(2)}%`}
+                  label="Face Similarity"
+                  value={formatPercent(request.faceMatchConfidence, 2)}
                 />
                 <InfoRow
                   icon={ClipboardCheck}
-                  label="Match Threshold"
-                  value={request.faceMatchThreshold == null
-                    ? "—"
-                    : `${Number(request.faceMatchThreshold).toFixed(0)}%`}
+                  label="Thresholds"
+                  value={request.faceAutoVerifyMin == null
+                    ? `Review ≥ ${formatPercent(request.faceMatchThreshold)}`
+                    : `Auto-verify ≥ ${formatPercent(request.faceAutoVerifyMin)} · Review ≥ ${formatPercent(request.faceMatchThreshold)}`}
                 />
                 <InfoRow
                   icon={ClipboardCheck}

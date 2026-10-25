@@ -12,6 +12,7 @@ import '../models/app_user.dart';
 enum FaceVerificationFailure {
   mismatch,
   noFace,
+  multipleFaces,
   rateLimited,
   authentication,
   conflict,
@@ -21,21 +22,49 @@ enum FaceVerificationFailure {
   unknown,
 }
 
+/// Which uploaded photo a face-detection failure refers to.
+enum VerificationImage { document, selfie }
+
 class FaceVerificationException implements Exception {
-  const FaceVerificationException(this.failure, this.message);
+  const FaceVerificationException(
+    this.failure,
+    this.message, {
+    this.similarity,
+    this.image,
+  });
 
   final FaceVerificationFailure failure;
   final String message;
+
+  /// Calibrated similarity percentage, present on a face mismatch.
+  final double? similarity;
+
+  /// The photo the server could not use, present on face-detection failures.
+  final VerificationImage? image;
 
   @override
   String toString() => message;
 }
 
 class FaceVerificationResult {
-  const FaceVerificationResult({this.confidence, this.bypassed = false});
+  const FaceVerificationResult({
+    this.similarity,
+    this.confidence,
+    this.band,
+    this.status,
+  });
 
+  /// Calibrated similarity percentage (0–100).
+  final double? similarity;
   final double? confidence;
-  final bool bypassed;
+
+  /// `strong` (auto-verified) or `borderline` (sent to admin review).
+  final String? band;
+
+  /// Verification status after submission: `verified` or `pending`.
+  final String? status;
+
+  bool get isVerified => status == 'verified';
 }
 
 class VerificationRepository {
@@ -60,14 +89,11 @@ class VerificationRepository {
         : null,
   );
 
-  // TODO(face-verification): temporary ID-only mode. facePhoto is optional
-  // while the backend bypass is enabled; restore `required File facePhoto`
-  // to re-enable face matching.
   Future<FaceVerificationResult> submit({
     required String idType,
     required String idNumber,
     required File governmentId,
-    File? facePhoto,
+    required File facePhoto,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -89,24 +115,27 @@ class VerificationRepository {
         contentType: _contentType(governmentId),
       ),
     );
-    if (facePhoto != null) {
-      request.files.add(
-        await http.MultipartFile.fromPath(
-          'selfie',
-          facePhoto.path,
-          contentType: _contentType(facePhoto),
-        ),
-      );
-    }
+    request.files.add(
+      await http.MultipartFile.fromPath(
+        'selfie',
+        facePhoto.path,
+        contentType: _contentType(facePhoto),
+      ),
+    );
 
     try {
       final streamed = await _client.send(request);
       final response = await http.Response.fromStream(streamed);
       final payload = _json(response.body);
       if (response.statusCode == 201 && payload['match'] == true) {
+        final verification = payload['verification'];
         return FaceVerificationResult(
-          confidence: (payload['confidence'] as num?)?.toDouble(),
-          bypassed: payload['bypassed'] == true,
+          similarity: _number(payload['similarity'] ?? payload['confidence']),
+          confidence: _number(payload['confidence'] ?? payload['similarity']),
+          band: payload['band']?.toString(),
+          status: verification is Map
+              ? verification['status']?.toString()
+              : null,
         );
       }
       final code = payload['code']?.toString();
@@ -114,6 +143,12 @@ class VerificationRepository {
       throw FaceVerificationException(
         _failureFor(response.statusCode, code),
         message ?? _defaultMessage(response.statusCode, code),
+        similarity: _number(payload['similarity'] ?? payload['confidence']),
+        image: switch (payload['image']) {
+          'document' => VerificationImage.document,
+          'selfie' => VerificationImage.selfie,
+          _ => null,
+        },
       );
     } on FaceVerificationException {
       rethrow;
@@ -139,6 +174,8 @@ class VerificationRepository {
     }
   }
 
+  double? _number(Object? value) => value is num ? value.toDouble() : null;
+
   MediaType _contentType(File file) => file.path.toLowerCase().endsWith('.png')
       ? MediaType('image', 'png')
       : MediaType('image', 'jpeg');
@@ -146,6 +183,9 @@ class VerificationRepository {
   FaceVerificationFailure _failureFor(int status, String? code) {
     if (code == 'FACE_MISMATCH') return FaceVerificationFailure.mismatch;
     if (code == 'FACE_NOT_DETECTED') return FaceVerificationFailure.noFace;
+    if (code == 'MULTIPLE_FACES_DETECTED') {
+      return FaceVerificationFailure.multipleFaces;
+    }
     if (status == 401 || status == 403) {
       return FaceVerificationFailure.authentication;
     }
