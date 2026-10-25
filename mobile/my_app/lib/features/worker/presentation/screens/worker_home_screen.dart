@@ -7,10 +7,13 @@ import '../../../../shared/widgets/notification_swipe_actions.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
+import '../../../../shared/services/device_location_service.dart';
+import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../../../../shared/screens/reviews_screen.dart';
@@ -224,6 +227,19 @@ List<ServiceRequest> filterWorkerDashboardRequests({
       : eligible;
 }
 
+bool matchesWorkerDashboardSearch(ServiceRequest request, String query) {
+  final normalized = query.trim().toLowerCase();
+  if (normalized.isEmpty) return true;
+  return [
+    request.title,
+    request.category,
+    request.clientName,
+    request.description,
+    request.location,
+    request.modality.label,
+  ].any((value) => value.toLowerCase().contains(normalized));
+}
+
 class _WorkerDashboard extends StatefulWidget {
   const _WorkerDashboard({
     required this.worker,
@@ -238,7 +254,58 @@ class _WorkerDashboard extends StatefulWidget {
 }
 
 class _WorkerDashboardState extends State<_WorkerDashboard> {
+  static const _locationService = DeviceLocationService();
   var _filter = WorkerDashboardRequestFilter.recent;
+  JobCoordinate? _workerPosition;
+  DeviceLocationException? _locationError;
+  bool _loadingLocation = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocation();
+  }
+
+  Future<void> _loadLocation() async {
+    setState(() {
+      _loadingLocation = true;
+      _locationError = null;
+    });
+    try {
+      final position = await _locationService.currentPosition();
+      if (!mounted) return;
+      setState(() => _workerPosition = position);
+    } on DeviceLocationException catch (error) {
+      if (!mounted) return;
+      setState(() => _locationError = error);
+    } finally {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
+  }
+
+  Future<void> _openLocationSettings() async {
+    final error = _locationError;
+    if (error == null) return;
+    await _locationService.openRecoverySettings(error.failure);
+  }
+
+  String? _distanceLabel(ServiceRequest request) {
+    // Online jobs have no place to measure distance to.
+    if (!request.modality.needsLocation) return null;
+    final jobPosition = request.areaPosition;
+    if (jobPosition == null) return 'Distance unavailable';
+    if (_loadingLocation) return 'Finding distance…';
+    final workerPosition = _workerPosition;
+    if (workerPosition == null) return 'Distance unavailable';
+    final toJob = formatDistance(
+      distanceMetersBetween(workerPosition, jobPosition),
+      approximate: true,
+    );
+    // For errands, the job position is the pickup.
+    final tripKm = request.distanceKm;
+    if (!request.isErrand || tripKm == null) return toJob;
+    return '$toJob to pickup · ${tripKm.toStringAsFixed(1)} km trip';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -304,6 +371,17 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
                                 _openVerification(context, widget.worker),
                           ),
                         ],
+                        if (_locationError != null &&
+                            requests.any(
+                              (request) => request.areaPosition != null,
+                            )) ...[
+                          const SizedBox(height: 14),
+                          _LocationStatusBanner(
+                            error: _locationError!,
+                            onRetry: _loadLocation,
+                            onOpenSettings: _openLocationSettings,
+                          ),
+                        ],
                         const SizedBox(height: 20),
                         Row(
                           children: [
@@ -350,6 +428,7 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
                           for (final request in requests) ...[
                             _WorkerRequestCard(
                               request: request,
+                              distanceLabel: _distanceLabel(request),
                               onTap: () =>
                                   _openJob(context, request, widget.worker),
                             ),
@@ -611,11 +690,79 @@ class _WorkerRequestFilter extends StatelessWidget {
   }
 }
 
+class _LocationStatusBanner extends StatelessWidget {
+  const _LocationStatusBanner({
+    required this.error,
+    required this.onRetry,
+    required this.onOpenSettings,
+  });
+
+  final DeviceLocationException error;
+  final VoidCallback onRetry;
+  final VoidCallback onOpenSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _WorkerPalette.of(context);
+    final requiresSettings =
+        error.failure == DeviceLocationFailure.serviceDisabled ||
+        error.failure == DeviceLocationFailure.permissionPermanentlyDenied;
+    return Material(
+      color: palette.softSurface,
+      borderRadius: BorderRadius.circular(18),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 4),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 2),
+              child: Icon(Icons.location_off_outlined, color: AppTheme.ink),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Distance unavailable',
+                    style: TextStyle(
+                      color: palette.text,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    error.userMessage,
+                    style: TextStyle(color: palette.muted, fontSize: 12),
+                  ),
+                  TextButton(
+                    onPressed: requiresSettings ? onOpenSettings : onRetry,
+                    child: Text(
+                      requiresSettings ? 'Open settings' : 'Try again',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _WorkerRequestCard extends StatelessWidget {
-  const _WorkerRequestCard({required this.request, required this.onTap});
+  const _WorkerRequestCard({
+    required this.request,
+    required this.onTap,
+    this.distanceLabel,
+  });
 
   final ServiceRequest request;
   final VoidCallback onTap;
+  final String? distanceLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -669,11 +816,18 @@ class _WorkerRequestCard extends StatelessWidget {
                       style: TextStyle(color: palette.muted, fontSize: 13),
                     ),
                     Text(
-                      '${request.location} · ₱${request.budget.toStringAsFixed(0)}',
+                      '${request.placeLabel} · ₱${request.budget.toStringAsFixed(0)}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: palette.muted, fontSize: 13),
                     ),
+                    if (distanceLabel != null)
+                      Text(
+                        distanceLabel!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: palette.muted, fontSize: 12),
+                      ),
                   ],
                 ),
               ),
@@ -1141,7 +1295,7 @@ class _WorkerBookingCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${request.location.isEmpty ? 'Location unavailable' : request.location}'
+                        '${request.location.isEmpty ? 'Location unavailable' : request.placeLabel}'
                         '${date == null ? '' : ' · ${_formatBookingDate(date)}'}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

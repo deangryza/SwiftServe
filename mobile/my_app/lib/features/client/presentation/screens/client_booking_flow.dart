@@ -13,6 +13,7 @@ import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../widgets/conversation_ui.dart';
+import '../widgets/errand_tracking_map.dart';
 import 'client_sections.dart';
 
 const _bookingYellow = AppTheme.yellow;
@@ -1236,6 +1237,15 @@ class _BookingDetailsBody extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 _RequestSummaryCard(request: request, palette: palette),
+                if (request.isErrand &&
+                    (request.status == ServiceRequestStatus.accepted ||
+                        request.status == ServiceRequestStatus.ongoing)) ...[
+                  const SizedBox(height: 18),
+                  ErrandTrackingMap(
+                    key: ValueKey('errand-tracking-${request.id}'),
+                    request: request,
+                  ),
+                ],
                 const SizedBox(height: 22),
                 FilledButton.icon(
                   key: const ValueKey('view-worker-profile'),
@@ -1777,10 +1787,18 @@ class _RequestSummaryCard extends StatelessWidget {
           palette: palette,
         ),
         _DetailLine(
-          icon: Icons.location_on_outlined,
-          label: request.location,
+          icon: request.isErrand
+              ? Icons.delivery_dining_outlined
+              : Icons.location_on_outlined,
+          label: request.isErrand ? request.placeLabel : request.location,
           palette: palette,
         ),
+        if (request.errandItems?.isNotEmpty ?? false)
+          _DetailLine(
+            icon: Icons.shopping_bag_outlined,
+            label: request.errandItems!,
+            palette: palette,
+          ),
         _DetailLine(
           icon: Icons.info_outline,
           label: bookingStatusLabel(request.status),

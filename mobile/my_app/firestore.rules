@@ -62,8 +62,11 @@ service cloud.firestore {
         && data.keys().hasOnly([
           'clientId', 'clientName', 'title', 'category', 'budget', 'schedule',
           'scheduleFrom', 'scheduleTo', 'location', 'description', 'status',
-          'createdAt', 'workerId', 'workerName', 'acceptedAt', 'cancelledAt',
-          'ongoingAt', 'completedAt'
+          'areaPosition', 'createdAt', 'workerId', 'workerName', 'acceptedAt',
+          'cancelledAt', 'ongoingAt', 'completedAt', 'modality',
+          'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
+          'itemCostEstimate', 'distanceKm', 'errandStage', 'pickedUpAt',
+          'deliveringAt'
         ])
         && data.clientId is string
         && data.clientId.size() > 0
@@ -88,6 +91,22 @@ service cloud.firestore {
         && data.location is string
         && data.location.size() > 0
         && data.location.size() <= 300
+        && (!('areaPosition' in data) || data.areaPosition is latlng)
+        && (!('modality' in data)
+          || data.modality in ['onsite', 'online', 'hybrid', 'errand'])
+        && validOptionalString(data, 'dropoffLocation', 300)
+        && (!('dropoffAreaPosition' in data) || data.dropoffAreaPosition is latlng)
+        && validOptionalString(data, 'errandItems', 500)
+        && (!('itemCostEstimate' in data)
+          || (data.itemCostEstimate is number
+            && data.itemCostEstimate > 0
+            && data.itemCostEstimate <= 10000000))
+        && (!('distanceKm' in data)
+          || (data.distanceKm is number
+            && data.distanceKm >= 0
+            && data.distanceKm <= 1000))
+        && (!('errandStage' in data)
+          || data.errandStage in ['headingToPickup', 'pickedUp', 'delivering'])
         && data.description is string
         && data.description.size() > 0
         && data.description.size() <= 5000
@@ -95,6 +114,31 @@ service cloud.firestore {
         && data.createdAt is timestamp
         && validOptionalString(data, 'workerId', 128)
         && validOptionalString(data, 'workerName', 120);
+    }
+    function validExactLocation(data) {
+      return data.keys().hasAll(['position', 'address', 'createdAt'])
+        && data.keys().hasOnly([
+          'position', 'address', 'dropoffPosition', 'dropoffAddress',
+          'createdAt'
+        ])
+        && data.position is latlng
+        && data.address is string
+        && data.address.size() > 0
+        && data.address.size() <= 300
+        && (!('dropoffPosition' in data) || data.dropoffPosition is latlng)
+        && (!('dropoffAddress' in data)
+          || (data.dropoffAddress is string
+            && data.dropoffAddress.size() > 0
+            && data.dropoffAddress.size() <= 300))
+        && data.createdAt is timestamp;
+    }
+    function validRiderLocation(data) {
+      return data.keys().hasAll(['position', 'updatedAt'])
+        && data.keys().hasOnly(['position', 'heading', 'speed', 'updatedAt'])
+        && data.position is latlng
+        && (!('heading' in data) || data.heading is number)
+        && (!('speed' in data) || data.speed is number)
+        && data.updatedAt == request.time;
     }
     function validApplication(data) {
       return data.keys().hasAll([
@@ -281,7 +325,8 @@ service cloud.firestore {
     }
 
     match /service_categories/{categoryId} {
-      allow read: if signedIn();
+      // Public so the registration form can list categories before sign-in.
+      allow read: if true;
       // Category management is restricted to the authenticated admin backend.
       allow create, update, delete: if false;
     }
@@ -292,7 +337,40 @@ service cloud.firestore {
         && validServiceRequest(request.resource.data)
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.status == 'pending'
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.createdAt == request.time
+        // Online jobs carry no map pin; on-site and hybrid jobs need both the
+        // public area and the private exact location.
+        && (
+          (
+            request.resource.data.get('modality', 'onsite') == 'online'
+            && !('areaPosition' in request.resource.data)
+            && !existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          ) || (
+            request.resource.data.get('modality', 'onsite') != 'online'
+            && request.resource.data.areaPosition is latlng
+            && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          )
+        )
+        && !('errandStage' in request.resource.data)
+        // Errands also need a drop-off, publicly as an area and privately as
+        // the exact point. Other work types never carry errand fields.
+        && (
+          (
+            request.resource.data.get('modality', 'onsite') == 'errand'
+            && request.resource.data.dropoffAreaPosition is latlng
+            && request.resource.data.dropoffLocation is string
+            && request.resource.data.errandItems is string
+            && request.resource.data.errandItems.size() > 0
+            && request.resource.data.distanceKm is number
+            && getAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location).data.dropoffPosition is latlng
+          ) || (
+            request.resource.data.get('modality', 'onsite') != 'errand'
+            && !request.resource.data.keys().hasAny([
+              'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
+              'itemCostEstimate', 'distanceKm'
+            ])
+          )
+        );
       allow update: if validServiceRequest(request.resource.data) && (
         (
           self(resource.data.clientId)
@@ -319,14 +397,48 @@ service cloud.firestore {
               resource.data.status == 'accepted'
               && request.resource.data.status == 'ongoing'
               && request.resource.data.ongoingAt == request.time
-              && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['status', 'ongoingAt'])
+              && (
+                (
+                  resource.data.get('modality', 'onsite') != 'errand'
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['status', 'ongoingAt'])
+                ) || (
+                  // Starting an errand puts the rider on the way to pickup.
+                  resource.data.get('modality', 'onsite') == 'errand'
+                  && request.resource.data.errandStage == 'headingToPickup'
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['status', 'ongoingAt', 'errandStage'])
+                )
+              )
             ) || (
               resource.data.status == 'ongoing'
               && request.resource.data.status == 'completed'
               && request.resource.data.completedAt == request.time
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly(['status', 'completedAt'])
+              // An errand is delivered only after the rider is on the way.
+              // Errands started before stages existed have no stage.
+              && resource.data.get('errandStage', 'delivering') == 'delivering'
+            ) || (
+              // Errand stages only move forward, one step at a time.
+              resource.data.status == 'ongoing'
+              && request.resource.data.status == 'ongoing'
+              && resource.data.get('modality', 'onsite') == 'errand'
+              && (
+                (
+                  resource.data.get('errandStage', '') == 'headingToPickup'
+                  && request.resource.data.errandStage == 'pickedUp'
+                  && request.resource.data.pickedUpAt == request.time
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['errandStage', 'pickedUpAt'])
+                ) || (
+                  resource.data.get('errandStage', '') == 'pickedUp'
+                  && request.resource.data.errandStage == 'delivering'
+                  && request.resource.data.deliveringAt == request.time
+                  && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasOnly(['errandStage', 'deliveringAt'])
+                )
+              )
             )
           )
         )
@@ -368,6 +480,35 @@ service cloud.firestore {
               && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.workerId != workerId
             )
           );
+        allow delete: if false;
+      }
+
+      match /private/{privateDocumentId} {
+        function parent() {
+          return get(/databases/$(database)/documents/service_requests/$(requestId)).data;
+        }
+        allow read: if privateDocumentId in ['location', 'rider_location']
+          && signedIn()
+          && (
+            parent().clientId == request.auth.uid
+            || (
+              parent().workerId == request.auth.uid
+              && parent().status in ['accepted', 'ongoing', 'completed']
+            )
+          );
+        allow create: if privateDocumentId == 'location'
+          && signedIn()
+          && validExactLocation(request.resource.data)
+          && request.resource.data.createdAt == request.time
+          && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid;
+        // Only the assigned rider writes their live position, and only while
+        // the errand is underway.
+        allow create, update: if privateDocumentId == 'rider_location'
+          && signedIn()
+          && parent().get('modality', 'onsite') == 'errand'
+          && parent().workerId == request.auth.uid
+          && parent().status == 'ongoing'
+          && validRiderLocation(request.resource.data);
         allow delete: if false;
       }
     }

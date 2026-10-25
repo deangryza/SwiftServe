@@ -8,6 +8,7 @@ import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../widgets/errand_tracking_map.dart';
 import 'client_sections.dart';
 
 class ClientRequestDetailsScreen extends StatefulWidget {
@@ -202,13 +203,58 @@ class _ClientRequestDetailsScreenState
             subtitle: const Text('Requested date range'),
           ),
           ListTile(
-            leading: const Icon(Icons.location_on_outlined),
-            title: Text(request.location),
+            leading: Icon(
+              request.modality.needsLocation
+                  ? Icons.work_outline
+                  : Icons.laptop_mac_outlined,
+            ),
+            title: Text(request.modality.label),
+            subtitle: const Text('Work type'),
           ),
+          if (request.isErrand) ...[
+            ListTile(
+              leading: const Icon(Icons.storefront_outlined),
+              title: Text(request.location),
+              subtitle: const Text('Pickup'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: Text(request.dropoffLocation ?? 'Not set'),
+              subtitle: const Text('Drop-off'),
+            ),
+            if (request.errandItems?.isNotEmpty ?? false)
+              ListTile(
+                leading: const Icon(Icons.shopping_bag_outlined),
+                title: Text(request.errandItems!),
+                subtitle: request.itemCostEstimate == null
+                    ? null
+                    : Text(
+                        'Items ~₱${request.itemCostEstimate!.toStringAsFixed(0)}, '
+                        'paid back to the rider',
+                      ),
+              ),
+          ] else if (request.modality.needsLocation)
+            ListTile(
+              leading: const Icon(Icons.location_on_outlined),
+              title: Text(request.location),
+            ),
           ListTile(
             leading: const Icon(Icons.payments_outlined),
             title: Text('₱${request.budget.toStringAsFixed(0)}'),
+            subtitle: request.isErrand
+                ? Text(
+                    'Delivery fee'
+                    '${request.distanceKm == null ? '' : ' · ~${request.distanceKm!.toStringAsFixed(1)} km'}',
+                  )
+                : null,
           ),
+          if (request.isErrand &&
+              (request.status == ServiceRequestStatus.accepted ||
+                  request.status == ServiceRequestStatus.ongoing))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ErrandTrackingMap(request: request),
+            ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Text(request.description),

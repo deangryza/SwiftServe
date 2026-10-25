@@ -1,19 +1,114 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../models/app_user.dart';
+import '../models/job_location.dart';
+import '../models/rider_location.dart';
 import '../models/service_application.dart';
 import '../models/service_request.dart';
+import '../utils/job_location_utils.dart';
 
 String conversationIdFor({
   required String clientId,
   required String workerId,
 }) => '${clientId}_$workerId';
 
+/// The extra details a client gives when posting an errand.
+class ErrandDetails {
+  const ErrandDetails({
+    required this.dropoff,
+    required this.items,
+    required this.distanceKm,
+    this.itemCostEstimate,
+  });
+
+  final JobLocationSelection dropoff;
+  final String items;
+  final double distanceKm;
+  final double? itemCostEstimate;
+}
+
 class ServiceRequestRepository {
   ServiceRequestRepository({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+
+  Future<void> createRequest({
+    required String clientId,
+    required String clientName,
+    required String title,
+    required String category,
+    required double budget,
+    required DateTime scheduleFrom,
+    required DateTime scheduleTo,
+    required String description,
+    required JobModality modality,
+    JobLocationSelection? location,
+    ErrandDetails? errand,
+  }) async {
+    if (modality.needsLocation && location == null) {
+      throw ArgumentError.notNull('location');
+    }
+    if (modality == JobModality.errand && errand == null) {
+      throw ArgumentError.notNull('errand');
+    }
+    final errandDetails = modality == JobModality.errand ? errand : null;
+    // Online jobs have no physical place, so no pin is stored for them.
+    final pinned = modality.needsLocation ? location : null;
+    final requestRef = _firestore.collection('service_requests').doc();
+    final batch = _firestore.batch();
+
+    batch.set(requestRef, {
+      'clientId': clientId,
+      'clientName': clientName,
+      'title': title,
+      'category': category,
+      'budget': budget,
+      'schedule': Timestamp.fromDate(scheduleFrom),
+      'scheduleFrom': Timestamp.fromDate(scheduleFrom),
+      'scheduleTo': Timestamp.fromDate(scheduleTo),
+      'modality': modality.name,
+      'location': pinned?.areaLabel ?? JobModality.online.label,
+      if (pinned != null)
+        'areaPosition': roundToPublicArea(pinned.position).toGeoPoint(),
+      if (errandDetails != null) ...{
+        'dropoffLocation': errandDetails.dropoff.areaLabel,
+        'dropoffAreaPosition': roundToPublicArea(
+          errandDetails.dropoff.position,
+        ).toGeoPoint(),
+        'errandItems': errandDetails.items,
+        'distanceKm': errandDetails.distanceKm,
+        if (errandDetails.itemCostEstimate != null)
+          'itemCostEstimate': errandDetails.itemCostEstimate,
+      },
+      'description': description,
+      'status': ServiceRequestStatus.pending.name,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    if (pinned != null) {
+      batch.set(requestRef.collection('private').doc('location'), {
+        'position': pinned.position.toGeoPoint(),
+        'address': pinned.exactAddress,
+        if (errandDetails != null) ...{
+          'dropoffPosition': errandDetails.dropoff.position.toGeoPoint(),
+          'dropoffAddress': errandDetails.dropoff.exactAddress,
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
+  }
+
+  Future<ExactJobLocation?> getExactLocation(String requestId) async {
+    final document = await _firestore
+        .collection('service_requests')
+        .doc(requestId)
+        .collection('private')
+        .doc('location')
+        .get();
+    final data = document.data();
+    return data == null ? null : ExactJobLocation.fromMap(data);
+  }
 
   Stream<List<ServiceRequest>> watchAvailable() => _firestore
       .collection('service_requests')
@@ -281,7 +376,71 @@ class ServiceRequestRepository {
       transaction.update(reference, {
         'status': to.name,
         '${to.name}At': FieldValue.serverTimestamp(),
+        // Starting an errand means the rider is on the way to the pickup.
+        if (data['modality'] == JobModality.errand.name &&
+            to == ServiceRequestStatus.ongoing)
+          'errandStage': ErrandStage.headingToPickup.name,
       });
     });
   }
+
+  /// Moves an ongoing errand one stage forward.
+  Future<void> advanceErrandStage({
+    required String requestId,
+    required ErrandStage from,
+    required String workerId,
+  }) async {
+    final to = from.next;
+    if (to == null) {
+      throw StateError('Mark the errand as delivered instead.');
+    }
+    final reference = _firestore.collection('service_requests').doc(requestId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reference);
+      final data = snapshot.data();
+      if (data == null ||
+          data['workerId'] != workerId ||
+          data['status'] != ServiceRequestStatus.ongoing.name ||
+          data['errandStage'] != from.name) {
+        throw StateError('The errand changed before this action completed.');
+      }
+      transaction.update(reference, {
+        'errandStage': to.name,
+        '${to.name}At': FieldValue.serverTimestamp(),
+      });
+    });
+  }
+
+  DocumentReference<Map<String, dynamic>> _riderLocationRef(String requestId) =>
+      _firestore
+          .collection('service_requests')
+          .doc(requestId)
+          .collection('private')
+          .doc('rider_location');
+
+  Future<void> publishRiderLocation({
+    required String requestId,
+    required JobCoordinate position,
+    double? heading,
+    double? speed,
+  }) => _riderLocationRef(requestId).set({
+    'position': position.toGeoPoint(),
+    'heading': ?heading,
+    'speed': ?speed,
+    'updatedAt': FieldValue.serverTimestamp(),
+  });
+
+  Stream<RiderLocation?> watchRiderLocation(String requestId) =>
+      _riderLocationRef(
+        requestId,
+      ).snapshots().map((document) => RiderLocation.fromMap(document.data()));
+
+  Stream<ServiceRequest?> watchRequest(String requestId) => _firestore
+      .collection('service_requests')
+      .doc(requestId)
+      .snapshots()
+      .map(
+        (document) =>
+            document.exists ? ServiceRequest.fromDocument(document) : null,
+      );
 }
