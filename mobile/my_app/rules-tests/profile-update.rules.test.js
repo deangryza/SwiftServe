@@ -148,6 +148,39 @@ test('a worker can edit their profile', async () => {
   );
 });
 
+test('a profile whose public profile has extra older fields can be edited', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'public_profiles/worker-1'), {
+      uid: 'worker-1',
+      role: 'worker',
+      fullName: 'Worker One',
+      photoBase64: '',
+      location: 'Malolos Bulacan',
+      createdAt: new Date('2026-10-01T00:00:00Z'),
+      updatedAt: new Date('2026-10-01T00:00:00Z'),
+    });
+  });
+  const db = environment.authenticatedContext('worker-1').firestore();
+  await assertSucceeds(
+    saveProfile(db, 'worker-1', 'worker', {
+      fullName: 'Worker One',
+      address: 'Malolos Bulacan',
+    }),
+  );
+  await assertSucceeds(
+    savePhoto(db, 'worker-1', 'worker', 'Worker One', 'photo'),
+  );
+  // Older fields are tolerated, not editable, and nothing new can be added.
+  for (const change of [{ location: 'Elsewhere' }, { email: 'a@b.c' }]) {
+    await assertFails(
+      updateDoc(doc(db, 'public_profiles/worker-1'), {
+        ...change,
+        updatedAt: serverTimestamp(),
+      }),
+    );
+  }
+});
+
 test('users cannot change protected profile fields', async () => {
   const client = environment.authenticatedContext('client-1').firestore();
   for (const change of [
