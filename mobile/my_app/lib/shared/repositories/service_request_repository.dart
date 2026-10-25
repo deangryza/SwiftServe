@@ -27,6 +27,84 @@ class ErrandDetails {
   final double? itemCostEstimate;
 }
 
+/// The client-editable part of a post, shared by create and update so the
+/// two write the same fields.
+class _PostDetails {
+  _PostDetails({
+    required this.title,
+    required this.category,
+    required this.budget,
+    required this.scheduleFrom,
+    required this.scheduleTo,
+    required this.description,
+    required this.modality,
+    JobLocationSelection? location,
+    ErrandDetails? errand,
+  }) : // Online jobs have no physical place, so no pin is stored for them.
+       pinned = modality.needsLocation ? location : null,
+       errand = modality == JobModality.errand ? errand : null {
+    if (modality.needsLocation && location == null) {
+      throw ArgumentError.notNull('location');
+    }
+    if (modality == JobModality.errand && errand == null) {
+      throw ArgumentError.notNull('errand');
+    }
+  }
+
+  final String title;
+  final String category;
+  final double budget;
+  final DateTime scheduleFrom;
+  final DateTime scheduleTo;
+  final String description;
+  final JobModality modality;
+  final JobLocationSelection? pinned;
+  final ErrandDetails? errand;
+
+  Map<String, dynamic> publicFields() {
+    final pinned = this.pinned;
+    final errand = this.errand;
+    return {
+      'title': title,
+      'category': category,
+      'budget': budget,
+      'schedule': Timestamp.fromDate(scheduleFrom),
+      'scheduleFrom': Timestamp.fromDate(scheduleFrom),
+      'scheduleTo': Timestamp.fromDate(scheduleTo),
+      'modality': modality.name,
+      'location': pinned?.areaLabel ?? JobModality.online.label,
+      if (pinned != null)
+        'areaPosition': roundToPublicArea(pinned.position).toGeoPoint(),
+      if (errand != null) ...{
+        'dropoffLocation': errand.dropoff.areaLabel,
+        'dropoffAreaPosition': roundToPublicArea(
+          errand.dropoff.position,
+        ).toGeoPoint(),
+        'errandItems': errand.items,
+        'distanceKm': errand.distanceKm,
+        if (errand.itemCostEstimate != null)
+          'itemCostEstimate': errand.itemCostEstimate,
+      },
+      'description': description,
+    };
+  }
+
+  Map<String, dynamic>? privateLocation() {
+    final pinned = this.pinned;
+    final errand = this.errand;
+    if (pinned == null) return null;
+    return {
+      'position': pinned.position.toGeoPoint(),
+      'address': pinned.exactAddress,
+      if (errand != null) ...{
+        'dropoffPosition': errand.dropoff.position.toGeoPoint(),
+        'dropoffAddress': errand.dropoff.exactAddress,
+      },
+      'createdAt': FieldValue.serverTimestamp(),
+    };
+  }
+}
+
 class ServiceRequestRepository {
   ServiceRequestRepository({FirebaseFirestore? firestore})
     : _firestore = firestore ?? FirebaseFirestore.instance;
@@ -46,58 +124,95 @@ class ServiceRequestRepository {
     JobLocationSelection? location,
     ErrandDetails? errand,
   }) async {
-    if (modality.needsLocation && location == null) {
-      throw ArgumentError.notNull('location');
-    }
-    if (modality == JobModality.errand && errand == null) {
-      throw ArgumentError.notNull('errand');
-    }
-    final errandDetails = modality == JobModality.errand ? errand : null;
-    // Online jobs have no physical place, so no pin is stored for them.
-    final pinned = modality.needsLocation ? location : null;
+    final details = _PostDetails(
+      title: title,
+      category: category,
+      budget: budget,
+      scheduleFrom: scheduleFrom,
+      scheduleTo: scheduleTo,
+      description: description,
+      modality: modality,
+      location: location,
+      errand: errand,
+    );
     final requestRef = _firestore.collection('service_requests').doc();
     final batch = _firestore.batch();
 
     batch.set(requestRef, {
       'clientId': clientId,
       'clientName': clientName,
-      'title': title,
-      'category': category,
-      'budget': budget,
-      'schedule': Timestamp.fromDate(scheduleFrom),
-      'scheduleFrom': Timestamp.fromDate(scheduleFrom),
-      'scheduleTo': Timestamp.fromDate(scheduleTo),
-      'modality': modality.name,
-      'location': pinned?.areaLabel ?? JobModality.online.label,
-      if (pinned != null)
-        'areaPosition': roundToPublicArea(pinned.position).toGeoPoint(),
-      if (errandDetails != null) ...{
-        'dropoffLocation': errandDetails.dropoff.areaLabel,
-        'dropoffAreaPosition': roundToPublicArea(
-          errandDetails.dropoff.position,
-        ).toGeoPoint(),
-        'errandItems': errandDetails.items,
-        'distanceKm': errandDetails.distanceKm,
-        if (errandDetails.itemCostEstimate != null)
-          'itemCostEstimate': errandDetails.itemCostEstimate,
-      },
-      'description': description,
+      ...details.publicFields(),
       'status': ServiceRequestStatus.pending.name,
       'createdAt': FieldValue.serverTimestamp(),
     });
-    if (pinned != null) {
-      batch.set(requestRef.collection('private').doc('location'), {
-        'position': pinned.position.toGeoPoint(),
-        'address': pinned.exactAddress,
-        if (errandDetails != null) ...{
-          'dropoffPosition': errandDetails.dropoff.position.toGeoPoint(),
-          'dropoffAddress': errandDetails.dropoff.exactAddress,
-        },
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+    final privateLocation = details.privateLocation();
+    if (privateLocation != null) {
+      batch.set(
+        requestRef.collection('private').doc('location'),
+        privateLocation,
+      );
     }
     await batch.commit();
   }
+
+  /// Edits a posted job. Only allowed while no worker has been hired.
+  Future<void> updateRequest({
+    required String requestId,
+    required String title,
+    required String category,
+    required double budget,
+    required DateTime scheduleFrom,
+    required DateTime scheduleTo,
+    required String description,
+    required JobModality modality,
+    JobLocationSelection? location,
+    ErrandDetails? errand,
+  }) async {
+    final details = _PostDetails(
+      title: title,
+      category: category,
+      budget: budget,
+      scheduleFrom: scheduleFrom,
+      scheduleTo: scheduleTo,
+      description: description,
+      modality: modality,
+      location: location,
+      errand: errand,
+    );
+    final requestRef = _firestore.collection('service_requests').doc(requestId);
+    final latest = await requestRef.get();
+    if (latest.data()?['status'] != ServiceRequestStatus.pending.name) {
+      throw StateError(
+        'A worker has already been hired; this post can no longer be edited.',
+      );
+    }
+    final publicFields = details.publicFields();
+    final batch = _firestore.batch();
+    batch.update(requestRef, {
+      // Clear fields the new work type no longer uses.
+      for (final field in _placementFields)
+        if (!publicFields.containsKey(field)) field: FieldValue.delete(),
+      ...publicFields,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    final locationRef = requestRef.collection('private').doc('location');
+    final privateLocation = details.privateLocation();
+    if (privateLocation != null) {
+      batch.set(locationRef, privateLocation);
+    } else {
+      batch.delete(locationRef);
+    }
+    await batch.commit();
+  }
+
+  static const _placementFields = [
+    'areaPosition',
+    'dropoffLocation',
+    'dropoffAreaPosition',
+    'errandItems',
+    'distanceKm',
+    'itemCostEstimate',
+  ];
 
   Future<ExactJobLocation?> getExactLocation(String requestId) async {
     final document = await _firestore
@@ -109,6 +224,17 @@ class ServiceRequestRepository {
     final data = document.data();
     return data == null ? null : ExactJobLocation.fromMap(data);
   }
+
+  Stream<ExactJobLocation?> watchExactLocation(String requestId) => _firestore
+      .collection('service_requests')
+      .doc(requestId)
+      .collection('private')
+      .doc('location')
+      .snapshots()
+      .map((document) {
+        final data = document.data();
+        return data == null ? null : ExactJobLocation.fromMap(data);
+      });
 
   Stream<List<ServiceRequest>> watchAvailable() => _firestore
       .collection('service_requests')

@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../models/job_location.dart';
 import '../utils/job_location_utils.dart';
+import '../services/road_route_service.dart';
 import 'open_street_map_layers.dart';
 
 const Color errandPickupColor = Color(0xFF7A5200);
@@ -43,6 +44,7 @@ List<Widget> errandMapLayers({
   JobCoordinate? rider,
   required Color routeColor,
   bool approximate = false,
+  RoadRouteService? routeService,
 }) => approximate
     ? [
         CircleLayer(
@@ -69,15 +71,11 @@ List<Widget> errandMapLayers({
         ),
       ]
     : [
-        PolylineLayer(
-          polylines: [
-            Polyline(
-              points: [_latLng(pickup), _latLng(dropoff)],
-              color: routeColor,
-              strokeWidth: 4,
-              pattern: StrokePattern.dashed(segments: const [10, 8]),
-            ),
-          ],
+        ErrandRouteLayer(
+          pickup: pickup,
+          dropoff: dropoff,
+          color: routeColor,
+          service: routeService,
         ),
         MarkerLayer(
           markers: [
@@ -104,6 +102,99 @@ List<Widget> errandMapLayers({
           ],
         ),
       ];
+
+/// The pickup → drop-off line. Follows the real roads once the route is
+/// known, and is a dashed straight line until then or when routing fails.
+class ErrandRouteLayer extends StatefulWidget {
+  const ErrandRouteLayer({
+    super.key,
+    required this.pickup,
+    required this.dropoff,
+    required this.color,
+    this.service,
+  });
+
+  final JobCoordinate pickup;
+  final JobCoordinate dropoff;
+  final Color color;
+  final RoadRouteService? service;
+
+  @override
+  State<ErrandRouteLayer> createState() => _ErrandRouteLayerState();
+}
+
+class _ErrandRouteLayerState extends State<ErrandRouteLayer> {
+  RoadRoute? _route;
+  int _version = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(ErrandRouteLayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    bool moved(JobCoordinate before, JobCoordinate after) =>
+        before.latitude != after.latitude ||
+        before.longitude != after.longitude;
+    // Maps rebuild on every rider update, so compare by value.
+    if (moved(oldWidget.pickup, widget.pickup) ||
+        moved(oldWidget.dropoff, widget.dropoff)) {
+      _route = null;
+      _load();
+    }
+  }
+
+  Future<void> _load() async {
+    final version = ++_version;
+    final route = await (widget.service ?? RoadRouteService.instance).fetch(
+      widget.pickup,
+      widget.dropoff,
+    );
+    if (!mounted || version != _version) return;
+    setState(() => _route = route);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final route = _route;
+    if (route == null) {
+      return PolylineLayer(
+        polylines: [
+          Polyline(
+            points: [_latLng(widget.pickup), _latLng(widget.dropoff)],
+            color: widget.color,
+            strokeWidth: 4,
+            pattern: StrokePattern.dashed(segments: const [10, 8]),
+          ),
+        ],
+      );
+    }
+    final points = route.points.map(_latLng).toList(growable: false);
+    // A white outline under the line keeps it readable over busy streets.
+    return PolylineLayer(
+      key: const ValueKey('errand-road-route'),
+      polylines: [
+        Polyline(
+          points: points,
+          color: Colors.white,
+          strokeWidth: 8,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
+        ),
+        Polyline(
+          points: points,
+          color: widget.color,
+          strokeWidth: 5,
+          strokeCap: StrokeCap.round,
+          strokeJoin: StrokeJoin.round,
+        ),
+      ],
+    );
+  }
+}
 
 /// Small round icon marking the middle of an approximate pickup or drop-off
 /// area. Also used beside the matching heading so the two read together.

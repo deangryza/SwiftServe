@@ -8,12 +8,14 @@ import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../widgets/errand_tracking_map.dart';
+import '../widgets/post_location_map.dart';
 import 'client_sections.dart';
+import 'post_request_screen.dart';
 
 class ClientRequestDetailsScreen extends StatefulWidget {
-  const ClientRequestDetailsScreen({super.key, required this.request});
+  const ClientRequestDetailsScreen({super.key, required this.requestId});
 
-  final ServiceRequest request;
+  final String requestId;
 
   @override
   State<ClientRequestDetailsScreen> createState() =>
@@ -23,6 +25,12 @@ class ClientRequestDetailsScreen extends StatefulWidget {
 class _ClientRequestDetailsScreenState
     extends State<ClientRequestDetailsScreen> {
   bool _saving = false;
+
+  /// The latest saved version of the post, kept live so edits show at once.
+  late final _requestStream = ServiceRequestRepository().watchRequest(
+    widget.requestId,
+  );
+  late ServiceRequest _request;
 
   String _dateRange(ServiceRequest request) {
     String format(DateTime date) => '${date.month}/${date.day}/${date.year}';
@@ -38,7 +46,7 @@ class _ClientRequestDetailsScreenState
     try {
       await FirebaseFirestore.instance
           .collection('service_requests')
-          .doc(widget.request.id)
+          .doc(_request.id)
           .update({
             'status': 'cancelled',
             'cancelledAt': FieldValue.serverTimestamp(),
@@ -75,7 +83,7 @@ class _ClientRequestDetailsScreenState
     setState(() => _saving = true);
     try {
       await ServiceRequestRepository().acceptApplicant(
-        request: widget.request,
+        request: _request,
         application: application,
       );
       if (!mounted) return;
@@ -94,7 +102,7 @@ class _ClientRequestDetailsScreenState
   }
 
   Future<void> _openWorkerChat() async {
-    final request = widget.request;
+    final request = _request;
     final pairConversationId = conversationIdFor(
       clientId: request.clientId,
       workerId: request.workerId!,
@@ -151,12 +159,12 @@ class _ClientRequestDetailsScreenState
     if (selected == null) return;
     await FirebaseFirestore.instance
         .collection('reviews')
-        .doc(widget.request.id)
+        .doc(_request.id)
         .set({
-          'requestId': widget.request.id,
+          'requestId': _request.id,
           'clientId': FirebaseAuth.instance.currentUser!.uid,
-          'workerId': widget.request.workerId,
-          'workerName': widget.request.workerName ?? '',
+          'workerId': _request.workerId,
+          'workerName': _request.workerName ?? '',
           'rating': selected,
           'comment': '',
           'createdAt': FieldValue.serverTimestamp(),
@@ -168,9 +176,40 @@ class _ClientRequestDetailsScreenState
     }
   }
 
+  void _edit(ServiceRequest request) {
+    Navigator.push(
+      context,
+      clientPageRoute(PostRequestScreen(existing: request)),
+    );
+  }
+
   @override
-  Widget build(BuildContext context) {
-    final request = widget.request;
+  Widget build(BuildContext context) => StreamBuilder<ServiceRequest?>(
+    stream: _requestStream,
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Request details')),
+          body: Center(
+            child: Text('Could not load this post.\n${snapshot.error}'),
+          ),
+        );
+      }
+      if (!snapshot.hasData) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Request details')),
+          body: snapshot.connectionState == ConnectionState.active
+              ? const Center(child: Text('This post no longer exists.'))
+              : const Center(child: CircularProgressIndicator()),
+        );
+      }
+      _request = snapshot.data!;
+      return _buildDetails(context, _request);
+    },
+  );
+
+  Widget _buildDetails(BuildContext context, ServiceRequest request) {
+    final canEdit = request.status == ServiceRequestStatus.pending;
     final canCancel =
         request.status == ServiceRequestStatus.pending ||
         request.status == ServiceRequestStatus.accepted;
@@ -178,7 +217,18 @@ class _ClientRequestDetailsScreenState
         request.workerId != null &&
         request.status != ServiceRequestStatus.cancelled;
     return Scaffold(
-      appBar: AppBar(title: const Text('Request details')),
+      appBar: AppBar(
+        title: const Text('Request details'),
+        actions: [
+          if (canEdit)
+            IconButton(
+              key: const ValueKey('request-details-edit'),
+              tooltip: 'Edit post',
+              onPressed: _saving ? null : () => _edit(request),
+              icon: const Icon(Icons.edit_outlined),
+            ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -246,6 +296,11 @@ class _ClientRequestDetailsScreenState
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 8),
               child: ErrandTrackingMap(request: request),
+            )
+          else if (request.modality.needsLocation)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: PostLocationMap(request: request),
             ),
           Padding(
             padding: const EdgeInsets.all(16),

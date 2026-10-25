@@ -44,9 +44,12 @@ bool isErrandCategory(String? category) {
 }
 
 class PostRequestScreen extends StatefulWidget {
-  const PostRequestScreen({super.key, this.initialCategory});
+  const PostRequestScreen({super.key, this.initialCategory, this.existing});
 
   final String? initialCategory;
+
+  /// The open post being edited. Leave null to post a new job.
+  final ServiceRequest? existing;
 
   @override
   State<PostRequestScreen> createState() => _PostRequestScreenState();
@@ -67,7 +70,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   JobLocationSelection? _selectedLocation;
   JobLocationSelection? _dropoffLocation;
   bool _isPosting = false;
+  bool _loadingLocation = false;
 
+  bool get _isEditing => widget.existing != null;
   bool get _isErrand => _modality == JobModality.errand;
 
   /// Estimated km between pickup and drop-off, once both are pinned.
@@ -85,8 +90,62 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   @override
   void initState() {
     super.initState();
+    final existing = widget.existing;
+    if (existing != null) {
+      _prefill(existing);
+      return;
+    }
     _selectedCategory = widget.initialCategory?.trim();
     if (isErrandCategory(_selectedCategory)) _modality = JobModality.errand;
+  }
+
+  void _prefill(ServiceRequest request) {
+    String amount(double value) => value == value.roundToDouble()
+        ? value.toStringAsFixed(0)
+        : value.toStringAsFixed(2);
+    _titleController.text = request.title;
+    _budgetController.text = amount(request.budget);
+    _descriptionController.text = request.description;
+    _errandItemsController.text = request.errandItems ?? '';
+    if (request.itemCostEstimate != null) {
+      _itemCostController.text = amount(request.itemCostEstimate!);
+    }
+    _selectedCategory = request.category;
+    _modality = request.modality;
+    _fromDate = request.scheduleFrom ?? request.schedule;
+    _toDate = request.scheduleTo ?? _fromDate;
+    if (request.modality.needsLocation) {
+      _loadingLocation = true;
+      _loadSavedLocation(request);
+    }
+  }
+
+  Future<void> _loadSavedLocation(ServiceRequest request) async {
+    try {
+      final exact = await ServiceRequestRepository().getExactLocation(
+        request.id,
+      );
+      if (!mounted || exact == null) return;
+      setState(() {
+        _selectedLocation = JobLocationSelection(
+          position: exact.position,
+          exactAddress: exact.address,
+          areaLabel: request.location,
+        );
+        final dropoff = exact.dropoffPosition;
+        if (request.isErrand && dropoff != null) {
+          _dropoffLocation = JobLocationSelection(
+            position: dropoff,
+            exactAddress: exact.dropoffAddress ?? '',
+            areaLabel: request.dropoffLocation ?? 'Pinned service area',
+          );
+        }
+      });
+    } catch (_) {
+      // The client can pin the location again.
+    } finally {
+      if (mounted) setState(() => _loadingLocation = false);
+    }
   }
 
   @override
@@ -197,7 +256,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   }
 
   Future<void> _postJob() async {
-    if (!_formKey.currentState!.validate() || _isPosting) return;
+    if (_loadingLocation || !_formKey.currentState!.validate() || _isPosting) {
+      return;
+    }
 
     if (_fromDate == null || _toDate == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -214,6 +275,11 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
       return;
     }
 
+    if (_isEditing) {
+      await _saveChanges();
+      return;
+    }
+
     setState(() => _isPosting = true);
     try {
       final profile = await FirebaseFirestore.instance
@@ -225,31 +291,18 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ? fullName.trim()
           : 'Client';
 
-      final distanceKm = _isErrand ? _errandDistanceKm! : null;
-      final itemCost = double.tryParse(_itemCostController.text.trim());
       await ServiceRequestRepository().createRequest(
         clientId: user.uid,
         clientName: clientName,
         title: _titleController.text.trim(),
         category: _selectedCategory!,
-        budget: distanceKm != null
-            ? errandDeliveryFee(distanceKm)
-            : double.parse(_budgetController.text.trim()),
+        budget: _jobBudget(),
         scheduleFrom: _fromDate!,
         scheduleTo: _toDate!,
         description: _descriptionController.text.trim(),
         modality: _modality,
         location: _modality.needsLocation ? _selectedLocation : null,
-        errand: distanceKm == null
-            ? null
-            : ErrandDetails(
-                dropoff: _dropoffLocation!,
-                items: _errandItemsController.text.trim(),
-                distanceKm: double.parse(distanceKm.toStringAsFixed(2)),
-                itemCostEstimate: itemCost != null && itemCost > 0
-                    ? itemCost
-                    : null,
-              ),
+        errand: _errandDetails(),
       );
 
       if (!mounted) return;
@@ -262,6 +315,55 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     } finally {
       if (mounted) setState(() => _isPosting = false);
     }
+  }
+
+  Future<void> _saveChanges() async {
+    setState(() => _isPosting = true);
+    try {
+      await ServiceRequestRepository().updateRequest(
+        requestId: widget.existing!.id,
+        title: _titleController.text.trim(),
+        category: _selectedCategory!,
+        budget: _jobBudget(),
+        scheduleFrom: _fromDate!,
+        scheduleTo: _toDate!,
+        description: _descriptionController.text.trim(),
+        modality: _modality,
+        location: _modality.needsLocation ? _selectedLocation : null,
+        errand: _errandDetails(),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Post updated.')));
+      Navigator.pop(context, true);
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Could not save changes: $error')));
+    } finally {
+      if (mounted) setState(() => _isPosting = false);
+    }
+  }
+
+  double _jobBudget() {
+    final distanceKm = _isErrand ? _errandDistanceKm! : null;
+    return distanceKm != null
+        ? errandDeliveryFee(distanceKm)
+        : double.parse(_budgetController.text.trim());
+  }
+
+  ErrandDetails? _errandDetails() {
+    if (!_isErrand) return null;
+    final distanceKm = _errandDistanceKm!;
+    final itemCost = double.tryParse(_itemCostController.text.trim());
+    return ErrandDetails(
+      dropoff: _dropoffLocation!,
+      items: _errandItemsController.text.trim(),
+      distanceKm: double.parse(distanceKm.toStringAsFixed(2)),
+      itemCostEstimate: itemCost != null && itemCost > 0 ? itemCost : null,
+    );
   }
 
   InputDecoration _inputDecoration({
@@ -372,8 +474,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         ),
                       ),
                       const SizedBox(width: 18),
-                      const Text(
-                        'Post need',
+                      Text(
+                        _isEditing ? 'Edit post' : 'Post need',
                         style: TextStyle(
                           color: _ink,
                           fontSize: 21,
@@ -699,31 +801,36 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                     _isErrand ? 'Pickup' : 'Location',
                                     text,
                                   ),
-                                  FormField<JobLocationSelection>(
-                                    key: const ValueKey('post-job-location'),
-                                    validator: (value) {
-                                      if (value == null) {
-                                        return _isErrand
-                                            ? 'Choose the pickup point on the map.'
-                                            : 'Choose the service location on the map.';
-                                      }
-                                      if (value.exactAddress.trim().isEmpty) {
-                                        return _isErrand
-                                            ? 'Enter the pickup address.'
-                                            : 'Enter the exact service address.';
-                                      }
-                                      return null;
-                                    },
-                                    builder: (field) => JobLocationPicker(
-                                      errorText: field.errorText,
-                                      onChanged: (value) {
-                                        setState(
-                                          () => _selectedLocation = value,
-                                        );
-                                        field.didChange(value);
+                                  if (_loadingLocation)
+                                    const _SavedLocationLoader()
+                                  else
+                                    FormField<JobLocationSelection>(
+                                      key: const ValueKey('post-job-location'),
+                                      initialValue: _selectedLocation,
+                                      validator: (value) {
+                                        if (value == null) {
+                                          return _isErrand
+                                              ? 'Choose the pickup point on the map.'
+                                              : 'Choose the service location on the map.';
+                                        }
+                                        if (value.exactAddress.trim().isEmpty) {
+                                          return _isErrand
+                                              ? 'Enter the pickup address.'
+                                              : 'Enter the exact service address.';
+                                        }
+                                        return null;
                                       },
+                                      builder: (field) => JobLocationPicker(
+                                        initialValue: _selectedLocation,
+                                        errorText: field.errorText,
+                                        onChanged: (value) {
+                                          setState(
+                                            () => _selectedLocation = value,
+                                          );
+                                          field.didChange(value);
+                                        },
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -737,27 +844,32 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   _label('Drop-off', text),
-                                  FormField<JobLocationSelection>(
-                                    key: const ValueKey('post-job-dropoff'),
-                                    validator: (value) {
-                                      if (value == null) {
-                                        return 'Choose the drop-off point on the map.';
-                                      }
-                                      if (value.exactAddress.trim().isEmpty) {
-                                        return 'Enter the drop-off address.';
-                                      }
-                                      return null;
-                                    },
-                                    builder: (field) => JobLocationPicker(
-                                      errorText: field.errorText,
-                                      onChanged: (value) {
-                                        setState(
-                                          () => _dropoffLocation = value,
-                                        );
-                                        field.didChange(value);
+                                  if (_loadingLocation)
+                                    const _SavedLocationLoader()
+                                  else
+                                    FormField<JobLocationSelection>(
+                                      key: const ValueKey('post-job-dropoff'),
+                                      initialValue: _dropoffLocation,
+                                      validator: (value) {
+                                        if (value == null) {
+                                          return 'Choose the drop-off point on the map.';
+                                        }
+                                        if (value.exactAddress.trim().isEmpty) {
+                                          return 'Enter the drop-off address.';
+                                        }
+                                        return null;
                                       },
+                                      builder: (field) => JobLocationPicker(
+                                        initialValue: _dropoffLocation,
+                                        errorText: field.errorText,
+                                        onChanged: (value) {
+                                          setState(
+                                            () => _dropoffLocation = value,
+                                          );
+                                          field.didChange(value);
+                                        },
+                                      ),
                                     ),
-                                  ),
                                 ],
                               ),
                             ),
@@ -879,7 +991,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                         color: _ink,
                                       ),
                                     )
-                                  : const Text('Post job'),
+                                  : Text(
+                                      _isEditing ? 'Save changes' : 'Post job',
+                                    ),
                             ),
                           ),
                           const SizedBox(height: 8),
@@ -1038,4 +1152,14 @@ class _ErrandFeePreview extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SavedLocationLoader extends StatelessWidget {
+  const _SavedLocationLoader();
+
+  @override
+  Widget build(BuildContext context) => const SizedBox(
+    height: 120,
+    child: Center(child: CircularProgressIndicator()),
+  );
 }

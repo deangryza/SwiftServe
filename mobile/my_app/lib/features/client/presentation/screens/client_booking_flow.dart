@@ -11,7 +11,9 @@ import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../widgets/conversation_ui.dart';
 import '../widgets/errand_tracking_map.dart';
+import 'client_request_details_screen.dart';
 import 'client_sections.dart';
+import 'post_request_screen.dart';
 
 const _bookingYellow = Color(0xFFFFC72C);
 const _bookingCream = Color(0xFFFFF9E9);
@@ -387,6 +389,16 @@ class _BookingList extends StatelessWidget {
                   ClientWorkersFoundScreen(requestId: requests[index].id),
                 ),
               ),
+              onViewPost: () => Navigator.push(
+                context,
+                clientPageRoute(
+                  ClientRequestDetailsScreen(requestId: requests[index].id),
+                ),
+              ),
+              onEditPost: () => Navigator.push(
+                context,
+                clientPageRoute(PostRequestScreen(existing: requests[index])),
+              ),
             ),
           );
         },
@@ -398,11 +410,15 @@ class _BookingCard extends StatelessWidget {
     required this.request,
     required this.palette,
     required this.onTap,
+    required this.onViewPost,
+    required this.onEditPost,
   });
 
   final ServiceRequest request;
   final _BookingPalette palette;
   final VoidCallback onTap;
+  final VoidCallback onViewPost;
+  final VoidCallback onEditPost;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -468,9 +484,67 @@ class _BookingCard extends StatelessWidget {
                 ),
               ),
             ),
+            _BookingMoreMenu(
+              key: ValueKey('booking-more-${request.id}'),
+              canEdit: request.status == ServiceRequestStatus.pending,
+              color: palette.text,
+              onViewPost: onViewPost,
+              onEditPost: onEditPost,
+            ),
           ],
         ),
       ),
+    ),
+  );
+}
+
+enum _BookingAction { view, edit }
+
+class _BookingMoreMenu extends StatelessWidget {
+  const _BookingMoreMenu({
+    super.key,
+    required this.canEdit,
+    required this.color,
+    required this.onViewPost,
+    required this.onEditPost,
+  });
+
+  final bool canEdit;
+  final Color color;
+  final VoidCallback onViewPost;
+  final VoidCallback onEditPost;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: 32,
+    height: 36,
+    child: PopupMenuButton<_BookingAction>(
+      tooltip: 'More',
+      padding: EdgeInsets.zero,
+      icon: Icon(Icons.more_vert, color: color, size: 20),
+      onSelected: (action) => switch (action) {
+        _BookingAction.view => onViewPost(),
+        _BookingAction.edit => onEditPost(),
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: _BookingAction.view,
+          child: ListTile(
+            leading: Icon(Icons.article_outlined),
+            title: Text('View post'),
+            contentPadding: EdgeInsets.zero,
+          ),
+        ),
+        if (canEdit)
+          const PopupMenuItem(
+            value: _BookingAction.edit,
+            child: ListTile(
+              leading: Icon(Icons.edit_outlined),
+              title: Text('Edit post'),
+              contentPadding: EdgeInsets.zero,
+            ),
+          ),
+      ],
     ),
   );
 }
@@ -628,12 +702,33 @@ class _WorkersHeader extends StatelessWidget {
             children: [
               _CircleBackButton(onPressed: () => Navigator.pop(context)),
               const SizedBox(width: 12),
-              const Text(
-                'Workers Found',
-                style: TextStyle(
-                  color: _bookingInk,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
+              const Expanded(
+                child: Text(
+                  'Workers Found',
+                  style: TextStyle(
+                    color: _bookingInk,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              Material(
+                color: const Color(0xFFFFF7D9),
+                shape: const CircleBorder(),
+                child: IconButton(
+                  key: const ValueKey('workers-found-post-details'),
+                  tooltip: 'Post details',
+                  onPressed: () => Navigator.push(
+                    context,
+                    clientPageRoute(
+                      ClientRequestDetailsScreen(requestId: request.id),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.article_outlined,
+                    color: _bookingInk,
+                    size: 21,
+                  ),
                 ),
               ),
             ],

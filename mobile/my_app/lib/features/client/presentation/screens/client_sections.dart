@@ -2,7 +2,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
-import '../../../../shared/models/service_request.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
@@ -84,9 +83,7 @@ class ClientHistoryScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                         context,
                         clientPageRoute(
-                          ClientRequestDetailsScreen(
-                            request: ServiceRequest.fromDocument(document),
-                          ),
+                          ClientRequestDetailsScreen(requestId: document.id),
                         ),
                       ),
                       child: Card(

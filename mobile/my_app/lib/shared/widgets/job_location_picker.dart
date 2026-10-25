@@ -19,6 +19,7 @@ class JobLocationPicker extends StatefulWidget {
   const JobLocationPicker({
     super.key,
     required this.onChanged,
+    this.initialValue,
     this.errorText,
     this.locationService = const DeviceLocationService(),
     this.geocodingService,
@@ -26,6 +27,9 @@ class JobLocationPicker extends StatefulWidget {
   });
 
   final ValueChanged<JobLocationSelection?> onChanged;
+
+  /// A pin to start from, such as the saved location of a post being edited.
+  final JobLocationSelection? initialValue;
   final String? errorText;
   final DeviceLocationService locationService;
   final JobAddressResolver? geocodingService;
@@ -57,6 +61,13 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   void initState() {
     super.initState();
     _geocodingService = widget.geocodingService ?? JobGeocodingService();
+    final initial = widget.initialValue;
+    if (initial != null) {
+      _position = initial.position;
+      _areaLabel = initial.areaLabel;
+      _addressController.text = initial.exactAddress;
+      _statusMessage = 'Exact address is shared only with the accepted worker.';
+    }
     _addressController.addListener(_notifySelection);
   }
 
@@ -209,8 +220,15 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
                     child: FlutterMap(
                       mapController: _mapController,
                       options: MapOptions(
-                        initialCenter: _philippinesCenter,
-                        initialZoom: 5.3,
+                        // Open straight on a saved pin; moving the camera
+                        // after the map loads can leave it blank.
+                        initialCenter: widget.initialValue == null
+                            ? _philippinesCenter
+                            : LatLng(
+                                widget.initialValue!.position.latitude,
+                                widget.initialValue!.position.longitude,
+                              ),
+                        initialZoom: widget.initialValue == null ? 5.3 : 16,
                         minZoom: 3,
                         maxZoom: 18,
                         onMapReady: _handleMapReady,
