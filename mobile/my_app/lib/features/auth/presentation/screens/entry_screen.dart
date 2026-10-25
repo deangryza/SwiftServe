@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 
 import 'client_register_screen.dart';
@@ -8,12 +9,12 @@ import 'worker_register_screen.dart';
 class EntryScreen extends StatelessWidget {
   const EntryScreen({super.key});
 
-  static const _background = Color(0xFFFFF9E9);
-  static const _yellow = Color(0xFFFFC72C);
-  static const _ink = Color(0xFF18181B);
-  static const _muted = Color(0xFF71717A);
-  static const _border = Color(0xFFE4E4E7);
-  static const _link = Color(0xFF2563EB);
+  static const _background = Color(0xFFFFFFFF);
+  static const _yellow = AppTheme.yellow;
+  static const _ink = AppTheme.ink;
+  static const _muted = AppTheme.muted;
+  static const _border = AppTheme.line;
+  static const _link = AppTheme.muted;
 
   void _open(BuildContext context, Widget screen) {
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
@@ -23,11 +24,11 @@ class EntryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = dark ? const Color(0xFF171717) : _background;
-    final surface = dark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFEFB);
+    final surface = dark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFFFF);
     final ink = dark ? const Color(0xFFF3F3F3) : _ink;
     final muted = dark ? const Color(0xFFB8B8B8) : _muted;
     final border = dark ? const Color(0xFF505050) : _border;
-    final link = dark ? const Color(0xFF66AFFF) : _link;
+    final link = dark ? const Color(0xFFFFD45A) : _link;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: background,

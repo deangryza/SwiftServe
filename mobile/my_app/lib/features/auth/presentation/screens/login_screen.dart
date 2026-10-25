@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -226,7 +227,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ? 'Welcome back'
                                           : 'Welcome',
                                       style: TextStyle(
-                                        color: const Color(0xFF111827),
+                                        color: AppTheme.ink,
                                         fontSize: 28,
                                         height: 34 / 28,
                                         fontWeight: FontWeight.w700,
@@ -393,15 +394,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                           ? null
                                           : _loginWithGoogle,
                                       style: OutlinedButton.styleFrom(
-                                        backgroundColor: const Color(
-                                          0xFFFAFBFF,
-                                        ),
+                                        backgroundColor: Colors.white,
                                         foregroundColor: const Color(
                                           0xFF565A63,
                                         ),
-                                        disabledBackgroundColor: const Color(
-                                          0xFFFAFBFF,
-                                        ),
+                                        disabledBackgroundColor: Colors.white,
                                         disabledForegroundColor: const Color(
                                           0xFF8B8E95,
                                         ),
@@ -520,20 +517,18 @@ class _LoginPalette {
 
   final bool dark;
 
-  Color get background =>
-      dark ? const Color(0xFF242424) : const Color(0xFFFFF8E5);
-  Color get ink => dark ? const Color(0xFFF7F7F7) : const Color(0xFF111827);
-  Color get muted => dark ? const Color(0xFF9A9A9A) : const Color(0xFF737780);
-  Color get subtle => dark ? const Color(0xFF858585) : const Color(0xFF8A8A8A);
-  Color get label => dark ? const Color(0xFF969696) : const Color(0xFF30343A);
+  Color get background => dark ? AppTheme.ink : Colors.white;
+  Color get ink => dark ? const Color(0xFFF7F7F7) : AppTheme.ink;
+  Color get muted => dark ? const Color(0xFF9A9A9A) : AppTheme.muted;
+  Color get subtle => dark ? const Color(0xFF858585) : AppTheme.muted;
+  Color get label => dark ? const Color(0xFF969696) : AppTheme.ink;
   Color get field => dark ? const Color(0xFF2C2C2C) : const Color(0xFFFFFFFF);
-  Color get fieldBorder =>
-      dark ? const Color(0xFF8C8C8C) : const Color(0xFFC4C6CD);
+  Color get fieldBorder => dark ? const Color(0xFF8C8C8C) : AppTheme.line;
   Color get divider => dark ? const Color(0xFF777777) : const Color(0xFFAAADB4);
   Color get googleBorder =>
       dark ? const Color(0xFFD7D8DC) : const Color(0xFFAAADB4);
-  Color get accent => const Color(0xFFFFC72C);
-  Color get link => const Color(0xFF2F80ED);
+  Color get accent => AppTheme.yellow;
+  Color get link => AppTheme.muted;
 }
 
 class _FieldLabel extends StatelessWidget {
@@ -596,7 +591,7 @@ class _LoginField extends StatelessWidget {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFFFC72C), width: 1.5),
+        borderSide: const BorderSide(color: AppTheme.yellow, width: 1.5),
       ),
     ),
   );

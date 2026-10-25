@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
@@ -14,9 +15,9 @@ import 'client_booking_flow.dart';
 import 'client_sections.dart' show ClientMessagesScreen;
 import 'client_settings_screen.dart';
 
-const _profileYellow = Color(0xFFFFC72C);
-const _profileCream = Color(0xFFFFF9E9);
-const _profileInk = Color(0xFF242424);
+const _profileYellow = AppTheme.yellow;
+const _profileCream = Color(0xFFFFFFFF);
+const _profileInk = AppTheme.ink;
 
 class ClientProfileScreen extends StatelessWidget {
   const ClientProfileScreen({super.key});
@@ -66,7 +67,7 @@ class _ProfileView extends StatelessWidget {
     final background = dark ? const Color(0xFF1B1B1B) : _profileCream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
     final text = dark ? const Color(0xFFF2F2F2) : _profileInk;
-    final muted = dark ? const Color(0xFFB6B6B6) : const Color(0xFF697386);
+    final muted = dark ? const Color(0xFFB6B6B6) : AppTheme.muted;
     final name = (data['fullName'] ?? 'Client').toString().trim();
     final safeName = name.isEmpty ? 'Client' : name;
     final email = (data['email'] ?? user.email ?? 'No email available')
@@ -90,7 +91,7 @@ class _ProfileView extends StatelessWidget {
         ),
       ),
       child: Scaffold(
-        backgroundColor: _profileYellow,
+        backgroundColor: background,
         bottomNavigationBar: _ProfileBottomNavigation(
           userId: user.uid,
           background: background,
@@ -103,14 +104,7 @@ class _ProfileView extends StatelessWidget {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 430),
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [_profileYellow, background, background],
-                    stops: const [0, 0.34, 1],
-                  ),
-                ),
+                decoration: BoxDecoration(color: background),
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
                   children: [
@@ -222,7 +216,7 @@ class _ProfileView extends StatelessWidget {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                elevation: 2,
+                                elevation: 0,
                                 backgroundColor: surface,
                               ),
                               child: const Text(
@@ -440,6 +434,7 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
           'fullName': name,
           'role': role,
           'photoBase64': _photoBase64,
+          'location': _addressController.text.trim(),
           'updatedAt': timestamp,
         },
         SetOptions(merge: true),
@@ -478,12 +473,12 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     final background = dark ? const Color(0xFF1B1B1B) : _profileCream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
     final text = dark ? const Color(0xFFF2F2F2) : _profileInk;
-    final muted = dark ? const Color(0xFFB6B6B6) : const Color(0xFF697386);
+    final muted = dark ? const Color(0xFFB6B6B6) : AppTheme.muted;
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
-        backgroundColor: _profileYellow,
-        foregroundColor: _profileInk,
+        backgroundColor: background,
+        foregroundColor: text,
         elevation: 0,
         title: const Text(
           'Edit Profile',
@@ -635,10 +630,10 @@ class _ProfilePhoto extends StatelessWidget {
       fallbackPhotoBase64: photoBase64,
       joinedAt: joinedAt,
       radius: radius,
-      backgroundColor: const Color(0xFFE6EDFA),
-      foregroundColor: const Color(0xFF21458B),
+      backgroundColor: AppTheme.softYellow,
+      foregroundColor: AppTheme.ink,
       textStyle: TextStyle(
-        color: const Color(0xFF21458B),
+        color: AppTheme.ink,
         fontSize: radius * 0.62,
         fontWeight: FontWeight.w700,
       ),
@@ -661,7 +656,7 @@ class _VerificationBadge extends StatelessWidget {
       'resubmission_required' => 'Action required',
       _ => 'Pending',
     };
-    final color = verified ? const Color(0xFF20B978) : const Color(0xFFE3A500);
+    final color = verified ? AppTheme.ink : AppTheme.ink;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(
@@ -942,11 +937,9 @@ BoxDecoration _cardDecoration(Color color, {double radius = 16}) =>
     BoxDecoration(
       color: color,
       borderRadius: BorderRadius.circular(radius),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x26000000),
-          blurRadius: 5,
-          offset: Offset(0, 3),
-        ),
-      ],
+      border: Border.all(
+        color: color.computeLuminance() < 0.5
+            ? const Color(0xFF494949)
+            : AppTheme.line,
+      ),
     );

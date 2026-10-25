@@ -1,8 +1,10 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 
 class ClientSearchScreen extends StatefulWidget {
@@ -87,37 +89,6 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
     await _preferences.setStringList(_storageKey, _recentSearches);
   }
 
-  void _showWorkerDetails(BuildContext context, Map<String, dynamic> worker) {
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  (worker['fullName'] ?? 'Service provider').toString(),
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text('Skills: ${_skillsText(worker['skills'])}'),
-                const SizedBox(height: 8),
-                Text('Location: ${worker['location'] ?? 'Not provided'}'),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   String _skillsText(dynamic skills) {
     if (skills is List) return skills.join(', ');
     if (skills is String && skills.trim().isNotEmpty) return skills;
@@ -128,94 +99,62 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
   Widget build(BuildContext context) {
     final query = _searchController.text.trim().toLowerCase();
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final background = dark ? const Color(0xFF171717) : const Color(0xFFFFF9E9);
+    final background = dark ? const Color(0xFF171717) : const Color(0xFFFFFFFF);
     final field = dark ? const Color(0xFF2C2C2C) : Colors.white;
-    final text = dark ? const Color(0xFFF2F2F2) : const Color(0xFF252525);
+    final text = dark ? const Color(0xFFF2F2F2) : AppTheme.ink;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFFC72C),
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        foregroundColor: text,
+        title: const Text('Search'),
+      ),
       body: SafeArea(
+        top: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
             child: Column(
               children: [
-                Container(
-                  height: 124,
-                  padding: const EdgeInsets.fromLTRB(8, 30, 18, 18),
-                  color: const Color(0xFFFFC72C),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(
-                          Icons.arrow_back,
-                          size: 22,
-                          color: Color(0xFF252525),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+                  child: Material(
+                    color: field,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Theme.of(context).dividerColor),
+                    ),
+                    child: TextField(
+                      key: const ValueKey('client-search-field'),
+                      controller: _searchController,
+                      focusNode: _focusNode,
+                      textInputAction: TextInputAction.search,
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: _saveSearch,
+                      style: TextStyle(color: text, fontSize: 14),
+                      decoration: InputDecoration(
+                        hintText: 'Search for a service or worker...',
+                        prefixIcon: const Icon(Icons.search, size: 21),
+                        filled: true,
+                        fillColor: field,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
                         ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                      Expanded(
-                        child: Material(
-                          color: field,
-                          elevation: 3,
-                          shadowColor: Colors.black26,
-                          borderRadius: BorderRadius.circular(18),
-                          child: TextField(
-                            key: const ValueKey('client-search-field'),
-                            controller: _searchController,
-                            focusNode: _focusNode,
-                            textInputAction: TextInputAction.search,
-                            onChanged: (_) => setState(() {}),
-                            onSubmitted: _saveSearch,
-                            style: TextStyle(color: text, fontSize: 13),
-                            decoration: InputDecoration(
-                              hintText: 'Search for a service or worker...',
-                              hintStyle: const TextStyle(
-                                color: Color(0xFF888888),
-                                fontSize: 12,
-                              ),
-                              prefixIcon: const Icon(Icons.search, size: 21),
-                              suffixIcon: Padding(
-                                padding: const EdgeInsets.all(5),
-                                child: IconButton.filled(
-                                  tooltip: 'Search filters',
-                                  onPressed: () {},
-                                  style: IconButton.styleFrom(
-                                    backgroundColor: const Color(0xFFFFC72C),
-                                    foregroundColor: const Color(0xFF252525),
-                                  ),
-                                  icon: const Icon(Icons.tune, size: 19),
-                                ),
-                              ),
-                              filled: true,
-                              fillColor: field,
-                              contentPadding: const EdgeInsets.symmetric(
-                                vertical: 13,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(18),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide.none,
                         ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
                 Expanded(
-                  child: Container(
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(46),
-                      ),
-                    ),
-                    child: query.isEmpty
-                        ? _buildRecentSearches()
-                        : _buildSearchResults(query),
-                  ),
+                  child: query.isEmpty
+                      ? _buildRecentSearches()
+                      : _buildSearchResults(query),
                 ),
               ],
             ),
@@ -228,10 +167,10 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
   Widget _buildRecentSearches() {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
-    final text = dark ? const Color(0xFFF2F2F2) : const Color(0xFF252525);
-    final muted = dark ? const Color(0xFFAAAAAA) : const Color(0xFF666666);
+    final text = dark ? const Color(0xFFF2F2F2) : AppTheme.ink;
+    final muted = dark ? const Color(0xFFAAAAAA) : AppTheme.muted;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 46, 20, 24),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
       children: [
         Row(
           children: [
@@ -264,8 +203,8 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
           Card(
             margin: const EdgeInsets.only(bottom: 10),
             color: surface,
-            elevation: 2,
-            shadowColor: Colors.black38,
+            elevation: 0,
+            shadowColor: Colors.black12,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(15),
             ),
@@ -276,14 +215,10 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
                 width: 34,
                 height: 34,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFFFF0BE),
+                  color: AppTheme.softYellow,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
-                  Icons.search,
-                  size: 18,
-                  color: Color(0xFF252525),
-                ),
+                child: const Icon(Icons.search, size: 18, color: AppTheme.ink),
               ),
               title: Text(search, style: TextStyle(color: text, fontSize: 13)),
               trailing: IconButton(
@@ -328,15 +263,7 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
         final workers = snapshot.data!.docs.where((doc) {
           final data = doc.data();
 
-          final name = (data['fullName'] ?? '').toString().toLowerCase();
-          final skills = _skillsText(data['skills']).toLowerCase();
-          final location = (data['location'] ?? '').toString().toLowerCase();
-          final category = (data['category'] ?? '').toString().toLowerCase();
-
-          return name.contains(query) ||
-              skills.contains(query) ||
-              location.contains(query) ||
-              category.contains(query);
+          return publicProfileMatchesQuery(data, query);
         }).toList();
 
         if (workers.isEmpty) {
@@ -344,7 +271,7 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
         }
 
         return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(20, 42, 20, 24),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
           itemCount: workers.length,
           itemBuilder: (context, index) {
             final worker = workers[index].data();
@@ -369,7 +296,16 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
                   await _saveSearch(_searchController.text);
 
                   if (!context.mounted) return;
-                  _showWorkerDetails(context, worker);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PublicProfileScreen(
+                        userId: workers[index].id,
+                        role: PublicProfileRole.worker,
+                        initialData: worker,
+                      ),
+                    ),
+                  );
                 },
               ),
             );

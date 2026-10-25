@@ -1,14 +1,18 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/widgets/simple_back_button.dart';
+import '../../../../shared/theme/app_theme.dart';
+import '../../../../shared/utils/message_time.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
 
 import '../../../../shared/widgets/live_profile_avatar.dart';
 
-const _chatYellow = Color(0xFFFFC72C);
-const _chatCream = Color(0xFFFFF9E9);
-const _chatInk = Color(0xFF242424);
+const _chatYellow = AppTheme.yellow;
+const _chatCream = Color(0xFFFFFFFF);
+const _chatInk = AppTheme.ink;
 
-enum _ConversationAction { delete, block }
+enum _ConversationAction { delete, block, unblock }
 
 class _ConversationChoice {
   const _ConversationChoice({
@@ -62,7 +66,7 @@ class ConversationUnreadBadge extends StatelessWidget {
             : 0;
         return Badge(
           isLabelVisible: count > 0,
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.ink,
           smallSize: 8,
           child: child,
         );
@@ -99,7 +103,7 @@ class NotificationUnreadBadge extends StatelessWidget {
             );
         return Badge(
           isLabelVisible: hasUnread,
-          backgroundColor: Colors.red,
+          backgroundColor: AppTheme.ink,
           smallSize: 8,
           child: child,
         );
@@ -137,11 +141,56 @@ class ConversationInboxScreen extends StatefulWidget {
 class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
   final _searchController = TextEditingController();
 
-  Future<List<_ConversationChoice>> _conversationChoices() async {
+  Future<List<_ConversationChoice>> _blockedChoices() async {
+    final blocks = await FirebaseFirestore.instance
+        .collection('user_blocks')
+        .where('blockerId', isEqualTo: widget.userId)
+        .get();
+
+    return Future.wait(
+      blocks.docs.map((block) async {
+        final data = block.data();
+        final conversationId = (data['conversationId'] ?? '').toString();
+        final counterpartId = (data['blockedId'] ?? '').toString();
+        if (conversationId.isEmpty || counterpartId.isEmpty) return null;
+
+        final conversation = await FirebaseFirestore.instance
+            .collection('conversations')
+            .doc(conversationId)
+            .get();
+        final conversationData = conversation.data();
+        return _ConversationChoice(
+          id: conversationId,
+          counterpartId: counterpartId,
+          name:
+              (conversationData?[widget.counterpartNameField] ?? 'Blocked user')
+                  .toString(),
+        );
+      }),
+    ).then(
+      (choices) =>
+          choices.whereType<_ConversationChoice>().toList(growable: false),
+    );
+  }
+
+  Future<List<_ConversationChoice>> _conversationChoices(
+    _ConversationAction action,
+  ) async {
+    if (action == _ConversationAction.unblock) return _blockedChoices();
+
     final snapshot = await FirebaseFirestore.instance
         .collection('conversations')
         .where('participantIds', arrayContains: widget.userId)
         .get();
+    final blockedIds = action == _ConversationAction.block
+        ? (await FirebaseFirestore.instance
+                  .collection('user_blocks')
+                  .where('blockerId', isEqualTo: widget.userId)
+                  .get())
+              .docs
+              .map((block) => (block.data()['blockedId'] ?? '').toString())
+              .toSet()
+        : const <String>{};
     final latestByCounterpart =
         <String, QueryDocumentSnapshot<Map<String, dynamic>>>{};
     final documents = snapshot.docs.toList()
@@ -158,6 +207,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
       if (hiddenFor is List && hiddenFor.contains(widget.userId)) continue;
       final counterpartId = data[widget.counterpartIdField]?.toString();
       if (counterpartId == null || counterpartId.isEmpty) continue;
+      if (blockedIds.contains(counterpartId)) continue;
       latestByCounterpart.putIfAbsent(counterpartId, () => document);
     }
     return latestByCounterpart.entries
@@ -177,7 +227,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
   Future<_ConversationChoice?> _chooseConversation(
     _ConversationAction action,
   ) async {
-    final choices = await _conversationChoices();
+    final choices = await _conversationChoices(action);
     if (!mounted) return null;
     if (choices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -193,12 +243,11 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              title: Text(
-                action == _ConversationAction.delete
-                    ? 'Delete a conversation'
-                    : 'Block a user',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
+              title: Text(switch (action) {
+                _ConversationAction.delete => 'Delete a conversation',
+                _ConversationAction.block => 'Block a user',
+                _ConversationAction.unblock => 'Unblock a user',
+              }, style: const TextStyle(fontWeight: FontWeight.w700)),
               subtitle: const Text('Choose a conversation below'),
             ),
             ConstrainedBox(
@@ -230,31 +279,30 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
     try {
       final choice = await _chooseConversation(action);
       if (choice == null || !mounted) return;
-      final verb = action == _ConversationAction.delete ? 'delete' : 'block';
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text(
-            action == _ConversationAction.delete
-                ? 'Delete conversation?'
-                : 'Block ${choice.name}?',
-          ),
-          content: Text(
-            action == _ConversationAction.delete
-                ? 'This conversation will be removed from your inbox.'
-                : 'You and ${choice.name} will no longer be able to send each other messages.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: Text(verb[0].toUpperCase() + verb.substring(1)),
-            ),
-          ],
-        ),
+      final verb = switch (action) {
+        _ConversationAction.delete => 'delete',
+        _ConversationAction.block => 'block',
+        _ConversationAction.unblock => 'unblock',
+      };
+      final confirmed = await showActionConfirmation(
+        context,
+        title: switch (action) {
+          _ConversationAction.delete => 'Delete conversation?',
+          _ConversationAction.block => 'Block ${choice.name}?',
+          _ConversationAction.unblock => 'Unblock ${choice.name}?',
+        },
+        message: switch (action) {
+          _ConversationAction.delete =>
+            'Are you sure you want to delete this conversation? It will be removed from your inbox.',
+          _ConversationAction.block =>
+            'Are you sure you want to block ${choice.name}? You will no longer be able to message each other.',
+          _ConversationAction.unblock =>
+            'Are you sure you want to unblock ${choice.name}? You will be able to message each other again.',
+        },
+        confirmLabel: verb[0].toUpperCase() + verb.substring(1),
+        icon: action == _ConversationAction.block
+            ? Icons.block_rounded
+            : Icons.delete_outline_rounded,
       );
       if (confirmed != true) return;
 
@@ -266,7 +314,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
           'hiddenFor': FieldValue.arrayUnion([widget.userId]),
           'unreadFor': FieldValue.arrayRemove([widget.userId]),
         });
-      } else {
+      } else if (action == _ConversationAction.block) {
         final batch = FirebaseFirestore.instance.batch();
         final block = FirebaseFirestore.instance
             .collection('user_blocks')
@@ -278,19 +326,32 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
           'createdAt': FieldValue.serverTimestamp(),
         });
         batch.update(conversation, {
-          'hiddenFor': FieldValue.arrayUnion([widget.userId]),
+          'hiddenFor': FieldValue.arrayRemove([widget.userId]),
           'unreadFor': FieldValue.arrayRemove([widget.userId]),
+        });
+        await batch.commit();
+      } else {
+        final batch = FirebaseFirestore.instance.batch();
+        batch.delete(
+          FirebaseFirestore.instance
+              .collection('user_blocks')
+              .doc('${widget.userId}_${choice.counterpartId}'),
+        );
+        batch.update(conversation, {
+          'hiddenFor': FieldValue.arrayRemove([widget.userId]),
         });
         await batch.commit();
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            action == _ConversationAction.delete
-                ? 'Conversation deleted.'
-                : '${choice.name} has been blocked.',
-          ),
+          content: Text(switch (action) {
+            _ConversationAction.delete => 'Conversation deleted.',
+            _ConversationAction.block =>
+              '${choice.name} has been blocked. Messages are now restricted.',
+            _ConversationAction.unblock =>
+              '${choice.name} has been unblocked. You can message each other again.',
+          }),
         ),
       );
     } catch (error) {
@@ -312,14 +373,12 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = dark ? const Color(0xFF171717) : _chatCream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
-    final unreadSurface = dark
-        ? const Color(0xFF393323)
-        : const Color(0xFFFFF4CE);
+    final unreadSurface = dark ? const Color(0xFF393323) : AppTheme.softYellow;
     final text = dark ? const Color(0xFFF3F3F3) : _chatInk;
-    final muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF737373);
+    final muted = dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
 
     return Scaffold(
-      backgroundColor: _chatYellow,
+      backgroundColor: background,
       bottomNavigationBar: widget.bottomNavigationBar,
       body: SafeArea(
         child: Center(
@@ -335,31 +394,16 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                       Row(
                         children: [
                           if (widget.showBackButton) ...[
-                            Material(
-                              color: const Color(0xFFFFF7D9),
-                              shape: const CircleBorder(),
-                              child: IconButton(
-                                onPressed:
-                                    widget.onBack ??
-                                    () => Navigator.pop(context),
-                                constraints: const BoxConstraints.tightFor(
-                                  width: 38,
-                                  height: 38,
-                                ),
-                                padding: EdgeInsets.zero,
-                                icon: const Icon(
-                                  Icons.arrow_back,
-                                  color: _chatInk,
-                                  size: 19,
-                                ),
-                              ),
+                            SimpleBackButton(
+                              onPressed:
+                                  widget.onBack ?? () => Navigator.pop(context),
                             ),
                             const SizedBox(width: 12),
                           ],
-                          const Text(
+                          Text(
                             'Messages',
                             style: TextStyle(
-                              color: _chatInk,
+                              color: text,
                               fontSize: 22,
                               fontWeight: FontWeight.w700,
                             ),
@@ -368,7 +412,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                           PopupMenuButton<_ConversationAction>(
                             key: const ValueKey('messages-more-actions'),
                             tooltip: 'Conversation actions',
-                            icon: const Icon(Icons.more_horiz, color: _chatInk),
+                            icon: Icon(Icons.more_horiz, color: text),
                             onSelected: _handleConversationAction,
                             itemBuilder: (context) => const [
                               PopupMenuItem(
@@ -387,6 +431,14 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                                   title: Text('Block user'),
                                 ),
                               ),
+                              PopupMenuItem(
+                                value: _ConversationAction.unblock,
+                                child: ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: Icon(Icons.lock_open_outlined),
+                                  title: Text('Blocked users'),
+                                ),
+                              ),
                             ],
                           ),
                         ],
@@ -394,8 +446,8 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                       const SizedBox(height: 16),
                       Material(
                         color: surface,
-                        elevation: 3,
-                        borderRadius: BorderRadius.circular(20),
+                        elevation: 0,
+                        borderRadius: BorderRadius.circular(14),
                         child: TextField(
                           key: const ValueKey('conversation-search'),
                           controller: _searchController,
@@ -412,8 +464,10 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                             filled: true,
                             fillColor: surface,
                             border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(20),
-                              borderSide: BorderSide.none,
+                              borderRadius: BorderRadius.circular(14),
+                              borderSide: BorderSide(
+                                color: Theme.of(context).dividerColor,
+                              ),
                             ),
                           ),
                         ),
@@ -427,9 +481,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                     clipBehavior: Clip.antiAlias,
                     decoration: BoxDecoration(
                       color: background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(42),
-                      ),
+                      borderRadius: BorderRadius.zero,
                     ),
                     child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
                       stream: FirebaseFirestore.instance
@@ -533,12 +585,14 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                             final unread =
                                 unreadFor is List &&
                                 unreadFor.contains(widget.userId);
+                            final updatedAt = data['updatedAt'] as Timestamp?;
                             return _ConversationCard(
                               userId: counterpartId,
                               name: name,
                               message:
                                   (data['lastMessage'] ?? 'Open conversation')
                                       .toString(),
+                              timestamp: updatedAt?.toDate(),
                               unread: unread,
                               surface: unread ? unreadSurface : surface,
                               text: text,
@@ -568,6 +622,7 @@ class _ConversationCard extends StatelessWidget {
     required this.userId,
     required this.name,
     required this.message,
+    required this.timestamp,
     required this.unread,
     required this.surface,
     required this.text,
@@ -578,6 +633,7 @@ class _ConversationCard extends StatelessWidget {
   final String userId;
   final String name;
   final String message;
+  final DateTime? timestamp;
   final bool unread;
   final Color surface;
   final Color text;
@@ -587,17 +643,19 @@ class _ConversationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: surface,
-    elevation: 3,
-    shadowColor: Colors.black38,
-    borderRadius: BorderRadius.circular(20),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(14),
+      side: BorderSide(color: Theme.of(context).dividerColor),
+    ),
     child: InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
         constraints: const BoxConstraints(minHeight: 90),
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(14),
           border: unread ? Border.all(color: _chatYellow, width: 1.2) : null,
         ),
         child: Row(
@@ -606,7 +664,7 @@ class _ConversationCard extends StatelessWidget {
               userId: userId,
               fallbackName: name,
               radius: 25,
-              backgroundColor: const Color(0xFFFFF1C8),
+              backgroundColor: AppTheme.softYellow,
               foregroundColor: _chatInk,
               textStyle: const TextStyle(fontWeight: FontWeight.w700),
             ),
@@ -632,12 +690,25 @@ class _ConversationCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (timestamp != null) ...[
+                        const SizedBox(width: 8),
+                        Text(
+                          messageTimestampLabel(timestamp!),
+                          style: TextStyle(
+                            color: muted,
+                            fontSize: 9,
+                            fontWeight: unread
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                          ),
+                        ),
+                      ],
                       if (unread)
                         Container(
                           width: 9,
                           height: 9,
                           decoration: const BoxDecoration(
-                            color: Colors.red,
+                            color: AppTheme.ink,
                             shape: BoxShape.circle,
                           ),
                         ),

@@ -9,7 +9,7 @@ class ApiService {
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
-  static const _requestTimeout = Duration(seconds: 8);
+  static const _requestTimeout = Duration(seconds: 30);
 
   /// Throws [ApiConnectionException] when the backend cannot be reached, so
   /// sign-up can stop before creating a Firebase account without a profile.
@@ -69,7 +69,7 @@ class ApiService {
           .timeout(_requestTimeout);
     } on TimeoutException {
       throw const ApiConnectionException(
-        'The SwiftServe server did not respond. Make sure the backend is running and try again.',
+        'The SwiftServe server did not respond within 30 seconds. Keep the backend and USB connection active, then try again.',
       );
     } on http.ClientException {
       throw const ApiConnectionException(

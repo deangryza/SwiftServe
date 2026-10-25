@@ -1,22 +1,70 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/theme/app_theme.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
+import '../../../../shared/models/service_request.dart';
+import '../../../../shared/screens/reviews_screen.dart';
+import '../../../../shared/widgets/notification_swipe_actions.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import 'client_booking_flow.dart';
 
-const _headerYellow = Color(0xFFFFC72C);
-const _unreadYellow = Color(0xFFFFD14E);
-const _cream = Color(0xFFFFF9E9);
-const _ink = Color(0xFF242424);
+const _unreadYellow = AppTheme.yellow;
+const _cream = Color(0xFFFFFFFF);
+const _ink = AppTheme.ink;
+
+Future<void> _deleteClientNotification(
+  BuildContext context,
+  QueryDocumentSnapshot<Map<String, dynamic>> notification,
+) async {
+  final confirmed = await showActionConfirmation(
+    context,
+    title: 'Delete notification?',
+    message:
+        'Are you sure you want to delete this notification? This action cannot be undone.',
+    confirmLabel: 'Delete',
+    icon: Icons.delete_outline_rounded,
+  );
+  if (!confirmed) return;
+  try {
+    await notification.reference.delete();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Notification deleted.')));
+  } catch (error) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Could not delete notification: $error')),
+    );
+  }
+}
 
 Future<void> _openClientNotification(
   BuildContext context,
   QueryDocumentSnapshot<Map<String, dynamic>> notification,
 ) async {
-  final requestId = notification.data()['requestId']?.toString();
+  final data = notification.data();
+  final requestId = data['requestId']?.toString();
+  final type = data['type']?.toString();
   try {
-    await notification.reference.update({'read': true});
+    if (type == 'reviewReceived' ||
+        (type == null && data['title'] == 'New review received')) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null || uid.isEmpty) {
+        throw StateError('Please sign in again to view this review.');
+      }
+      await notification.reference.update({'read': true});
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        clientPageRoute(
+          ReviewsScreen(userId: uid, reviewsFor: ReviewsFor.client),
+        ),
+      );
+      return;
+    }
     if (requestId == null || requestId.isEmpty) {
       throw StateError('This notification has no linked request.');
     }
@@ -27,11 +75,18 @@ Future<void> _openClientNotification(
     if (!requestDocument.exists) {
       throw StateError('This service request is no longer available.');
     }
+    final request = ServiceRequest.fromDocument(requestDocument);
+    final destination =
+        type == 'workerApplication' ||
+            (type == null && request.workerId == null)
+        ? ClientWorkersFoundScreen(requestId: requestId)
+        : ClientBookingDetailsScreen(
+            requestId: requestId,
+            workerId: request.workerId!,
+          );
+    await notification.reference.update({'read': true});
     if (!context.mounted) return;
-    Navigator.push(
-      context,
-      clientPageRoute(ClientWorkersFoundScreen(requestId: requestId)),
-    );
+    Navigator.push(context, clientPageRoute(destination));
   } catch (error) {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -50,152 +105,108 @@ class ClientNotificationsScreen extends StatelessWidget {
     final background = dark ? const Color(0xFF171717) : _cream;
     final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
     final text = dark ? const Color(0xFFF3F3F3) : _ink;
-    final muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF737373);
+    final muted = dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
 
     return Scaffold(
-      backgroundColor: _headerYellow,
+      backgroundColor: background,
+      appBar: AppBar(
+        backgroundColor: background,
+        foregroundColor: text,
+        leading: IconButton(
+          key: const ValueKey('notifications-back'),
+          onPressed: () => Navigator.pop(context),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('Notifications'),
+      ),
       body: SafeArea(
+        top: false,
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 112,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 28, 18, 18),
-                    child: Row(
-                      children: [
-                        Material(
-                          color: const Color(0xFFFFF7D9),
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            key: const ValueKey('notifications-back'),
-                            onPressed: () => Navigator.pop(context),
-                            constraints: const BoxConstraints.tightFor(
-                              width: 38,
-                              height: 38,
-                            ),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: _ink,
-                              size: 19,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Notifications',
-                          style: TextStyle(
-                            color: _ink,
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+            child: uid == null
+                ? Center(
+                    child: Text(
+                      'Please sign in again.',
+                      style: TextStyle(color: text),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    clipBehavior: Clip.antiAlias,
-                    decoration: BoxDecoration(
-                      color: background,
-                      borderRadius: const BorderRadius.vertical(
-                        top: Radius.circular(48),
-                      ),
-                    ),
-                    child: uid == null
-                        ? Center(
+                  )
+                : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('notifications')
+                        .where('recipientId', isEqualTo: uid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
                             child: Text(
-                              'Please sign in again.',
+                              'Could not load notifications:\n'
+                              '${snapshot.error}',
+                              textAlign: TextAlign.center,
                               style: TextStyle(color: text),
                             ),
-                          )
-                        : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                            stream: FirebaseFirestore.instance
-                                .collection('notifications')
-                                .where('recipientId', isEqualTo: uid)
-                                .snapshots(),
-                            builder: (context, snapshot) {
-                              if (snapshot.hasError) {
-                                return Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.all(24),
-                                    child: Text(
-                                      'Could not load notifications:\n'
-                                      '${snapshot.error}',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(color: text),
-                                    ),
-                                  ),
-                                );
-                              }
-                              if (!snapshot.hasData) {
-                                return const Center(
-                                  child: CircularProgressIndicator(),
-                                );
-                              }
-                              final notifications = snapshot.data!.docs.toList()
-                                ..sort((left, right) {
-                                  final leftTime =
-                                      left.data()['createdAt'] as Timestamp?;
-                                  final rightTime =
-                                      right.data()['createdAt'] as Timestamp?;
-                                  return (rightTime?.millisecondsSinceEpoch ??
-                                          0)
-                                      .compareTo(
-                                        leftTime?.millisecondsSinceEpoch ?? 0,
-                                      );
-                                });
-                              if (notifications.isEmpty) {
-                                return Center(
-                                  child: Text(
-                                    'No notifications yet.',
-                                    style: TextStyle(color: muted),
-                                  ),
-                                );
-                              }
-                              return ListView.separated(
-                                padding: const EdgeInsets.fromLTRB(
-                                  18,
-                                  32,
-                                  18,
-                                  28,
-                                ),
-                                itemCount: notifications.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 12),
-                                itemBuilder: (context, index) {
-                                  final notification = notifications[index];
-                                  final data = notification.data();
-                                  final opened = data['read'] == true;
-                                  return _NotificationCard(
-                                    key: ValueKey(
-                                      'client-notification-${notification.id}',
-                                    ),
-                                    title: (data['title'] ?? 'Update')
-                                        .toString(),
-                                    body: (data['body'] ?? '').toString(),
-                                    opened: opened,
-                                    surface: surface,
-                                    text: text,
-                                    muted: muted,
-                                    onTap: () => _openClientNotification(
-                                      context,
-                                      notification,
-                                    ),
-                                  );
-                                },
-                              );
-                            },
                           ),
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final notifications = snapshot.data!.docs.toList()
+                        ..sort((left, right) {
+                          final leftTime =
+                              left.data()['createdAt'] as Timestamp?;
+                          final rightTime =
+                              right.data()['createdAt'] as Timestamp?;
+                          return (rightTime?.millisecondsSinceEpoch ?? 0)
+                              .compareTo(leftTime?.millisecondsSinceEpoch ?? 0);
+                        });
+                      if (notifications.isEmpty) {
+                        return Center(
+                          child: Text(
+                            'No notifications yet.',
+                            style: TextStyle(color: muted),
+                          ),
+                        );
+                      }
+                      return ListView.separated(
+                        padding: const EdgeInsets.fromLTRB(18, 16, 18, 28),
+                        itemCount: notifications.length,
+                        separatorBuilder: (_, _) => const SizedBox(height: 12),
+                        itemBuilder: (context, index) {
+                          final notification = notifications[index];
+                          final data = notification.data();
+                          final opened = data['read'] == true;
+                          return NotificationSwipeActions(
+                            key: ValueKey(
+                              'client-notification-${notification.id}',
+                            ),
+                            actionKeyPrefix:
+                                'client-notification-${notification.id}',
+                            onViewDetails: () =>
+                                _openClientNotification(context, notification),
+                            onDelete: () => _deleteClientNotification(
+                              context,
+                              notification,
+                            ),
+                            child: _NotificationCard(
+                              title: (data['title'] ?? 'Update').toString(),
+                              body: (data['body'] ?? '').toString(),
+                              opened: opened,
+                              surface: surface,
+                              text: text,
+                              muted: muted,
+                              onTap: () => _openClientNotification(
+                                context,
+                                notification,
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -205,7 +216,6 @@ class ClientNotificationsScreen extends StatelessWidget {
 
 class _NotificationCard extends StatelessWidget {
   const _NotificationCard({
-    super.key,
     required this.title,
     required this.body,
     required this.opened,
@@ -226,9 +236,11 @@ class _NotificationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: surface,
-    elevation: 3,
-    shadowColor: Colors.black38,
-    borderRadius: BorderRadius.circular(20),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(20),
+      side: BorderSide(color: Theme.of(context).dividerColor),
+    ),
     child: InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),

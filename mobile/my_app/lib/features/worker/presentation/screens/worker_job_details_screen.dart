@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/widgets/simple_back_button.dart';
+import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -9,20 +12,20 @@ import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
-import '../../../../shared/screens/reviews_screen.dart';
+import '../../../../shared/screens/public_profile_screen.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/services/device_location_service.dart';
 import '../../../../shared/services/rider_location_service.dart';
 import '../../../../shared/utils/job_location_utils.dart';
-import '../../../../shared/widgets/client_rating_summary.dart';
 import '../../../../shared/widgets/errand_map_layers.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import 'worker_verification_screen.dart';
 
-const _detailsYellow = Color(0xFFFFC72C);
-const _detailsCream = Color(0xFFFFF9E9);
-const _detailsInk = Color(0xFF242424);
+const _detailsYellow = AppTheme.yellow;
+const _detailsCream = Color(0xFFFFFFFF);
+const _detailsInk = AppTheme.ink;
 
 class WorkerJobDetailsScreen extends StatefulWidget {
   const WorkerJobDetailsScreen({
@@ -147,6 +150,25 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
     }
   }
 
+  Future<void> _confirmAndRun({
+    required String title,
+    required String message,
+    required String confirmLabel,
+    required IconData icon,
+    required Future<void> Function() action,
+    required String successMessage,
+  }) async {
+    final confirmed = await showActionConfirmation(
+      context,
+      title: title,
+      message: message,
+      confirmLabel: confirmLabel,
+      icon: icon,
+    );
+    if (!confirmed) return;
+    await _runAction(action, successMessage);
+  }
+
   Future<void> _openClientChat(ServiceRequest request) async {
     final pairConversationId = conversationIdFor(
       clientId: request.clientId,
@@ -237,6 +259,15 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
         return;
       }
 
+      final profile = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final reviewerName =
+          (profile.data()?['fullName'] ?? widget.worker.fullName)
+              .toString()
+              .trim();
+      if (!mounted) return;
       final review = await showDialog<_ClientReview>(
         context: context,
         barrierDismissible: false,
@@ -252,6 +283,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
       batch.set(reviewReference, {
         'requestId': request.id,
         'workerId': user.uid,
+        'workerName': reviewerName,
         'clientId': request.clientId,
         'clientName': request.clientName,
         'rating': review.rating,
@@ -262,6 +294,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
         'recipientId': request.clientId,
         'senderId': user.uid,
         'requestId': request.id,
+        'type': 'reviewReceived',
         'title': 'New review received',
         'body':
             '${widget.worker.fullName} rated you ${review.rating} out of 5 stars.',
@@ -283,93 +316,118 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
     }
   }
 
+  Widget _buildDetailsBody(
+    ServiceRequest request,
+    _WorkerDetailsPalette palette,
+  ) {
+    return _WorkerBookingDetailsBody(
+      request: request,
+      worker: widget.worker,
+      palette: palette,
+      locationCard: _locationCard(request, palette),
+      savingAction: _savingAction,
+      savingReview: _savingReview,
+      savingReport: _savingReport,
+      onMessage: () => _openClientChat(request),
+      onRateClient: () => _rateClient(request),
+      onReport: () => _reportClient(request),
+      onVerify: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => WorkerVerificationScreen(profile: widget.worker),
+        ),
+      ),
+      onApply: () => _confirmAndRun(
+        title: 'Apply for this job?',
+        message:
+            'Are you sure you want to apply for ${request.title}? The client will be able to review your profile.',
+        confirmLabel: 'Apply',
+        icon: Icons.send_outlined,
+        action: () => ServiceRequestRepository().apply(
+          request: request,
+          worker: widget.worker,
+        ),
+        successMessage: 'Application sent.',
+      ),
+      onStart: () => _confirmAndRun(
+        title: 'Start this booking?',
+        message:
+            'Confirm that you are starting ${request.title}. The booking status will be visible to the client.',
+        confirmLabel: request.isErrand ? 'Start errand' : 'Start work',
+        icon: Icons.play_arrow_rounded,
+        action: () => ServiceRequestRepository().transition(
+          requestId: request.id,
+          from: ServiceRequestStatus.accepted,
+          to: ServiceRequestStatus.ongoing,
+          workerId: widget.worker.id,
+        ),
+        successMessage: request.isErrand ? 'Errand started.' : 'Work started.',
+      ),
+      onAdvanceStage: (stage) => _runAction(
+        () => ServiceRequestRepository().advanceErrandStage(
+          requestId: request.id,
+          from: stage,
+          workerId: widget.worker.id,
+        ),
+        'Customer updated: ${stage.next?.label ?? ''}.',
+      ),
+      onComplete: () => _confirmAndRun(
+        title: 'Complete this booking?',
+        message:
+            'Are you sure the work for ${request.title} is complete? This will move the booking to completed.',
+        confirmLabel: request.isErrand ? 'Mark delivered' : 'Mark complete',
+        icon: Icons.task_alt_rounded,
+        action: () => ServiceRequestRepository().transition(
+          requestId: request.id,
+          from: ServiceRequestStatus.ongoing,
+          to: ServiceRequestStatus.completed,
+          workerId: widget.worker.id,
+        ),
+        successMessage: request.isErrand
+            ? 'Errand delivered.'
+            : 'Booking marked completed.',
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = _WorkerDetailsPalette(
       dark: Theme.of(context).brightness == Brightness.dark,
     );
     return Scaffold(
-      backgroundColor: _detailsYellow,
+      backgroundColor: palette.background,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('service_requests')
-                  .doc(widget.request.id)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return _DetailsMessage(
-                    message: 'Could not load booking: ${snapshot.error}',
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.data!.exists) {
-                  return const _DetailsMessage(
-                    message: 'This booking no longer exists.',
-                  );
-                }
-                final request = ServiceRequest.fromDocument(snapshot.data!);
-                return _WorkerBookingDetailsBody(
-                  request: request,
-                  worker: widget.worker,
-                  palette: palette,
-                  locationCard: _locationCard(request, palette),
-                  savingAction: _savingAction,
-                  savingReview: _savingReview,
-                  savingReport: _savingReport,
-                  onMessage: () => _openClientChat(request),
-                  onRateClient: () => _rateClient(request),
-                  onReport: () => _reportClient(request),
-                  onVerify: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          WorkerVerificationScreen(profile: widget.worker),
-                    ),
+            child: Firebase.apps.isEmpty
+                ? _buildDetailsBody(widget.request, palette)
+                : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                    stream: FirebaseFirestore.instance
+                        .collection('service_requests')
+                        .doc(widget.request.id)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return _DetailsMessage(
+                          message: 'Could not load booking: ${snapshot.error}',
+                        );
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.data!.exists) {
+                        return const _DetailsMessage(
+                          message: 'This booking no longer exists.',
+                        );
+                      }
+                      final request = ServiceRequest.fromDocument(
+                        snapshot.data!,
+                      );
+                      return _buildDetailsBody(request, palette);
+                    },
                   ),
-                  onApply: () => _runAction(
-                    () => ServiceRequestRepository().apply(
-                      request: request,
-                      worker: widget.worker,
-                    ),
-                    'Application sent.',
-                  ),
-                  onStart: () => _runAction(
-                    () => ServiceRequestRepository().transition(
-                      requestId: request.id,
-                      from: ServiceRequestStatus.accepted,
-                      to: ServiceRequestStatus.ongoing,
-                      workerId: widget.worker.id,
-                    ),
-                    request.isErrand ? 'Errand started.' : 'Work started.',
-                  ),
-                  onAdvanceStage: (stage) => _runAction(
-                    () => ServiceRequestRepository().advanceErrandStage(
-                      requestId: request.id,
-                      from: stage,
-                      workerId: widget.worker.id,
-                    ),
-                    'Customer updated: ${stage.next?.label ?? ''}.',
-                  ),
-                  onComplete: () => _runAction(
-                    () => ServiceRequestRepository().transition(
-                      requestId: request.id,
-                      from: ServiceRequestStatus.ongoing,
-                      to: ServiceRequestStatus.completed,
-                      workerId: widget.worker.id,
-                    ),
-                    request.isErrand
-                        ? 'Errand delivered.'
-                        : 'Booking marked completed.',
-                  ),
-                );
-              },
-            ),
           ),
         ),
       ),
@@ -419,119 +477,122 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
         request.isErrand &&
         isAssignedWorker &&
         request.status == ServiceRequestStatus.ongoing;
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            SizedBox(
-              height: 180,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
-                child: Column(
+        SizedBox(
+          height: 168,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
+            child: Column(
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        Material(
-                          color: const Color(0xFFFFF7D9),
-                          shape: const CircleBorder(),
-                          child: IconButton(
-                            key: const ValueKey('worker-booking-back'),
-                            onPressed: () => Navigator.pop(context),
-                            constraints: const BoxConstraints.tightFor(
-                              width: 38,
-                              height: 38,
-                            ),
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: _detailsInk,
-                              size: 19,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Booking Details',
-                          style: TextStyle(
-                            color: _detailsInk,
-                            fontSize: 21,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
+                    SimpleBackButton(
+                      key: const ValueKey('worker-booking-back'),
+                      onPressed: () => Navigator.pop(context),
                     ),
-                    const SizedBox(height: 18),
-                    LiveProfileAvatar(
-                      userId: request.clientId,
-                      fallbackName: request.clientName,
-                      radius: 38,
-                      backgroundColor: const Color(0xFFDCE5FF),
-                      foregroundColor: const Color(0xFF24458E),
-                      textStyle: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
+                    const SizedBox(width: 12),
+                    Text(
+                      'Booking Details',
+                      style: TextStyle(
+                        color: palette.text,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: palette.background,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(48),
+                const SizedBox(height: 18),
+                LiveProfileAvatar(
+                  userId: request.clientId,
+                  fallbackName: request.clientName,
+                  radius: 32,
+                  backgroundColor: AppTheme.softYellow,
+                  foregroundColor: AppTheme.ink,
+                  textStyle: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 48, 20, 190),
-                  children: [
-                    _ClientSummaryCard(request: request, palette: palette),
-                    const SizedBox(height: 18),
-                    _JobSummaryCard(request: request, palette: palette),
-                    if (locationCard != null) ...[
-                      const SizedBox(height: 18),
-                      locationCard!,
-                    ],
-                    if (sharesLocation) ...[
-                      const SizedBox(height: 18),
-                      _RiderSharingBanner(
-                        key: ValueKey('rider-sharing-${request.id}'),
-                        requestId: request.id,
-                        palette: palette,
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    _WorkerBookingActions(
-                      request: request,
-                      worker: worker,
-                      palette: palette,
-                      isAssignedWorker: isAssignedWorker,
-                      saving: savingAction,
-                      savingReview: savingReview,
-                      onMessage: onMessage,
-                      onRateClient: onRateClient,
-                      onVerify: onVerify,
-                      onApply: onApply,
-                      onStart: onStart,
-                      onAdvanceStage: onAdvanceStage,
-                      onComplete: onComplete,
-                    ),
-                  ],
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
-        _ClientProfileSheet(
-          request: request,
-          palette: palette,
-          canContact: isAssignedWorker,
-          savingReport: savingReport,
-          onMessage: onMessage,
-          onReport: onReport,
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: palette.background,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+              children: [
+                _ClientSummaryCard(request: request, palette: palette),
+                const SizedBox(height: 18),
+                _JobSummaryCard(request: request, palette: palette),
+                if (locationCard != null) ...[
+                  const SizedBox(height: 18),
+                  locationCard!,
+                ],
+                if (sharesLocation) ...[
+                  const SizedBox(height: 18),
+                  _RiderSharingBanner(
+                    key: ValueKey('rider-sharing-${request.id}'),
+                    requestId: request.id,
+                    palette: palette,
+                  ),
+                ],
+                const SizedBox(height: 22),
+                FilledButton.icon(
+                  key: const ValueKey('view-client-profile'),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PublicProfileScreen(
+                        userId: request.clientId,
+                        role: PublicProfileRole.client,
+                        initialData: <String, dynamic>{
+                          'fullName': request.clientName,
+                          'location': request.location,
+                        },
+                        onReport: isAssignedWorker ? onReport : null,
+                        reporting: savingReport,
+                        reportLabel: 'Report client',
+                      ),
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.yellow,
+                    foregroundColor: AppTheme.ink,
+                    minimumSize: const Size.fromHeight(52),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(Icons.person_outline_rounded),
+                  label: const Text('View Profile'),
+                ),
+                const SizedBox(height: 12),
+                _WorkerBookingActions(
+                  request: request,
+                  worker: worker,
+                  palette: palette,
+                  isAssignedWorker: isAssignedWorker,
+                  saving: savingAction,
+                  savingReview: savingReview,
+                  onMessage: onMessage,
+                  onRateClient: onRateClient,
+                  onVerify: onVerify,
+                  onApply: onApply,
+                  onStart: onStart,
+                  onAdvanceStage: onAdvanceStage,
+                  onComplete: onComplete,
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -551,13 +612,7 @@ class _ClientSummaryCard extends StatelessWidget {
       color: palette.surface,
       border: Border.all(color: _detailsYellow, width: 1.4),
       borderRadius: BorderRadius.circular(20),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x26000000),
-          blurRadius: 5,
-          offset: Offset(0, 3),
-        ),
-      ],
+      boxShadow: const [],
     ),
     child: Row(
       children: [
@@ -565,7 +620,7 @@ class _ClientSummaryCard extends StatelessWidget {
           userId: request.clientId,
           fallbackName: request.clientName,
           radius: 24,
-          backgroundColor: const Color(0xFFFFF1C8),
+          backgroundColor: AppTheme.softYellow,
           foregroundColor: _detailsInk,
           textStyle: const TextStyle(fontWeight: FontWeight.w800),
         ),
@@ -787,17 +842,17 @@ class _WorkerBookingActions extends StatelessWidget {
             ServiceApplicationStatus.accepted => (
               'Application accepted',
               'This booking is ready for you.',
-              const Color(0xFF20B978),
+              AppTheme.ink,
             ),
             ServiceApplicationStatus.rejected => (
               'Application not selected',
               'The client selected another worker.',
-              const Color(0xFFE74632),
+              AppTheme.ink,
             ),
             ServiceApplicationStatus.pending => (
               'Application sent',
               'Wait for the client to choose a worker.',
-              const Color(0xFFE3A500),
+              AppTheme.ink,
             ),
           };
           return Container(
@@ -1001,176 +1056,6 @@ class _RiderSharingBannerState extends State<_RiderSharingBanner>
   }
 }
 
-class _ClientProfileSheet extends StatelessWidget {
-  const _ClientProfileSheet({
-    required this.request,
-    required this.palette,
-    required this.canContact,
-    required this.savingReport,
-    required this.onMessage,
-    required this.onReport,
-  });
-
-  final ServiceRequest request;
-  final _WorkerDetailsPalette palette;
-  final bool canContact;
-  final bool savingReport;
-  final VoidCallback onMessage;
-  final VoidCallback onReport;
-
-  @override
-  Widget build(BuildContext context) => DraggableScrollableSheet(
-    initialChildSize: 0.18,
-    minChildSize: 0.18,
-    maxChildSize: 0.72,
-    snap: true,
-    builder: (context, scrollController) => Container(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(42)),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 12,
-            offset: Offset(0, -4),
-          ),
-        ],
-      ),
-      child: ListView(
-        controller: scrollController,
-        padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
-        children: [
-          Center(
-            child: Container(
-              width: 52,
-              height: 5,
-              decoration: BoxDecoration(
-                color: palette.muted,
-                borderRadius: BorderRadius.circular(3),
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Icon(Icons.keyboard_arrow_up, color: palette.text, size: 30),
-          Text(
-            'Swipe to view client’s profile',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 28),
-          LiveProfileAvatar(
-            userId: request.clientId,
-            fallbackName: request.clientName,
-            radius: 42,
-            backgroundColor: const Color(0xFFFFF1C8),
-            foregroundColor: _detailsInk,
-            textStyle: const TextStyle(
-              fontSize: 25,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            request.clientName,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: palette.text,
-              fontSize: 21,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          Text(
-            'Client',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: palette.muted),
-          ),
-          const SizedBox(height: 22),
-          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('service_requests')
-                .where('clientId', isEqualTo: request.clientId)
-                .snapshots(),
-            builder: (context, snapshot) {
-              final requests = snapshot.data?.docs ?? const [];
-              return Row(
-                children: [
-                  Expanded(
-                    child: _ProfileStat(
-                      value: snapshot.hasData ? '${requests.length}' : '—',
-                      label: 'Jobs posted',
-                      palette: palette,
-                    ),
-                  ),
-                  Expanded(
-                    child: ClientRatingBuilder(
-                      clientId: request.clientId,
-                      builder: (context, summary) => _ProfileStat(
-                        value: summary.displayAverage,
-                        label: summary.reviewCount == 1
-                            ? '1 rating'
-                            : '${summary.reviewCount} ratings',
-                        palette: palette,
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ReviewsScreen(
-                              userId: request.clientId,
-                              reviewsFor: ReviewsFor.client,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
-            },
-          ),
-          const SizedBox(height: 20),
-          _DetailLine(
-            icon: Icons.location_on_outlined,
-            label: request.placeLabel,
-            palette: palette,
-          ),
-          _DetailLine(
-            icon: Icons.handshake_outlined,
-            label: canContact
-                ? 'Confirmed booking client'
-                : 'Client application pending',
-            palette: palette,
-          ),
-          const SizedBox(height: 14),
-          if (canContact) ...[
-            _DetailsButton(
-              key: const ValueKey('message-client-profile'),
-              label: 'Message Client',
-              onPressed: onMessage,
-              palette: palette,
-            ),
-            const SizedBox(height: 10),
-            OutlinedButton.icon(
-              key: const ValueKey('report-client'),
-              onPressed: savingReport ? null : onReport,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFE74632),
-                side: const BorderSide(color: Color(0xFFE74632)),
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              icon: const Icon(Icons.report_outlined),
-              label: Text(
-                savingReport ? 'Submitting report...' : 'Report client',
-              ),
-            ),
-          ],
-        ],
-      ),
-    ),
-  );
-}
-
 class _ClientReview {
   const _ClientReview({required this.rating, required this.comment});
 
@@ -1203,7 +1088,7 @@ class _ClientReviewDialogState extends State<_ClientReviewDialog> {
     final surface = dark ? const Color(0xFF272727) : _detailsCream;
     final field = dark ? const Color(0xFF333333) : Colors.white;
     final text = dark ? const Color(0xFFF4F4F4) : _detailsInk;
-    final muted = dark ? const Color(0xFFB5B5B5) : const Color(0xFF6F7480);
+    final muted = dark ? const Color(0xFFB5B5B5) : AppTheme.muted;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -1270,7 +1155,7 @@ class _ClientReviewDialogState extends State<_ClientReviewDialog> {
                             onPressed: () => Navigator.pop(context),
                             icon: const Icon(
                               Icons.close,
-                              color: Color(0xFF62666F),
+                              color: AppTheme.muted,
                             ),
                           ),
                         ),
@@ -1304,7 +1189,7 @@ class _ClientReviewDialogState extends State<_ClientReviewDialog> {
                                   icon: Icon(
                                     Icons.star_rounded,
                                     color: index < _rating
-                                        ? const Color(0xFFE37B00)
+                                        ? AppTheme.yellow
                                         : const Color(0xFFA7A9AD),
                                   ),
                                 ),
@@ -1379,11 +1264,9 @@ class _ClientReviewDialogState extends State<_ClientReviewDialog> {
                                         ),
                                       ),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF17BD8A),
-                                  foregroundColor: Colors.white,
-                                  disabledBackgroundColor: const Color(
-                                    0xFF9EDBC8,
-                                  ),
+                                  backgroundColor: AppTheme.yellow,
+                                  foregroundColor: AppTheme.ink,
+                                  disabledBackgroundColor: AppTheme.softYellow,
                                   minimumSize: const Size.fromHeight(54),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
@@ -1446,7 +1329,7 @@ class _ClientReportDialogState extends State<_ClientReportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    icon: const Icon(Icons.report_outlined, color: Color(0xFFE74632), size: 34),
+    icon: const Icon(Icons.report_outlined, color: AppTheme.ink, size: 34),
     title: Text('Report ${widget.clientName}?'),
     content: SingleChildScrollView(
       child: Column(
@@ -1505,7 +1388,7 @@ class _ClientReportDialogState extends State<_ClientReportDialog> {
                 ),
               ),
         style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFE74632),
+          backgroundColor: AppTheme.ink,
           foregroundColor: Colors.white,
         ),
         child: const Text('Submit report'),
@@ -1535,7 +1418,7 @@ class _DetailsButton extends StatelessWidget {
       backgroundColor: yellow ? _detailsYellow : palette.surface,
       foregroundColor: yellow ? _detailsInk : palette.text,
       minimumSize: const Size.fromHeight(52),
-      elevation: 2,
+      elevation: 0,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
     ),
     child: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
@@ -1565,43 +1448,6 @@ class _DetailLine extends StatelessWidget {
           child: Text(label, style: TextStyle(color: palette.text)),
         ),
       ],
-    ),
-  );
-}
-
-class _ProfileStat extends StatelessWidget {
-  const _ProfileStat({
-    required this.value,
-    required this.label,
-    required this.palette,
-    this.onTap,
-  });
-
-  final String value;
-  final String label;
-  final _WorkerDetailsPalette palette;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    key: onTap == null ? null : const ValueKey('client-reviews-link'),
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: palette.text,
-              fontSize: 20,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          Text(label, style: TextStyle(color: palette.muted, fontSize: 12)),
-        ],
-      ),
     ),
   );
 }
@@ -1691,11 +1537,15 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
         error?.failure == DeviceLocationFailure.permissionPermanentlyDenied;
     return Material(
       color: widget.palette.surface,
-      borderRadius: BorderRadius.circular(18),
       clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shadowColor: const Color(0x33000000),
-      textStyle: TextStyle(color: widget.palette.text),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: Theme.of(context).dividerColor),
+      ),
+      textStyle: Theme.of(
+        context,
+      ).textTheme.bodyMedium?.copyWith(color: widget.palette.text),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1874,7 +1724,7 @@ class _WorkerDetailsPalette {
     : background = dark ? const Color(0xFF171717) : _detailsCream,
       surface = dark ? const Color(0xFF2C2C2C) : Colors.white,
       text = dark ? const Color(0xFFF3F3F3) : _detailsInk,
-      muted = dark ? const Color(0xFFB8B8B8) : const Color(0xFF737373);
+      muted = dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
 
   final Color background;
   final Color surface;

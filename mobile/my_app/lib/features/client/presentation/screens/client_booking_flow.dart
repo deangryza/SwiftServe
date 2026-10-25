@@ -1,12 +1,15 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/widgets/simple_back_button.dart';
+import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
-import '../../../../shared/screens/reviews_screen.dart';
+import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/services/client_theme_controller.dart';
+import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
 import '../widgets/conversation_ui.dart';
@@ -15,9 +18,9 @@ import 'client_request_details_screen.dart';
 import 'client_sections.dart';
 import 'post_request_screen.dart';
 
-const _bookingYellow = Color(0xFFFFC72C);
-const _bookingCream = Color(0xFFFFF9E9);
-const _bookingInk = Color(0xFF242424);
+const _bookingYellow = AppTheme.yellow;
+const _bookingCream = Color(0xFFFFFFFF);
+const _bookingInk = AppTheme.ink;
 
 enum _BookingFilter { recent, past }
 
@@ -30,11 +33,11 @@ String bookingStatusLabel(ServiceRequestStatus status) => switch (status) {
 };
 
 Color _statusColor(ServiceRequestStatus status) => switch (status) {
-  ServiceRequestStatus.pending => const Color(0xFFFFC72C),
-  ServiceRequestStatus.accepted => const Color(0xFFAEC8FF),
-  ServiceRequestStatus.ongoing => const Color(0xFFFFC72C),
-  ServiceRequestStatus.completed => const Color(0xFF6EF0B0),
-  ServiceRequestStatus.cancelled => const Color(0xFFFF927C),
+  ServiceRequestStatus.pending => AppTheme.yellow,
+  ServiceRequestStatus.accepted => AppTheme.softYellow,
+  ServiceRequestStatus.ongoing => AppTheme.yellow,
+  ServiceRequestStatus.completed => AppTheme.softYellow,
+  ServiceRequestStatus.cancelled => AppTheme.softYellow,
 };
 
 String _formatDate(DateTime? date) {
@@ -59,8 +62,8 @@ class _BookingPalette {
   Color get background => dark ? const Color(0xFF171717) : _bookingCream;
   Color get surface => dark ? const Color(0xFF2C2C2C) : Colors.white;
   Color get text => dark ? const Color(0xFFF3F3F3) : _bookingInk;
-  Color get muted => dark ? const Color(0xFFB8B8B8) : const Color(0xFF707070);
-  Color get border => dark ? const Color(0xFF707070) : _bookingYellow;
+  Color get muted => dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
+  Color get border => dark ? AppTheme.muted : _bookingYellow;
 }
 
 class ClientBookingsScreen extends StatefulWidget {
@@ -101,7 +104,7 @@ class _ClientBookingsScreenState extends State<ClientBookingsScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: _bookingYellow,
+        backgroundColor: palette.background,
         body: SafeArea(
           child: Center(
             child: ConstrainedBox(
@@ -121,9 +124,7 @@ class _ClientBookingsScreenState extends State<ClientBookingsScreen> {
                       clipBehavior: Clip.antiAlias,
                       decoration: BoxDecoration(
                         color: palette.background,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(42),
-                        ),
+                        borderRadius: BorderRadius.zero,
                       ),
                       child: uid == null
                           ? const Center(child: Text('Please log in again.'))
@@ -169,10 +170,10 @@ class _BookingsHeader extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               'Bookings',
               style: TextStyle(
-                color: _bookingInk,
+                color: palette.text,
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
               ),
@@ -216,13 +217,7 @@ class _BookingFilterSlider extends StatelessWidget {
     decoration: BoxDecoration(
       color: palette.surface,
       borderRadius: BorderRadius.circular(18),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x26000000),
-          blurRadius: 4,
-          offset: Offset(0, 2),
-        ),
-      ],
+      border: Border.all(color: Theme.of(context).dividerColor),
     ),
     child: Stack(
       children: [
@@ -237,7 +232,7 @@ class _BookingFilterSlider extends StatelessWidget {
             heightFactor: 1,
             child: DecoratedBox(
               decoration: BoxDecoration(
-                color: _bookingCream,
+                color: _bookingYellow,
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
@@ -423,9 +418,11 @@ class _BookingCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: palette.surface,
-    elevation: 3,
-    shadowColor: Colors.black38,
-    borderRadius: BorderRadius.circular(20),
+    elevation: 0,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(20),
+      side: BorderSide(color: Theme.of(context).dividerColor),
+    ),
     child: InkWell(
       key: ValueKey('booking-${request.id}'),
       onTap: onTap,
@@ -573,26 +570,15 @@ class _ClientWorkersFoundScreenState extends State<ClientWorkersFoundScreen> {
     ServiceRequest request,
     ServiceApplication application,
   ) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Accept this worker?'),
-        content: Text(
-          '${application.workerName} will be selected for ${request.title}.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Not yet'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Accept worker'),
-          ),
-        ],
-      ),
+    final confirmed = await showActionConfirmation(
+      context,
+      title: 'Accept this worker?',
+      message:
+          '${application.workerName} will be selected for ${request.title}. Other applications will no longer be available.',
+      confirmLabel: 'Accept worker',
+      icon: Icons.person_add_alt_1_rounded,
     );
-    if (confirmed != true || _saving) return;
+    if (!confirmed || _saving) return;
     setState(() => _saving = true);
     try {
       await ServiceRequestRepository().acceptApplicant(
@@ -617,7 +603,7 @@ class _ClientWorkersFoundScreenState extends State<ClientWorkersFoundScreen> {
   Widget build(BuildContext context) {
     final palette = _BookingPalette(context);
     return Scaffold(
-      backgroundColor: _bookingYellow,
+      backgroundColor: palette.background,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -653,9 +639,7 @@ class _ClientWorkersFoundScreenState extends State<ClientWorkersFoundScreen> {
                         clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           color: palette.background,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(38),
-                          ),
+                          borderRadius: BorderRadius.zero,
                         ),
                         child: _ApplicationsList(
                           request: request,
@@ -867,22 +851,23 @@ class _ApplicationCard extends StatelessWidget {
       final skills = _skills(profile);
       return Material(
         color: palette.surface,
-        elevation: 3,
-        shadowColor: Colors.black38,
-        borderRadius: BorderRadius.circular(20),
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Theme.of(context).dividerColor),
+        ),
         child: InkWell(
           key: ValueKey('worker-application-${application.workerId}'),
-          onTap: _accepted
-              ? () => Navigator.push(
-                  context,
-                  clientPageRoute(
-                    ClientBookingDetailsScreen(
-                      requestId: request.id,
-                      workerId: application.workerId,
-                    ),
-                  ),
-                )
-              : null,
+          onTap: () => Navigator.push(
+            context,
+            clientPageRoute(
+              PublicProfileScreen(
+                userId: application.workerId,
+                role: PublicProfileRole.worker,
+                initialData: profile,
+              ),
+            ),
+          ),
           borderRadius: BorderRadius.circular(20),
           child: Container(
             padding: const EdgeInsets.all(14),
@@ -899,7 +884,7 @@ class _ApplicationCard extends StatelessWidget {
                   userId: application.workerId,
                   fallbackName: name,
                   radius: 25,
-                  backgroundColor: const Color(0xFFFFF1C8),
+                  backgroundColor: AppTheme.softYellow,
                   foregroundColor: _bookingInk,
                   textStyle: const TextStyle(fontWeight: FontWeight.w700),
                 ),
@@ -909,9 +894,11 @@ class _ApplicationCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _accepted ? 'Accepted worker' : 'Applied worker',
+                        _accepted
+                            ? 'Accepted worker · View profile'
+                            : 'Applied worker · View profile',
                         style: const TextStyle(
-                          color: Color(0xFF8A6B00),
+                          color: AppTheme.muted,
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                         ),
@@ -937,9 +924,28 @@ class _ApplicationCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 if (_accepted)
-                  const Icon(Icons.chevron_right, color: _bookingYellow)
+                  IconButton(
+                    key: ValueKey(
+                      'worker-booking-details-${application.workerId}',
+                    ),
+                    tooltip: 'Open booking details',
+                    onPressed: () => Navigator.push(
+                      context,
+                      clientPageRoute(
+                        ClientBookingDetailsScreen(
+                          requestId: request.id,
+                          workerId: application.workerId,
+                        ),
+                      ),
+                    ),
+                    icon: const Icon(
+                      Icons.chevron_right,
+                      color: _bookingYellow,
+                    ),
+                  )
                 else if (_canAccept)
                   FilledButton(
+                    key: ValueKey('accept-worker-${application.workerId}'),
                     onPressed: saving ? null : onAccept,
                     style: FilledButton.styleFrom(
                       backgroundColor: _bookingYellow,
@@ -1022,24 +1028,15 @@ class _ClientBookingDetailsScreenState
   }
 
   Future<void> _cancel(ServiceRequest request) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this request?'),
-        content: Text('Cancel ${request.title}?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Keep booking'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Cancel request'),
-          ),
-        ],
-      ),
+    final confirmed = await showActionConfirmation(
+      context,
+      title: 'Cancel this booking?',
+      message:
+          'Are you sure you want to cancel ${request.title}? This action cannot be undone.',
+      confirmLabel: 'Cancel booking',
+      icon: Icons.event_busy_outlined,
     );
-    if (confirmed != true || _saving) return;
+    if (!confirmed || _saving) return;
     setState(() => _saving = true);
     try {
       await FirebaseFirestore.instance
@@ -1080,6 +1077,14 @@ class _ClientBookingDetailsScreenState
         return;
       }
 
+      final profile = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      final reviewerName = (profile.data()?['fullName'] ?? request.clientName)
+          .toString()
+          .trim();
+      if (!mounted) return;
       final review = await showDialog<_WorkerReview>(
         context: context,
         barrierDismissible: false,
@@ -1097,6 +1102,7 @@ class _ClientBookingDetailsScreenState
       batch.set(reviewReference, {
         'requestId': request.id,
         'clientId': user.uid,
+        'clientName': reviewerName,
         'workerId': request.workerId,
         'workerName': request.workerName ?? '',
         'rating': review.rating,
@@ -1107,6 +1113,7 @@ class _ClientBookingDetailsScreenState
         'recipientId': request.workerId,
         'senderId': user.uid,
         'requestId': request.id,
+        'type': 'reviewReceived',
         'title': 'New review received',
         'body':
             '${request.clientName} rated your work ${review.rating} out of 5 stars.',
@@ -1180,7 +1187,7 @@ class _ClientBookingDetailsScreenState
   Widget build(BuildContext context) {
     final palette = _BookingPalette(context);
     return Scaffold(
-      backgroundColor: _bookingYellow,
+      backgroundColor: palette.background,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -1269,145 +1276,156 @@ class _BookingDetailsBody extends StatelessWidget {
     final canCancel =
         request.status == ServiceRequestStatus.pending ||
         request.status == ServiceRequestStatus.accepted;
-    return Stack(
+    return Column(
       children: [
-        Column(
-          children: [
-            SizedBox(
-              height: 180,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
-                child: Column(
+        SizedBox(
+          height: 168,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
+            child: Column(
+              children: [
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        _CircleBackButton(
-                          onPressed: () => Navigator.pop(context),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Booking Details',
-                          style: TextStyle(
-                            color: _bookingInk,
-                            fontSize: 21,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 18),
-                    LiveProfileAvatar(
-                      userId: request.workerId ?? '',
-                      fallbackName: name,
-                      radius: 38,
-                      backgroundColor: const Color(0xFFDCE5FF),
-                      foregroundColor: const Color(0xFF24458E),
-                      textStyle: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w800,
+                    _CircleBackButton(onPressed: () => Navigator.pop(context)),
+                    const SizedBox(width: 12),
+                    Text(
+                      'Booking Details',
+                      style: TextStyle(
+                        color: palette.text,
+                        fontSize: 21,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
-              ),
-            ),
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: palette.background,
-                  borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(48),
+                const SizedBox(height: 18),
+                LiveProfileAvatar(
+                  userId: request.workerId ?? '',
+                  fallbackName: name,
+                  radius: 32,
+                  backgroundColor: AppTheme.softYellow,
+                  foregroundColor: AppTheme.ink,
+                  textStyle: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 48, 20, 190),
-                  children: [
-                    _AcceptedWorkerCard(
-                      name: name,
-                      request: request,
-                      worker: worker,
-                      palette: palette,
-                    ),
-                    const SizedBox(height: 18),
-                    _RequestSummaryCard(request: request, palette: palette),
-                    if (request.isErrand &&
-                        (request.status == ServiceRequestStatus.accepted ||
-                            request.status ==
-                                ServiceRequestStatus.ongoing)) ...[
-                      const SizedBox(height: 18),
-                      ErrandTrackingMap(
-                        key: ValueKey('errand-tracking-${request.id}'),
-                        request: request,
-                      ),
-                    ],
-                    const SizedBox(height: 22),
-                    if (request.status == ServiceRequestStatus.completed) ...[
-                      FilledButton(
-                        key: const ValueKey('rate-completed-worker'),
-                        onPressed: savingReview ? null : onRateWorker,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: palette.surface,
-                          foregroundColor: palette.text,
-                          minimumSize: const Size.fromHeight(52),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          savingReview
-                              ? 'Submitting Review...'
-                              : 'Rate your worker',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    FilledButton(
-                      key: const ValueKey('message-accepted-worker'),
-                      onPressed: onMessage,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: palette.surface,
-                        foregroundColor: palette.text,
-                        minimumSize: const Size.fromHeight(52),
-                        elevation: 2,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text('Message Worker'),
-                    ),
-                    if (canCancel) ...[
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        onPressed: saving ? null : onCancel,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: const Color(0xFFFFDDDD),
-                          foregroundColor: const Color(0xFFE74632),
-                          minimumSize: const Size.fromHeight(52),
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: Text(
-                          saving ? 'Cancelling...' : 'Cancel Request',
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
-        _WorkerProfileSheet(
-          worker: worker,
-          workerId: request.workerId ?? '',
-          name: name,
-          palette: palette,
-          savingReport: savingReport,
-          onReport: onReportWorker,
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: palette.background,
+              borderRadius: BorderRadius.zero,
+            ),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+              children: [
+                _AcceptedWorkerCard(
+                  name: name,
+                  request: request,
+                  worker: worker,
+                  palette: palette,
+                ),
+                const SizedBox(height: 18),
+                _RequestSummaryCard(request: request, palette: palette),
+                if (request.isErrand &&
+                    (request.status == ServiceRequestStatus.accepted ||
+                        request.status == ServiceRequestStatus.ongoing)) ...[
+                  const SizedBox(height: 18),
+                  ErrandTrackingMap(
+                    key: ValueKey('errand-tracking-${request.id}'),
+                    request: request,
+                  ),
+                ],
+                const SizedBox(height: 22),
+                FilledButton.icon(
+                  key: const ValueKey('view-worker-profile'),
+                  onPressed: request.workerId == null
+                      ? null
+                      : () => Navigator.push(
+                          context,
+                          clientPageRoute(
+                            PublicProfileScreen(
+                              userId: request.workerId!,
+                              role: PublicProfileRole.worker,
+                              initialData: worker,
+                              onReport: onReportWorker,
+                              reporting: savingReport,
+                              reportLabel: 'Report worker',
+                            ),
+                          ),
+                        ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppTheme.yellow,
+                    foregroundColor: AppTheme.ink,
+                    minimumSize: const Size.fromHeight(52),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  icon: const Icon(Icons.person_outline_rounded),
+                  label: const Text('View Profile'),
+                ),
+                const SizedBox(height: 12),
+                if (request.status == ServiceRequestStatus.completed) ...[
+                  FilledButton(
+                    key: const ValueKey('rate-completed-worker'),
+                    onPressed: savingReview ? null : onRateWorker,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: palette.surface,
+                      foregroundColor: palette.text,
+                      minimumSize: const Size.fromHeight(52),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(
+                      savingReview
+                          ? 'Submitting Review...'
+                          : 'Rate your worker',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                FilledButton(
+                  key: const ValueKey('message-accepted-worker'),
+                  onPressed: onMessage,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: palette.surface,
+                    foregroundColor: palette.text,
+                    minimumSize: const Size.fromHeight(52),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
+                  child: const Text('Message Worker'),
+                ),
+                if (canCancel) ...[
+                  const SizedBox(height: 12),
+                  FilledButton(
+                    onPressed: saving ? null : onCancel,
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.softYellow,
+                      foregroundColor: AppTheme.ink,
+                      minimumSize: const Size.fromHeight(52),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(saving ? 'Cancelling...' : 'Cancel Request'),
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -1446,7 +1464,7 @@ class _WorkerReviewDialogState extends State<_WorkerReviewDialog> {
     final surface = dark ? const Color(0xFF272727) : _bookingCream;
     final field = dark ? const Color(0xFF333333) : Colors.white;
     final text = dark ? const Color(0xFFF4F4F4) : _bookingInk;
-    final muted = dark ? const Color(0xFFB5B5B5) : const Color(0xFF6F7480);
+    final muted = dark ? const Color(0xFFB5B5B5) : AppTheme.muted;
 
     return Dialog(
       insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -1513,7 +1531,7 @@ class _WorkerReviewDialogState extends State<_WorkerReviewDialog> {
                             onPressed: () => Navigator.pop(context),
                             icon: const Icon(
                               Icons.close,
-                              color: Color(0xFF62666F),
+                              color: AppTheme.muted,
                             ),
                           ),
                         ),
@@ -1547,7 +1565,7 @@ class _WorkerReviewDialogState extends State<_WorkerReviewDialog> {
                                   icon: Icon(
                                     Icons.star_rounded,
                                     color: index < _rating
-                                        ? const Color(0xFFE37B00)
+                                        ? AppTheme.yellow
                                         : const Color(0xFFA7A9AD),
                                   ),
                                 ),
@@ -1622,11 +1640,9 @@ class _WorkerReviewDialogState extends State<_WorkerReviewDialog> {
                                         ),
                                       ),
                                 style: FilledButton.styleFrom(
-                                  backgroundColor: const Color(0xFF17BD8A),
-                                  foregroundColor: Colors.white,
-                                  disabledBackgroundColor: const Color(
-                                    0xFF9EDBC8,
-                                  ),
+                                  backgroundColor: AppTheme.yellow,
+                                  foregroundColor: AppTheme.ink,
+                                  disabledBackgroundColor: AppTheme.softYellow,
                                   minimumSize: const Size.fromHeight(54),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(14),
@@ -1689,7 +1705,7 @@ class _WorkerReportDialogState extends State<_WorkerReportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    icon: const Icon(Icons.report_outlined, color: Color(0xFFE74632), size: 34),
+    icon: const Icon(Icons.report_outlined, color: AppTheme.ink, size: 34),
     title: Text('Report ${widget.workerName}?'),
     content: SingleChildScrollView(
       child: Column(
@@ -1748,7 +1764,7 @@ class _WorkerReportDialogState extends State<_WorkerReportDialog> {
                 ),
               ),
         style: FilledButton.styleFrom(
-          backgroundColor: const Color(0xFFE74632),
+          backgroundColor: AppTheme.ink,
           foregroundColor: Colors.white,
         ),
         child: const Text('Submit report'),
@@ -1777,14 +1793,7 @@ class _AcceptedWorkerCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _bookingYellow, width: 1.3),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x33000000),
-            blurRadius: 4,
-            offset: Offset(0, 3),
-          ),
-        ],
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Row(
         children: [
@@ -1792,7 +1801,7 @@ class _AcceptedWorkerCard extends StatelessWidget {
             userId: request.workerId ?? '',
             fallbackName: name,
             radius: 24,
-            backgroundColor: const Color(0xFFFFF1C8),
+            backgroundColor: AppTheme.softYellow,
             foregroundColor: _bookingInk,
             textStyle: const TextStyle(fontWeight: FontWeight.w700),
           ),
@@ -1923,236 +1932,13 @@ class _DetailLine extends StatelessWidget {
   );
 }
 
-class _WorkerProfileSheet extends StatelessWidget {
-  const _WorkerProfileSheet({
-    required this.worker,
-    required this.workerId,
-    required this.name,
-    required this.palette,
-    required this.savingReport,
-    required this.onReport,
-  });
-
-  final Map<String, dynamic> worker;
-  final String workerId;
-  final String name;
-  final _BookingPalette palette;
-  final bool savingReport;
-  final VoidCallback onReport;
-
-  @override
-  Widget build(BuildContext context) {
-    final skills = worker['skills'];
-    final skillText = skills is List && skills.isNotEmpty
-        ? skills.join(', ')
-        : (worker['category'] ?? 'Service provider').toString();
-    return DraggableScrollableSheet(
-      initialChildSize: 0.18,
-      minChildSize: 0.18,
-      maxChildSize: 0.72,
-      snap: true,
-      builder: (context, scrollController) => Container(
-        decoration: BoxDecoration(
-          color: palette.surface,
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(42)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 12,
-              offset: Offset(0, -4),
-            ),
-          ],
-        ),
-        child: ListView(
-          controller: scrollController,
-          padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
-          children: [
-            Center(
-              child: Container(
-                width: 52,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: palette.muted,
-                  borderRadius: BorderRadius.circular(3),
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Icon(Icons.keyboard_arrow_up, color: palette.text, size: 30),
-            Text(
-              'Swipe to view worker’s profile',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: palette.text,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 28),
-            LiveProfileAvatar(
-              userId: workerId,
-              fallbackName: name,
-              radius: 42,
-              backgroundColor: const Color(0xFFFFF1C8),
-              foregroundColor: _bookingInk,
-              textStyle: const TextStyle(
-                fontSize: 25,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              name,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: palette.text,
-                fontSize: 21,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            Text(
-              skillText,
-              textAlign: TextAlign.center,
-              style: TextStyle(color: palette.muted),
-            ),
-            const SizedBox(height: 22),
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('service_requests')
-                  .where('workerId', isEqualTo: workerId)
-                  .snapshots(),
-              builder: (context, jobsSnapshot) {
-                final completedJobs =
-                    jobsSnapshot.data?.docs
-                        .where(
-                          (document) =>
-                              document.data()['status'] == 'completed',
-                        )
-                        .length ??
-                    0;
-                return Row(
-                  children: [
-                    Expanded(
-                      child: WorkerRatingBuilder(
-                        workerId: workerId,
-                        builder: (context, summary) => _ProfileStat(
-                          value: summary.displayAverage,
-                          label: summary.reviewCount == 1
-                              ? '1 review'
-                              : '${summary.reviewCount} reviews',
-                          palette: palette,
-                          onTap: () => Navigator.push(
-                            context,
-                            clientPageRoute(
-                              ReviewsScreen(
-                                userId: workerId,
-                                reviewsFor: ReviewsFor.worker,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Expanded(
-                      child: _ProfileStat(
-                        value: jobsSnapshot.hasData ? '$completedJobs' : '—',
-                        label: 'Jobs done',
-                        palette: palette,
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-            _DetailLine(
-              icon: Icons.location_on_outlined,
-              label: (worker['location'] ?? 'Location not provided').toString(),
-              palette: palette,
-            ),
-            _DetailLine(
-              icon: Icons.verified_outlined,
-              label: worker['verificationStatus'] == 'verified'
-                  ? 'Identity verified'
-                  : 'Verification status unavailable',
-              palette: palette,
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton.icon(
-              key: const ValueKey('report-worker'),
-              onPressed: savingReport ? null : onReport,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFFE74632),
-                side: const BorderSide(color: Color(0xFFE74632)),
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              icon: const Icon(Icons.report_outlined),
-              label: Text(
-                savingReport ? 'Submitting report...' : 'Report worker',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileStat extends StatelessWidget {
-  const _ProfileStat({
-    required this.value,
-    required this.label,
-    required this.palette,
-    this.onTap,
-  });
-
-  final String value;
-  final String label;
-  final _BookingPalette palette;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) => InkWell(
-    key: onTap == null ? null : const ValueKey('worker-reviews-link'),
-    onTap: onTap,
-    borderRadius: BorderRadius.circular(12),
-    child: Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6),
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: TextStyle(
-              color: palette.text,
-              fontSize: 19,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          Text(label, style: TextStyle(color: palette.muted, fontSize: 12)),
-        ],
-      ),
-    ),
-  );
-}
-
 class _CircleBackButton extends StatelessWidget {
   const _CircleBackButton({required this.onPressed});
 
   final VoidCallback onPressed;
 
   @override
-  Widget build(BuildContext context) => Material(
-    color: const Color(0xFFFFF7D9),
-    shape: const CircleBorder(),
-    child: IconButton(
-      onPressed: onPressed,
-      icon: const Icon(Icons.arrow_back, color: _bookingInk, size: 19),
-      constraints: const BoxConstraints.tightFor(width: 38, height: 38),
-      padding: EdgeInsets.zero,
-    ),
-  );
+  Widget build(BuildContext context) => SimpleBackButton(onPressed: onPressed);
 }
 
 class _SearchField extends StatelessWidget {
@@ -2173,8 +1959,8 @@ class _SearchField extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Material(
     color: palette.surface,
-    elevation: 3,
-    borderRadius: BorderRadius.circular(20),
+    elevation: 0,
+    borderRadius: BorderRadius.circular(14),
     child: TextField(
       controller: controller,
       onChanged: onChanged,
@@ -2196,8 +1982,8 @@ class _SearchField extends StatelessWidget {
         filled: true,
         fillColor: palette.surface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(20),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Theme.of(context).dividerColor),
         ),
       ),
     ),
@@ -2220,13 +2006,7 @@ class _BookingsBottomNav extends StatelessWidget {
         decoration: BoxDecoration(
           color: palette.surface,
           borderRadius: BorderRadius.circular(22),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x33000000),
-              blurRadius: 5,
-              offset: Offset(0, 3),
-            ),
-          ],
+          border: Border.all(color: Theme.of(context).dividerColor),
         ),
         child: Row(
           children: [

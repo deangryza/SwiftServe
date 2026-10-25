@@ -60,7 +60,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FF),
+      backgroundColor: const Color(0xFFFFFFFF),
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -187,7 +187,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           decoration: BoxDecoration(
                             color: selected
                                 ? const Color(0xFF1478D4)
-                                : Colors.black26,
+                                : Colors.black12,
                             borderRadius: BorderRadius.circular(10),
                           ),
                         );
