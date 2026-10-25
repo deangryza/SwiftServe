@@ -47,7 +47,7 @@ class _ClientRequestDetailsScreenState
       context,
       title: 'Cancel this booking?',
       message:
-          'Are you sure you want to cancel ${widget.request.title}? This action cannot be undone.',
+          'Are you sure you want to cancel ${_request.title}? This action cannot be undone.',
       confirmLabel: 'Cancel booking',
       icon: Icons.event_busy_outlined,
     );
@@ -161,7 +161,7 @@ class _ClientRequestDetailsScreenState
         .doc(user.uid)
         .get();
     final reviewerName =
-        (profile.data()?['fullName'] ?? widget.request.clientName)
+        (profile.data()?['fullName'] ?? _request.clientName)
             .toString()
             .trim();
     await FirebaseFirestore.instance

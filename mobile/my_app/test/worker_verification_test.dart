@@ -69,6 +69,12 @@ void main() {
       ),
     );
 
+    // The actions sit at the end of a lazily built list.
+    await tester.scrollUntilVisible(
+      find.text('Verify to apply'),
+      200,
+      scrollable: find.byType(Scrollable).first,
+    );
     expect(find.text('Verify to apply'), findsOneWidget);
     expect(find.text('Apply for this request'), findsNothing);
   });
