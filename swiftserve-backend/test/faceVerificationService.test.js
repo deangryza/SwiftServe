@@ -2,14 +2,16 @@ const assert = require('node:assert/strict');
 const fs = require('fs/promises');
 const os = require('os');
 const path = require('path');
-const { afterEach, test } = require('node:test');
+const { afterEach, beforeEach, test } = require('node:test');
 
 const {
-  FACE_MATCH_THRESHOLD,
   MODEL_FILES,
   FaceDetectionError,
   compareAndCreateSubmission,
   compareDescriptors,
+  decisionThresholds,
+  distanceToSimilarity,
+  exifRotation,
   getFaceDescriptor,
   loadModels,
   maskIdNumber,
@@ -18,10 +20,27 @@ const {
   verifyFaces,
 } = require('../src/services/faceVerificationService');
 
-afterEach(resetModelStateForTests);
+const THRESHOLDS = Object.freeze({ autoVerifyMin: 80, reviewMin: 60 });
+
+let uploadsDir;
+let previousStorage;
+
+beforeEach(async () => {
+  uploadsDir = await fs.mkdtemp(path.join(os.tmpdir(), 'swiftserve-face-'));
+  previousStorage = process.env.VERIFICATION_STORAGE;
+  process.env.VERIFICATION_STORAGE = 'local';
+});
+
+afterEach(async () => {
+  resetModelStateForTests();
+  if (previousStorage === undefined) delete process.env.VERIFICATION_STORAGE;
+  else process.env.VERIFICATION_STORAGE = previousStorage;
+  await fs.rm(uploadsDir, { recursive: true, force: true });
+});
 
 const fixtures = ({ secondUploadFails = false, prior } = {}) => {
-  let storedRecord;
+  const writes = [];
+  const attempts = [];
   const deleted = [];
   const metadata = [];
   let saves = 0;
@@ -46,22 +65,39 @@ const fixtures = ({ secondUploadFails = false, prior } = {}) => {
       return {
         doc() {
           if (name === 'users') {
-            return { get: async () => ({ exists: true, data: () => ({ role: 'worker', verificationStatus: 'pending' }) }) };
+            return {
+              name,
+              get: async () => ({ exists: true, data: () => ({ role: 'worker', verificationStatus: 'pending' }) }),
+            };
           }
-          return {
-            get: async () => ({ exists: Boolean(prior), data: () => prior }),
-            set: async (value) => { storedRecord = value; },
-          };
+          if (name === 'worker_verifications') {
+            return {
+              name,
+              get: async () => ({ exists: Boolean(prior), data: () => prior }),
+              collection: () => ({ add: async (value) => { attempts.push(value); } }),
+            };
+          }
+          return { name };
         },
+      };
+    },
+    batch() {
+      const pending = [];
+      return {
+        set(ref, value) { pending.push([ref.name, value]); },
+        async commit() { writes.push(...pending); },
       };
     },
   };
   return {
     db,
     storage: { bucket: () => bucket },
+    attempts,
     deleted,
     metadata,
-    record: () => storedRecord,
+    writes,
+    record: () => writes.find(([name]) => name === 'worker_verifications')?.[1],
+    writesTo: (name) => writes.filter(([collection]) => collection === name).map(([, value]) => value),
   };
 };
 
@@ -74,10 +110,18 @@ const input = (fixture, verify) => ({
   db: fixture.db,
   storage: fixture.storage,
   verify,
+  thresholds: THRESHOLDS,
   now: () => new Date('2026-01-01T00:00:00.000Z'),
+  uploadsDir,
 });
 
-const comparison = (match = true) => ({ match, confidence: 75, distance: 0.25 });
+const comparison = (band, similarity) => ({
+  match: band !== 'mismatch',
+  band,
+  similarity,
+  confidence: similarity,
+  distance: 0.4,
+});
 
 test('loads each model once and validates all required model files', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'swiftserve-models-'));
@@ -149,61 +193,121 @@ test('extracts one descriptor and rejects zero or multiple faces with image attr
   );
 });
 
-test('compares descriptors at the exact threshold and clamps heuristic confidence', () => {
-  assert.deepEqual(compareDescriptors([0], [FACE_MATCH_THRESHOLD]), {
+test('maps descriptor distance onto the calibrated similarity anchors', () => {
+  assert.equal(distanceToSimilarity(0), 100);
+  assert.equal(distanceToSimilarity(0.3), 86.67);
+  assert.equal(distanceToSimilarity(0.45), 80);
+  assert.equal(distanceToSimilarity(0.6), 60);
+  assert.equal(distanceToSimilarity(0.8), 30);
+  assert.equal(distanceToSimilarity(1), 0);
+  assert.equal(distanceToSimilarity(1.4), 0);
+});
+
+test('assigns strong, borderline, and mismatch bands from similarity', () => {
+  assert.deepEqual(compareDescriptors([0], [0.45], THRESHOLDS), {
     match: true,
-    distance: 0.6,
-    confidence: 40,
+    band: 'strong',
+    distance: 0.45,
+    similarity: 80,
+    confidence: 80,
   });
-  assert.deepEqual(compareDescriptors([0], [0.600001]), {
-    match: false,
-    distance: 0.600001,
-    confidence: 40,
-  });
-  assert.equal(compareDescriptors([0], [2]).confidence, 0);
-  assert.equal(compareDescriptors([1], [1]).confidence, 100);
+  const borderline = compareDescriptors([0], [0.5], THRESHOLDS);
+  assert.equal(borderline.band, 'borderline');
+  assert.equal(borderline.match, true);
+  assert.equal(borderline.similarity, 73.33);
+  assert.equal(compareDescriptors([0], [0.6], THRESHOLDS).band, 'borderline');
+  const mismatch = compareDescriptors([0], [0.7], THRESHOLDS);
+  assert.equal(mismatch.band, 'mismatch');
+  assert.equal(mismatch.match, false);
   assert.throws(() => compareDescriptors([0], [0, 1]), /equal lengths/);
   assert.throws(() => compareDescriptors([Number.NaN], [0]), /finite/);
+});
+
+test('reads decision thresholds from the environment with safe fallbacks', () => {
+  assert.deepEqual(decisionThresholds({}), { autoVerifyMin: 80, reviewMin: 60 });
+  assert.deepEqual(
+    decisionThresholds({ FACE_AUTO_VERIFY_MIN: '85', FACE_REVIEW_MIN: '55' }),
+    { autoVerifyMin: 85, reviewMin: 55 },
+  );
+  assert.deepEqual(
+    decisionThresholds({ FACE_AUTO_VERIFY_MIN: 'high', FACE_REVIEW_MIN: '140' }),
+    { autoVerifyMin: 80, reviewMin: 60 },
+  );
+  assert.deepEqual(
+    decisionThresholds({ FACE_AUTO_VERIFY_MIN: '50', FACE_REVIEW_MIN: '70' }),
+    { autoVerifyMin: 50, reviewMin: 50 },
+  );
 });
 
 test('orchestrates document then selfie descriptors', async () => {
   const images = [];
   const result = await verifyFaces(Buffer.from('id'), Buffer.from('selfie'), {
+    thresholds: THRESHOLDS,
     descriptor: async (_buffer, image) => {
       images.push(image);
       return image === 'document' ? [0, 0] : [0.3, 0.4];
     },
   });
   assert.deepEqual(images, ['document', 'selfie']);
-  assert.deepEqual(result, { match: true, distance: 0.5, confidence: 50 });
+  assert.equal(result.distance, 0.5);
+  assert.equal(result.band, 'borderline');
 });
 
-test('stores local comparison metadata and only a masked identifier after a match', async () => {
+test('auto-verifies a strong match and updates the worker badge source', async () => {
   const fixture = fixtures();
-  const result = await compareAndCreateSubmission(input(fixture, async () => comparison()));
+  const result = await compareAndCreateSubmission(input(fixture, async () => comparison('strong', 91.5)));
 
-  assert.equal(result.match, true);
+  assert.equal(result.status, 'verified');
+  const record = fixture.record();
+  assert.equal(record.status, 'verified');
+  assert.equal(record.reviewedBy, 'auto_face_match');
+  assert.equal(record.faceMatchConfidence, 91.5);
+  assert.equal(record.faceMatchBand, 'strong');
+  assert.equal(record.faceMatchThreshold, 60);
+  assert.equal(record.faceAutoVerifyMin, 80);
+  assert.equal(record.maskedIdNumber, '********6789');
+  assert.equal(Object.values(record).includes('123456789'), false);
+  assert.ok(record.purgeAfter instanceof Date);
+  assert.equal(record.storageBackend, 'local');
+  assert.deepEqual(fixture.writesTo('users').map((value) => value.verificationStatus), ['verified']);
+  assert.deepEqual(fixture.writesTo('worker_profiles').map((value) => value.verificationStatus), ['verified']);
+  assert.equal(fixture.writesTo('notifications').length, 1);
+  assert.deepEqual(await fs.readFile(path.join(uploadsDir, record.governmentIdPath)), Buffer.from('id'));
+  assert.deepEqual(await fs.readFile(path.join(uploadsDir, record.facePhotoPath)), Buffer.from('face'));
+});
+
+test('sends a borderline match to admin review without touching the worker status', async () => {
+  const fixture = fixtures();
+  const result = await compareAndCreateSubmission(input(fixture, async () => comparison('borderline', 70)));
+
   assert.equal(result.status, 'pending');
-  assert.equal(fixture.record().maskedIdNumber, '********6789');
-  assert.equal(Object.values(fixture.record()).includes('123456789'), false);
-  assert.equal(fixture.record().faceVerificationProvider, 'local_face_api');
-  assert.equal(fixture.record().faceDistance, 0.25);
-  assert.equal(fixture.record().faceMatchConfidence, 75);
-  assert.equal(fixture.record().faceMatchThreshold, 0.6);
+  assert.equal(fixture.record().status, 'pending');
+  assert.equal(fixture.record().faceReviewFlag, 'borderline');
+  assert.equal(fixture.writesTo('users').length, 0);
+  assert.equal(fixture.writesTo('notifications').length, 0);
 });
 
-test('does not upload or store a mismatch', async () => {
+test('stores no images for a mismatch and logs the attempt score', async () => {
   const fixture = fixtures();
-  const result = await compareAndCreateSubmission(input(fixture, async () => comparison(false)));
+  const mismatch = comparison('mismatch', 42);
+  const result = await compareAndCreateSubmission(input(fixture, async () => mismatch));
 
-  assert.deepEqual(result, comparison(false));
-  assert.equal(fixture.record(), undefined);
+  assert.deepEqual(result, mismatch);
+  assert.equal(fixture.writes.length, 0);
+  assert.deepEqual(fixture.attempts, [{
+    similarity: 42,
+    distance: 0.4,
+    reviewMin: 60,
+    attemptedAt: new Date('2026-01-01T00:00:00.000Z'),
+  }]);
+  assert.deepEqual(await fs.readdir(uploadsDir), []);
 });
 
-test('removes partial uploads and schedules replaced images for deletion', async () => {
+test('removes partial Cloud Storage uploads and schedules replaced images for deletion', async () => {
+  process.env.VERIFICATION_STORAGE = 'gcs';
   const failed = fixtures({ secondUploadFails: true });
   await assert.rejects(
-    compareAndCreateSubmission(input(failed, async () => comparison())),
+    compareAndCreateSubmission(input(failed, async () => comparison('borderline', 70))),
     /upload failed/,
   );
   assert.equal(failed.deleted.length, 1);
@@ -216,8 +320,19 @@ test('removes partial uploads and schedules replaced images for deletion', async
       facePhotoPath: 'old/selfie.jpg',
     },
   });
-  await compareAndCreateSubmission(input(replacement, async () => comparison()));
+  await compareAndCreateSubmission(input(replacement, async () => comparison('borderline', 70)));
+  assert.equal(replacement.record().storageBackend, 'gcs');
   assert.deepEqual(replacement.metadata.map(([filePath]) => filePath), ['old/id.jpg', 'old/selfie.jpg']);
+});
+
+test('deletes replaced local images after a new submission', async () => {
+  await fs.mkdir(path.join(uploadsDir, 'old'), { recursive: true });
+  await fs.writeFile(path.join(uploadsDir, 'old/id.jpg'), 'old');
+  const fixture = fixtures({
+    prior: { status: 'resubmission_required', storageBackend: 'local', governmentIdPath: 'old/id.jpg' },
+  });
+  await compareAndCreateSubmission(input(fixture, async () => comparison('borderline', 70)));
+  await assert.rejects(fs.access(path.join(uploadsDir, 'old/id.jpg')));
 });
 
 test('masks short and long identifiers consistently', () => {
@@ -225,46 +340,74 @@ test('masks short and long identifiers consistently', () => {
   assert.equal(maskIdNumber('123456789'), '********6789');
 });
 
-// TODO(face-verification): temporary ID-only bypass coverage. Remove when
-// face matching is re-enabled.
-test('creates an ID-only pending submission while the face check is disabled', async () => {
-  const previous = process.env.DISABLE_FACE_VERIFICATION;
-  process.env.DISABLE_FACE_VERIFICATION = 'true';
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'swiftserve-id-only-'));
-  try {
-    const fixture = fixtures();
-    const result = await compareAndCreateSubmission({
-      uid: 'worker-1',
-      idType: 'National ID',
-      idNumber: '123456789',
-      document: { buffer: Buffer.from('id'), mimetype: 'image/jpeg' },
-      selfie: undefined,
-      db: fixture.db,
-      storage: fixture.storage,
-      verify: async () => { throw new Error('face matcher must not run while bypassed'); },
-      now: () => new Date('2026-01-01T00:00:00.000Z'),
-      uploadsDir: directory,
-    });
+const jpegWithOrientation = (orientation) => {
+  const tiff = Buffer.alloc(26);
+  tiff.write('II', 0, 'ascii');
+  tiff.writeUInt16LE(42, 2);
+  tiff.writeUInt32LE(8, 4);
+  tiff.writeUInt16LE(1, 8);
+  tiff.writeUInt16LE(0x0112, 10);
+  tiff.writeUInt16LE(3, 12);
+  tiff.writeUInt32LE(1, 14);
+  tiff.writeUInt16LE(orientation, 18);
+  const payload = Buffer.concat([Buffer.from('Exif\0\0', 'ascii'), tiff]);
+  const header = Buffer.alloc(4);
+  header.writeUInt16BE(0xffe1, 0);
+  header.writeUInt16BE(payload.length + 2, 2);
+  return Buffer.concat([Buffer.from([0xff, 0xd8]), header, payload, Buffer.from([0xff, 0xda])]);
+};
 
-    assert.deepEqual(result, {
-      match: true,
-      confidence: null,
-      distance: null,
-      status: 'pending',
-      bypassed: true,
-    });
-    assert.equal(fixture.record().status, 'pending');
-    assert.equal(fixture.record().faceVerified, false);
-    assert.equal(fixture.record().faceVerificationProvider, 'bypassed');
-    assert.equal(fixture.record().facePhotoPath, null);
-    assert.equal(fixture.record().maskedIdNumber, '********6789');
-    assert.equal(fixture.record().storageBackend, 'local');
-    assert.equal(fixture.record().governmentIdMimeType, 'image/jpeg');
-    const saved = await fs.readFile(path.join(directory, fixture.record().governmentIdPath));
-    assert.deepEqual(saved, Buffer.from('id'));
-  } finally {
-    if (previous === undefined) delete process.env.DISABLE_FACE_VERIFICATION;
-    else process.env.DISABLE_FACE_VERIFICATION = previous;
-    await fs.rm(directory, { recursive: true, force: true });
-  }
+test('reads the EXIF rotation phone cameras store with sideways pixels', () => {
+  assert.equal(exifRotation(jpegWithOrientation(6)), 90);
+  assert.equal(exifRotation(jpegWithOrientation(3)), 180);
+  assert.equal(exifRotation(jpegWithOrientation(8)), 270);
+  assert.equal(exifRotation(jpegWithOrientation(1)), 0);
+  assert.equal(exifRotation(Buffer.from([0x89, 0x50, 0x4e, 0x47])), 0);
+  assert.equal(exifRotation(Buffer.from([0xff, 0xd8, 0xff])), 0);
+});
+
+test('tries the EXIF orientation first, then other turns, and prefers the main ID portrait', async () => {
+  const tried = [];
+  const box = (area) => ({ detection: { box: { area } }, descriptor: [area] });
+  const runtimeFor = (facesAt, faces) => ({
+    loadImage: async () => ({ width: 720, height: 1280 }),
+    createCanvas: (width, height) => {
+      const target = { width, height, degrees: 0 };
+      target.getContext = () => ({
+        translate() {},
+        rotate(radians) { target.degrees = Math.round((radians * 180) / Math.PI); },
+        drawImage() {},
+      });
+      return target;
+    },
+    faceapi: {
+      detectAllFaces(target) {
+        tried.push(target.degrees);
+        return {
+          withFaceLandmarks() { return this; },
+          async withFaceDescriptors() { return target.degrees === facesAt ? faces : []; },
+        };
+      },
+    },
+  });
+
+  const sideways = jpegWithOrientation(6);
+  assert.deepEqual(await getFaceDescriptor(sideways, 'document', runtimeFor(90, [box(4)])), [4]);
+  assert.deepEqual(tried, [90]);
+
+  tried.length = 0;
+  const ghostImage = await getFaceDescriptor(sideways, 'document', runtimeFor(0, [box(2), box(9)]));
+  assert.deepEqual(ghostImage, [9]);
+  assert.deepEqual(tried, [90, 180, 0]);
+
+  await assert.rejects(
+    getFaceDescriptor(sideways, 'selfie', runtimeFor(90, [box(2), box(9)])),
+    (error) => error.code === 'MULTIPLE_FACES_DETECTED',
+  );
+  tried.length = 0;
+  await assert.rejects(
+    getFaceDescriptor(sideways, 'document', runtimeFor(-1, [])),
+    (error) => error.code === 'FACE_NOT_DETECTED',
+  );
+  assert.deepEqual(tried, [90, 180, 0, 270]);
 });

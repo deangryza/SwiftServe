@@ -6,6 +6,12 @@ const {
   resolveUploadsDir,
   sendLocalFile,
 } = require('../services/verificationStorageService');
+const {
+  AUTO_REVIEWER,
+  addStatusWrites,
+  isFinalStatus,
+  purgeDateFor,
+} = require('../services/verificationDecisionService');
 
 const ALLOWED_STATUSES = new Set([
   'under_review',
@@ -39,6 +45,10 @@ const serialize = (id, verification, user = {}) => ({
   faceVerified: Boolean(verification.faceVerified),
   faceMatchConfidence: verification.faceMatchConfidence ?? null,
   faceMatchThreshold: verification.faceMatchThreshold ?? null,
+  faceAutoVerifyMin: verification.faceAutoVerifyMin ?? null,
+  faceMatchBand: verification.faceMatchBand || null,
+  faceReviewFlag: verification.faceReviewFlag || null,
+  autoVerified: verification.reviewedBy === AUTO_REVIEWER,
   faceVerificationProvider: verification.faceVerificationProvider || null,
   faceVerifiedAt: toIso(verification.faceVerifiedAt),
   purgeAfter: toIso(verification.purgeAfter),
@@ -70,9 +80,10 @@ const signedUrl = async (path) => {
   return url;
 };
 
-const localImageUrl = (req, workerId) => {
+const localImageUrl = (req, workerId, kind = 'document') => {
   const base = `${req.protocol}://${req.get('host')}`;
-  return `${base}/api/admin/verifications/${encodeURIComponent(workerId)}/image`;
+  const url = `${base}/api/admin/verifications/${encodeURIComponent(workerId)}/image`;
+  return kind === 'selfie' ? `${url}?kind=selfie` : url;
 };
 
 const getVerification = async (req, res) => {
@@ -100,7 +111,7 @@ const getVerification = async (req, res) => {
         facePhotoUrl: !data.facePhotoPath
           ? null
           : backend === LOCAL_BACKEND
-            ? null
+            ? localImageUrl(req, workerId, 'selfie')
             : await signedUrl(data.facePhotoPath),
       },
     });
@@ -125,17 +136,17 @@ const updateVerification = async (req, res) => {
     if (!verification.exists) {
       return res.status(404).json({ message: 'Verification request not found.' });
     }
-    const currentStatus = verification.data().status;
-    if (['verified', 'rejected'].includes(currentStatus) && status !== currentStatus) {
+    const { status: currentStatus, reviewedBy: priorReviewer } = verification.data();
+    // Automatic face-match approvals stay revocable by an admin.
+    const isAutoDecision = currentStatus === 'verified' && priorReviewer === AUTO_REVIEWER;
+    if (isFinalStatus(currentStatus) && status !== currentStatus && !isAutoDecision) {
       return res.status(409).json({ message: 'A final verification decision cannot be reopened.' });
     }
     const batch = db.batch();
     const now = new Date();
     const reviewedBy = req.user.email || req.user.uid;
-    const isFinalDecision = status === 'verified' || status === 'rejected';
-    const purgeAfter = isFinalDecision
-      ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
-      : null;
+    const isFinalDecision = isFinalStatus(status);
+    const purgeAfter = purgeDateFor(status, now);
     batch.update(verificationRef, {
       status,
       adminNotes,
@@ -144,22 +155,7 @@ const updateVerification = async (req, res) => {
       updatedAt: now,
       ...(isFinalDecision ? { purgeAfter } : {}),
     });
-    batch.set(db.collection('users').doc(workerId), {
-      verificationStatus: status,
-      updatedAt: now,
-    }, { merge: true });
-    batch.set(db.collection('worker_profiles').doc(workerId), {
-      verificationStatus: status,
-      updatedAt: now,
-    }, { merge: true });
-    batch.set(db.collection('notifications').doc(), {
-      recipientId: workerId,
-      senderId: req.user.uid,
-      title: 'Verification updated',
-      body: `Your worker verification is now ${status.replaceAll('_', ' ')}.`,
-      read: false,
-      createdAt: now,
-    });
+    addStatusWrites(batch, db, workerId, status, { senderId: req.user.uid, now });
     await batch.commit();
     if (isFinalDecision) {
       const priorBackend = verification.data().storageBackend || 'gcs';
@@ -199,7 +195,7 @@ const updateVerification = async (req, res) => {
   }
 };
 
-// TODO(billing): serves locally stored ID photos to admins while there is
+// TODO(billing): serves locally stored ID and selfie photos to admins while there is
 // no Storage bucket. Remove the route + handler when VERIFICATION_STORAGE=gcs.
 const createImageHandler = ({ database = db, uploadsDir } = {}) => async (req, res) => {
   try {
@@ -209,12 +205,14 @@ const createImageHandler = ({ database = db, uploadsDir } = {}) => async (req, r
       return res.status(404).json({ message: 'Verification request not found.' });
     }
     const data = snapshot.data();
-    if ((data.storageBackend || 'gcs') !== LOCAL_BACKEND || !data.governmentIdPath) {
+    const isSelfie = req.query?.kind === 'selfie';
+    const imagePath = isSelfie ? data.facePhotoPath : data.governmentIdPath;
+    if ((data.storageBackend || 'gcs') !== LOCAL_BACKEND || !imagePath) {
       return res.status(404).json({ message: 'No locally stored verification image.' });
     }
-    const served = await sendLocalFile(res, data.governmentIdPath, {
+    const served = await sendLocalFile(res, imagePath, {
       uploadsDir: uploadsDir || resolveUploadsDir(),
-      contentType: data.governmentIdMimeType,
+      contentType: isSelfie ? data.facePhotoMimeType : data.governmentIdMimeType,
     });
     if (!served) {
       return res.status(404).json({ message: 'Verification image not found.' });

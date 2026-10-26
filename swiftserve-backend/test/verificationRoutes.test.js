@@ -35,16 +35,17 @@ test('returns the distance contract and clears buffers after a passing compariso
   let files;
   const response = await addValidPair(request(createApp(async (value) => {
     files = [value.document, value.selfie];
-    return { match: true, confidence: 96.25, distance: 0.0375, status: 'pending' };
+    return { match: true, band: 'strong', similarity: 96.25, confidence: 96.25, distance: 0.0375, status: 'verified' };
   })).post('/api/verify'));
 
   assert.equal(response.status, 201);
   assert.deepEqual(response.body, {
     match: true,
+    similarity: 96.25,
     confidence: 96.25,
     distance: 0.0375,
-    bypassed: false,
-    verification: { status: 'pending' },
+    band: 'strong',
+    verification: { status: 'verified' },
   });
   assert.equal(files[0].buffer, undefined);
   assert.equal(files[1].buffer, undefined);
@@ -53,6 +54,8 @@ test('returns the distance contract and clears buffers after a passing compariso
 test('returns a mismatch result with confidence and distance', async () => {
   const response = await addValidPair(request(createApp(async () => ({
     match: false,
+    band: 'mismatch',
+    similarity: 31.5,
     confidence: 31.5,
     distance: 0.685,
   }))).post('/api/verify'));
@@ -60,8 +63,10 @@ test('returns a mismatch result with confidence and distance', async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, {
     match: false,
+    similarity: 31.5,
     confidence: 31.5,
     distance: 0.685,
+    band: 'mismatch',
     code: 'FACE_MISMATCH',
   });
 });
@@ -130,34 +135,13 @@ test('preserves authentication, rate-limit, conflict, and generic failure respon
   assert.equal(unexpected.body.code, 'INTERNAL_ERROR');
 });
 
-// TODO(face-verification): temporary ID-only bypass coverage. Remove these
-// tests when face matching is re-enabled.
-test('accepts an ID-only upload while the face check is disabled', async (t) => {
-  const previous = process.env.DISABLE_FACE_VERIFICATION;
-  process.env.DISABLE_FACE_VERIFICATION = 'true';
-  try {
-    const app = createApp(async () => ({
-      match: true,
-      confidence: null,
-      distance: null,
-      status: 'pending',
-      bypassed: true,
-    }));
-    const response = await request(app).post('/api/verify')
-      .field('idType', 'Philippine National ID')
-      .field('idNumber', '123456789')
-      .attach('document', Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0, 0, 0]), { filename: 'id.jpg', contentType: 'image/jpeg' });
+test('requires a selfie alongside the ID document', async () => {
+  const app = createApp(async () => { throw new Error('comparison must not run'); });
+  const response = await request(app).post('/api/verify')
+    .field('idType', 'Philippine National ID')
+    .field('idNumber', '123456789')
+    .attach('document', Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0, 0, 0]), { filename: 'id.jpg', contentType: 'image/jpeg' });
 
-    assert.equal(response.status, 201);
-    assert.deepEqual(response.body, {
-      match: true,
-      confidence: null,
-      distance: null,
-      bypassed: true,
-      verification: { status: 'pending' },
-    });
-  } finally {
-    if (previous === undefined) delete process.env.DISABLE_FACE_VERIFICATION;
-    else process.env.DISABLE_FACE_VERIFICATION = previous;
-  }
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, 'INVALID_UPLOAD');
 });

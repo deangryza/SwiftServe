@@ -9,8 +9,7 @@ const {
   VerificationConflictError,
   WorkerAccessError,
   compareAndCreateSubmission,
-  isFaceCheckDisabled,
-} = require('../services/faceVerificationService');
+} =require('../services/faceVerificationService');
 
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
 
@@ -75,18 +74,13 @@ const createVerificationRouter = ({
       selfie = req.files?.selfie?.[0];
       const idType = String(req.body?.idType || '').trim();
       const idNumber = String(req.body?.idNumber || '').trim();
-      // TODO(face-verification): temporary ID-only bypass. Selfie is optional
-      // while DISABLE_FACE_VERIFICATION=true; restore the strict requirement below.
-      const faceCheckDisabled = isFaceCheckDisabled();
-      if (!document || !idType || !idNumber || (!faceCheckDisabled && !selfie)) {
+      if (!document || !selfie || !idType || !idNumber) {
         return res.status(400).json({
           code: 'INVALID_UPLOAD',
-          message: faceCheckDisabled
-            ? 'ID type, ID number, and document are required.'
-            : 'ID type, ID number, document, and selfie are required.',
+          message: 'ID type, ID number, document, and selfie are required.',
         });
       }
-      if (!hasExpectedSignature(document) || (selfie && !hasExpectedSignature(selfie))) {
+      if (!hasExpectedSignature(document) || !hasExpectedSignature(selfie)) {
         return res.status(415).json({
           code: 'UNSUPPORTED_IMAGE_TYPE',
           message: 'The uploaded files are not valid JPEG or PNG images.',
@@ -104,16 +98,19 @@ const createVerificationRouter = ({
       if (!result.match) {
         return res.json({
           match: false,
+          similarity: result.similarity,
           confidence: result.confidence,
           distance: result.distance,
+          band: result.band,
           code: 'FACE_MISMATCH',
         });
       }
       return res.status(201).json({
         match: true,
-        confidence: result.confidence ?? null,
-        distance: result.distance ?? null,
-        bypassed: result.bypassed === true,
+        similarity: result.similarity,
+        confidence: result.confidence,
+        distance: result.distance,
+        band: result.band,
         verification: { status: result.status },
       });
     } catch (error) {

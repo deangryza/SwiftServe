@@ -1566,7 +1566,10 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                       initialZoom: widget.approximate ? 13 : 16,
                       initialCameraFit: dropoff == null
                           ? null
-                          : errandCameraFit([widget.position, dropoff]),
+                          : errandCameraFit([
+                              widget.position,
+                              dropoff,
+                            ], maxZoom: widget.approximate ? 14 : 16),
                       minZoom: 3,
                       maxZoom: 18,
                       backgroundColor: Theme.of(
@@ -1583,6 +1586,16 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                           pickup: widget.position,
                           dropoff: dropoff,
                           routeColor: _detailsInk,
+                          approximate: widget.approximate,
+                        )
+                      else if (widget.approximate)
+                        CircleLayer(
+                          circles: [
+                            publicAreaCircle(
+                              widget.position,
+                              Theme.of(context).colorScheme.primary,
+                            ),
+                          ],
                         )
                       else
                         MarkerLayer(
@@ -1615,12 +1628,15 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
               children: [
                 Row(
                   children: [
-                    Icon(
-                      widget.approximate
-                          ? Icons.location_searching_outlined
-                          : Icons.location_on_outlined,
-                      size: 20,
-                    ),
+                    if (widget.approximate && dropoff != null)
+                      const ErrandAreaBadge(pickup: true, size: 22)
+                    else
+                      Icon(
+                        widget.approximate
+                            ? Icons.location_searching_outlined
+                            : Icons.location_on_outlined,
+                        size: 20,
+                      ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(switch ((
@@ -1639,11 +1655,21 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                 Text(widget.address),
                 if (dropoff != null) ...[
                   const SizedBox(height: 10),
-                  Text(
-                    widget.approximate
-                        ? 'Approximate drop-off area'
-                        : 'Drop-off',
-                    style: Theme.of(context).textTheme.titleSmall,
+                  Row(
+                    children: [
+                      if (widget.approximate) ...[
+                        const ErrandAreaBadge(pickup: false, size: 22),
+                        const SizedBox(width: 8),
+                      ],
+                      Expanded(
+                        child: Text(
+                          widget.approximate
+                              ? 'Approximate drop-off area'
+                              : 'Drop-off',
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 4),
                   Text(widget.dropoffAddress ?? ''),
@@ -1655,6 +1681,17 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                     context,
                   ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
+                if (widget.approximate) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    dropoff != null
+                        ? "Exact addresses are shared once you're hired."
+                        : "The exact address is shared once you're hired.",
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: widget.palette.muted,
+                    ),
+                  ),
+                ],
                 if (error != null) ...[
                   const SizedBox(height: 8),
                   Semantics(

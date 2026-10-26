@@ -79,13 +79,12 @@ class DeviceLocationService {
     }
   }
 
-  Future<bool> openRecoverySettings(DeviceLocationFailure failure) => switch (
-    failure
-  ) {
-    DeviceLocationFailure.serviceDisabled =>
-      Geolocator.openLocationSettings(),
-    DeviceLocationFailure.permissionPermanentlyDenied =>
-      Geolocator.openAppSettings(),
-    _ => Future.value(false),
-  };
+  Future<bool> openRecoverySettings(DeviceLocationFailure failure) =>
+      switch (failure) {
+        DeviceLocationFailure.serviceDisabled =>
+          Geolocator.openLocationSettings(),
+        DeviceLocationFailure.permissionPermanentlyDenied =>
+          Geolocator.openAppSettings(),
+        _ => Future.value(false),
+      };
 }

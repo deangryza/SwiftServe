@@ -3,13 +3,29 @@ const fs = require('fs/promises');
 const path = require('path');
 const { FieldValue } = require('firebase-admin/firestore');
 const {
+  LOCAL_BACKEND,
   isLocalStorage,
   removeStoredFiles,
   resolveUploadsDir,
   saveLocalBuffer,
 } = require('./verificationStorageService');
+const {
+  AUTO_REVIEWER,
+  addStatusWrites,
+  purgeDateFor,
+} = require('./verificationDecisionService');
 
-const FACE_MATCH_THRESHOLD = 0.6;
+// Euclidean distance between face-api descriptors, mapped to a 0-100
+// similarity. Anchors are calibrated for ID photo vs live selfie, where the
+// same person usually lands around 0.35-0.5 rather than near 0.
+const SIMILARITY_ANCHORS = Object.freeze([
+  [0, 100],
+  [0.45, 80],
+  [0.6, 60],
+  [1, 0],
+]);
+const DEFAULT_AUTO_VERIFY_MIN = 80;
+const DEFAULT_REVIEW_MIN = 60;
 const MODELS_PATH = path.resolve(__dirname, '../../models');
 const MODEL_FILES = Object.freeze([
   'ssd_mobilenetv1_model-weights_manifest.json',
@@ -23,11 +39,6 @@ const FINAL_OR_REPLACEABLE_STATUSES = new Set([
   'rejected',
   'resubmission_required',
 ]);
-
-// TODO(face-verification): temporary bypass. Set DISABLE_FACE_VERIFICATION=false
-// (or unset) to re-enable automatic face matching.
-const isFaceCheckDisabled = () =>
-  process.env.DISABLE_FACE_VERIFICATION === 'true';
 
 let faceRuntime;
 let modelsPromise;
@@ -65,12 +76,12 @@ const createFaceRuntime = () => {
   const wasm = require('@tensorflow/tfjs-backend-wasm');
   const faceapi = require('@vladmandic/face-api/dist/face-api.node-wasm.js');
   const canvas = require('canvas');
-  const { Canvas, Image, ImageData, loadImage } = canvas;
+  const { Canvas, Image, ImageData, createCanvas, loadImage } = canvas;
 
   const wasmDirectory = `${path.dirname(require.resolve('@tensorflow/tfjs-backend-wasm'))}${path.sep}`;
   wasm.setWasmPaths(wasmDirectory);
   faceapi.env.monkeyPatch({ Canvas, Image, ImageData });
-  return { tf, faceapi, loadImage };
+  return { tf, faceapi, createCanvas, loadImage };
 };
 
 const getFaceRuntime = () => {
@@ -119,24 +130,114 @@ const loadModels = async ({ modelsPath = MODELS_PATH, runtime } = {}) => {
   }
 };
 
+const MAX_INFERENCE_SIDE = 1600;
+const EXIF_ROTATION = Object.freeze({ 3: 180, 6: 90, 8: 270 });
+
+// Phone cameras usually store pixels sideways plus an EXIF orientation tag,
+// which node-canvas ignores. Returns the clockwise rotation the tag asks for.
+const exifRotation = (buffer) => {
+  if (!buffer || buffer[0] !== 0xff || buffer[1] !== 0xd8) return 0;
+  let offset = 2;
+  while (offset + 4 <= buffer.length && buffer[offset] === 0xff) {
+    const marker = buffer[offset + 1];
+    const length = buffer.readUInt16BE(offset + 2);
+    if (marker === 0xda) return 0;
+    if (marker === 0xe1 && buffer.toString('ascii', offset + 4, offset + 8) === 'Exif') {
+      const tiff = offset + 10;
+      if (tiff + 8 > buffer.length) return 0;
+      const littleEndian = buffer.toString('ascii', tiff, tiff + 2) === 'II';
+      const read16 = (at) => (littleEndian ? buffer.readUInt16LE(at) : buffer.readUInt16BE(at));
+      const read32 = (at) => (littleEndian ? buffer.readUInt32LE(at) : buffer.readUInt32BE(at));
+      const directory = tiff + read32(tiff + 4);
+      if (directory + 2 > buffer.length) return 0;
+      for (let index = 0; index < read16(directory); index += 1) {
+        const entry = directory + 2 + index * 12;
+        if (entry + 10 > buffer.length) return 0;
+        if (read16(entry) === 0x0112) return EXIF_ROTATION[read16(entry + 8)] || 0;
+      }
+      return 0;
+    }
+    offset += 2 + length;
+  }
+  return 0;
+};
+
+const rotatedCanvas = (createCanvas, decodedImage, degrees) => {
+  const scale = Math.min(1, MAX_INFERENCE_SIDE / Math.max(decodedImage.width, decodedImage.height));
+  const width = Math.round(decodedImage.width * scale);
+  const height = Math.round(decodedImage.height * scale);
+  const sideways = degrees % 180 !== 0;
+  const target = createCanvas(sideways ? height : width, sideways ? width : height);
+  const context = target.getContext('2d');
+  context.translate(target.width / 2, target.height / 2);
+  context.rotate((degrees * Math.PI) / 180);
+  context.drawImage(decodedImage, -width / 2, -height / 2, width, height);
+  return target;
+};
+
+const largestDetection = (detections) => detections.reduce((largest, current) => (
+  current.detection.box.area > largest.detection.box.area ? current : largest
+));
+
 const getFaceDescriptor = async (imageBuffer, image, runtime) => {
   const activeRuntime = runtime || await loadModels();
   const decodedImage = await activeRuntime.loadImage(imageBuffer);
-  const detections = await activeRuntime.faceapi
-    .detectAllFaces(decodedImage)
-    .withFaceLandmarks()
-    .withFaceDescriptors();
+  // Honour the EXIF tag first, then try the other orientations in case the ID
+  // card itself was photographed sideways or upside down.
+  const base = exifRotation(imageBuffer);
+  const turns = activeRuntime.createCanvas ? [0, 90, 270, 180] : [null];
 
-  if (detections.length === 0) {
-    throw new FaceDetectionError('FACE_NOT_DETECTED', image);
-  }
-  if (detections.length > 1) {
+  for (const turn of turns) {
+    const candidate = turn === null
+      ? decodedImage
+      : rotatedCanvas(activeRuntime.createCanvas, decodedImage, (base + turn) % 360);
+    const detections = await activeRuntime.faceapi
+      .detectAllFaces(candidate)
+      .withFaceLandmarks()
+      .withFaceDescriptors();
+    if (detections.length === 0) continue;
+    if (detections.length === 1) return detections[0].descriptor;
+    // Many IDs print a small secondary "ghost" portrait; use the main photo.
+    if (image === 'document') return largestDetection(detections).descriptor;
     throw new FaceDetectionError('MULTIPLE_FACES_DETECTED', image);
   }
-  return detections[0].descriptor;
+  throw new FaceDetectionError('FACE_NOT_DETECTED', image);
 };
 
-const compareDescriptors = (a, b, threshold = FACE_MATCH_THRESHOLD) => {
+const percentFromEnv = (value, fallback) => {
+  const parsed = Number(value);
+  return value !== undefined && value !== '' && Number.isFinite(parsed) && parsed >= 0 && parsed <= 100
+    ? parsed
+    : fallback;
+};
+
+const decisionThresholds = (env = process.env) => {
+  const autoVerifyMin = percentFromEnv(env.FACE_AUTO_VERIFY_MIN, DEFAULT_AUTO_VERIFY_MIN);
+  const reviewMin = Math.min(percentFromEnv(env.FACE_REVIEW_MIN, DEFAULT_REVIEW_MIN), autoVerifyMin);
+  return { autoVerifyMin, reviewMin };
+};
+
+const distanceToSimilarity = (distance) => {
+  let similarity = 0;
+  for (let index = 1; index < SIMILARITY_ANCHORS.length; index += 1) {
+    const [toDistance, toScore] = SIMILARITY_ANCHORS[index];
+    if (distance <= toDistance) {
+      const [fromDistance, fromScore] = SIMILARITY_ANCHORS[index - 1];
+      const ratio = (distance - fromDistance) / (toDistance - fromDistance);
+      similarity = fromScore + ratio * (toScore - fromScore);
+      break;
+    }
+  }
+  return Math.round(similarity * 100) / 100;
+};
+
+const bandFor = (similarity, { autoVerifyMin, reviewMin }) => {
+  if (similarity >= autoVerifyMin) return 'strong';
+  if (similarity >= reviewMin) return 'borderline';
+  return 'mismatch';
+};
+
+const compareDescriptors = (a, b, thresholds = decisionThresholds()) => {
   if (!a || !b || a.length === 0 || a.length !== b.length) {
     throw new TypeError('Face descriptors must be non-empty and have equal lengths.');
   }
@@ -150,27 +251,29 @@ const compareDescriptors = (a, b, threshold = FACE_MATCH_THRESHOLD) => {
     squaredDifference += difference * difference;
   }
 
-  const rawDistance = Math.sqrt(squaredDifference);
-  const confidence = Math.round(
-    Math.min(100, Math.max(0, (1 - rawDistance) * 100)) * 100,
-  ) / 100;
+  const distance = Number(Math.sqrt(squaredDifference).toFixed(6));
+  const similarity = distanceToSimilarity(distance);
+  const band = bandFor(similarity, thresholds);
 
+  // `confidence` is kept as an alias of `similarity` for older clients.
   return {
-    match: rawDistance <= threshold,
-    distance: Number(rawDistance.toFixed(6)),
-    confidence,
+    match: band !== 'mismatch',
+    band,
+    distance,
+    similarity,
+    confidence: similarity,
   };
 };
 
 const verifyFaces = async (
   documentBuffer,
   selfieBuffer,
-  { descriptor = getFaceDescriptor } = {},
+  { descriptor = getFaceDescriptor, thresholds = decisionThresholds() } = {},
 ) => {
   // Process sequentially to avoid holding two inference pipelines in memory.
   const documentDescriptor = await descriptor(documentBuffer, 'document');
   const selfieDescriptor = await descriptor(selfieBuffer, 'selfie');
-  return compareDescriptors(documentDescriptor, selfieDescriptor);
+  return compareDescriptors(documentDescriptor, selfieDescriptor, thresholds);
 };
 
 const maskIdNumber = (value) => {
@@ -188,6 +291,28 @@ const markForDeletion = async (bucket, paths, customTime = new Date()) => {
   );
 };
 
+// Saves one image to local disk or Cloud Storage and returns the stored path.
+const storeImage = async ({ backend, bucket, filePath, file, uploadsDir }) => {
+  if (backend === LOCAL_BACKEND) return saveLocalBuffer(filePath, file.buffer, uploadsDir);
+  await bucket.file(filePath).save(file.buffer, {
+    resumable: false,
+    metadata: { contentType: file.mimetype },
+  });
+  return filePath;
+};
+
+// Mismatches store no images, only the score, so admins can spot repeated
+// failed attempts.
+const recordFailedAttempt = (verificationRef, comparison, thresholds, attemptedAt) => verificationRef
+  .collection('face_attempts')
+  .add({
+    similarity: comparison.similarity,
+    distance: comparison.distance,
+    reviewMin: thresholds.reviewMin,
+    attemptedAt,
+  })
+  .catch((error) => console.error('Failed to record face match attempt:', error));
+
 const compareAndCreateSubmission = async ({
   uid,
   idType,
@@ -197,6 +322,7 @@ const compareAndCreateSubmission = async ({
   db,
   storage,
   verify = verifyFaces,
+  thresholds = decisionThresholds(),
   now = () => new Date(),
   uploadsDir = resolveUploadsDir(),
 }) => {
@@ -219,161 +345,97 @@ const compareAndCreateSubmission = async ({
     throw new VerificationConflictError('A verification submission is already being reviewed.');
   }
 
-  // TODO(face-verification): temporary ID-only bypass. Workers submit just the
-  // government ID and an admin approves manually. Re-enable by requiring the
-  // selfie again and restoring the verify() call below.
-  if (isFaceCheckDisabled()) {
-    return createIdOnlySubmission({
-      uid,
-      idType,
-      idNumber,
-      document,
-      db,
-      storage,
-      verificationRef,
-      prior,
-      now,
+  const comparison = await verify(document.buffer, selfie.buffer, { thresholds });
+  if (!comparison.match) {
+    await recordFailedAttempt(verificationRef, comparison, thresholds, now());
+    return comparison;
+  }
+
+  const submittedAt = now();
+  const autoVerified = comparison.band === 'strong';
+  const status = autoVerified ? 'verified' : 'pending';
+  const submissionId = crypto.randomUUID();
+  const basePath = `worker_verifications/${uid}/${submissionId}`;
+  // TODO(billing): local disk while there is no Storage bucket. Set
+  // VERIFICATION_STORAGE=gcs with a real FIREBASE_STORAGE_BUCKET for production.
+  const backend = isLocalStorage() || !storage?.bucket ? LOCAL_BACKEND : 'gcs';
+  const bucket = backend === LOCAL_BACKEND ? null : storage.bucket();
+  const storedPaths = [];
+
+  try {
+    const governmentIdPath = await storeImage({
+      backend,
+      bucket,
+      filePath: `${basePath}/government_id.${extensionFor(document.mimetype)}`,
+      file: document,
       uploadsDir,
     });
-  }
-
-  const comparison = await verify(document.buffer, selfie.buffer);
-  if (!comparison.match) return comparison;
-
-  const submittedAt = now();
-  const submissionId = crypto.randomUUID();
-  const basePath = `worker_verifications/${uid}/${submissionId}`;
-  const governmentIdPath = `${basePath}/government_id.${extensionFor(document.mimetype)}`;
-  const facePhotoPath = `${basePath}/face_photo.${extensionFor(selfie.mimetype)}`;
-  const bucket = storage.bucket();
-  const uploadedPaths = [];
-
-  try {
-    await bucket.file(governmentIdPath).save(document.buffer, {
-      resumable: false,
-      metadata: { contentType: document.mimetype },
+    storedPaths.push(governmentIdPath);
+    const facePhotoPath = await storeImage({
+      backend,
+      bucket,
+      filePath: `${basePath}/face_photo.${extensionFor(selfie.mimetype)}`,
+      file: selfie,
+      uploadsDir,
     });
-    uploadedPaths.push(governmentIdPath);
-    await bucket.file(facePhotoPath).save(selfie.buffer, {
-      resumable: false,
-      metadata: { contentType: selfie.mimetype },
-    });
-    uploadedPaths.push(facePhotoPath);
+    storedPaths.push(facePhotoPath);
 
-    await verificationRef.set({
-      workerId: uid,
-      submissionId,
-      idType: String(idType).trim(),
-      maskedIdNumber: maskIdNumber(idNumber),
-      governmentIdPath,
-      facePhotoPath,
-      idSubmitted: true,
-      faceVerified: true,
-      faceDistance: comparison.distance,
-      faceMatchConfidence: comparison.confidence,
-      faceMatchThreshold: FACE_MATCH_THRESHOLD,
-      faceVerificationProvider: 'local_face_api',
-      faceVerifiedAt: submittedAt,
-      status: 'pending',
-      adminNotes: '',
-      submittedAt,
-      updatedAt: submittedAt,
-      reviewedAt: FieldValue.delete(),
-      reviewedBy: FieldValue.delete(),
-      purgeAfter: FieldValue.delete(),
-    }, { merge: true });
-  } catch (error) {
-    await Promise.allSettled(
-      uploadedPaths.map((filePath) => bucket.file(filePath).delete({ ignoreNotFound: true })),
-    );
-    throw error;
-  }
-
-  if (prior) {
-    await markForDeletion(bucket, [prior.governmentIdPath, prior.facePhotoPath], submittedAt)
-      .catch((error) => console.error('Failed to schedule replaced verification images for deletion:', error));
-  }
-
-  return { ...comparison, status: 'pending' };
-};
-
-const createIdOnlySubmission = async ({
-  uid,
-  idType,
-  idNumber,
-  document,
-  db,
-  storage,
-  verificationRef,
-  prior,
-  now,
-  uploadsDir = resolveUploadsDir(),
-}) => {
-  const submittedAt = now();
-  const submissionId = crypto.randomUUID();
-  const basePath = `worker_verifications/${uid}/${submissionId}`;
-  const fileName = `government_id.${extensionFor(document.mimetype)}`;
-  const bucket = storage?.bucket ? storage.bucket() : null;
-  let governmentIdPath = `${basePath}/${fileName}`;
-  let backend = 'gcs';
-
-  try {
-    // TODO(billing): local disk while there is no Storage bucket. The GCS
-    // branch below is the production path; restore by setting
-    // VERIFICATION_STORAGE=gcs with a real FIREBASE_STORAGE_BUCKET.
-    if (isLocalStorage() || !bucket) {
-      governmentIdPath = await saveLocalBuffer(`${basePath}/${fileName}`, document.buffer, uploadsDir);
-      backend = 'local';
-    } else {
-      await bucket.file(governmentIdPath).save(document.buffer, {
-        resumable: false,
-        metadata: { contentType: document.mimetype },
-      });
-    }
-
-    await verificationRef.set({
+    const batch = db.batch();
+    batch.set(verificationRef, {
       workerId: uid,
       submissionId,
       idType: String(idType).trim(),
       maskedIdNumber: maskIdNumber(idNumber),
       governmentIdPath,
       governmentIdMimeType: document.mimetype,
+      facePhotoPath,
+      facePhotoMimeType: selfie.mimetype,
       storageBackend: backend,
-      facePhotoPath: null,
       idSubmitted: true,
-      faceVerified: false,
-      faceDistance: null,
-      faceMatchConfidence: null,
-      faceMatchThreshold: null,
-      faceVerificationProvider: 'bypassed',
-      faceVerifiedAt: FieldValue.delete(),
-      status: 'pending',
+      faceVerified: true,
+      faceDistance: comparison.distance,
+      faceMatchConfidence: comparison.similarity,
+      faceMatchBand: comparison.band,
+      faceMatchThreshold: thresholds.reviewMin,
+      faceAutoVerifyMin: thresholds.autoVerifyMin,
+      faceReviewFlag: autoVerified ? FieldValue.delete() : 'borderline',
+      faceVerificationProvider: 'local_face_api',
+      faceVerifiedAt: submittedAt,
+      status,
       adminNotes: '',
       submittedAt,
       updatedAt: submittedAt,
-      reviewedAt: FieldValue.delete(),
-      reviewedBy: FieldValue.delete(),
-      purgeAfter: FieldValue.delete(),
+      ...(autoVerified
+        ? {
+          reviewedAt: submittedAt,
+          reviewedBy: AUTO_REVIEWER,
+          purgeAfter: purgeDateFor(status, submittedAt),
+        }
+        : {
+          reviewedAt: FieldValue.delete(),
+          reviewedBy: FieldValue.delete(),
+          purgeAfter: FieldValue.delete(),
+        }),
     }, { merge: true });
-  } catch (error) {
-    if (backend === 'local') {
-      await removeStoredFiles({ paths: [governmentIdPath], backend, uploadsDir });
-    } else if (bucket) {
-      await bucket.file(governmentIdPath).delete({ ignoreNotFound: true }).catch(() => {});
+    if (autoVerified) {
+      addStatusWrites(batch, db, uid, status, { senderId: AUTO_REVIEWER, now: submittedAt });
     }
+    await batch.commit();
+  } catch (error) {
+    await removeStoredFiles({ paths: storedPaths, backend, storage, uploadsDir }).catch(() => {});
     throw error;
   }
 
   if (prior) {
-    await removeStoredFiles({
-      paths: [prior.governmentIdPath, prior.facePhotoPath],
-      backend: prior.storageBackend || 'gcs',
-      storage,
-      uploadsDir,
-    }).catch((error) => console.error('Failed to remove replaced verification images:', error));
+    const priorPaths = [prior.governmentIdPath, prior.facePhotoPath];
+    const cleanup = (prior.storageBackend || 'gcs') === LOCAL_BACKEND
+      ? removeStoredFiles({ paths: priorPaths, backend: LOCAL_BACKEND, uploadsDir })
+      : markForDeletion(storage.bucket(), priorPaths, submittedAt);
+    await cleanup
+      .catch((error) => console.error('Failed to clean up replaced verification images:', error));
   }
 
-  return { match: true, confidence: null, distance: null, status: 'pending', bypassed: true };
+  return { ...comparison, status };
 };
 
 const resetModelStateForTests = () => {
@@ -382,7 +444,8 @@ const resetModelStateForTests = () => {
 };
 
 module.exports = {
-  FACE_MATCH_THRESHOLD,
+  DEFAULT_AUTO_VERIFY_MIN,
+  DEFAULT_REVIEW_MIN,
   MODEL_FILES,
   MODELS_PATH,
   FaceDetectionError,
@@ -390,8 +453,10 @@ module.exports = {
   WorkerAccessError,
   compareAndCreateSubmission,
   compareDescriptors,
+  decisionThresholds,
+  distanceToSimilarity,
+  exifRotation,
   getFaceDescriptor,
-  isFaceCheckDisabled,
   loadModels,
   markForDeletion,
   maskIdNumber,

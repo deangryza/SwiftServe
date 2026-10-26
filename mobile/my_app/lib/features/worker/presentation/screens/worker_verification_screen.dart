@@ -18,9 +18,7 @@ typedef VerificationSubmitter =
       required String idType,
       required String idNumber,
       required File governmentId,
-      // TODO(face-verification): nullable while ID-only bypass is active.
-      // Restore to `required File facePhoto` to re-enable face matching.
-      File? facePhoto,
+      required File facePhoto,
     });
 typedef VerificationFileDeleter = Future<void> Function(File file);
 
@@ -43,10 +41,6 @@ class WorkerVerificationScreen extends StatefulWidget {
   final Stream<VerificationStatus?>? statusStream;
   final VerificationSubmitter? submitter;
   final VerificationCaptureLauncher? documentCaptureLauncher;
-  // TODO(face-verification): unused while ID-only bypass is active. Kept so
-  // existing tests/callers still compile; remove the deprecation comment and
-  // restore the selfie step to re-enable face matching.
-  @Deprecated('Unused while face verification is bypassed')
   final VerificationCaptureLauncher? selfieCaptureLauncher;
   final VerificationFileDeleter? deleteFile;
   final Future<void> Function()? signOut;
@@ -76,9 +70,10 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
   bool _submitting = false;
   bool _submissionComplete = false;
-  // TODO(face-verification): restore `double? _submittedConfidence` and the
-  // confidence-based success copy when face matching returns.
+  double? _submittedConfidence;
+  bool _submittedVerified = false;
   String? _stepMessage;
+  double? _mismatchSimilarity;
 
   @override
   void initState() {
@@ -93,8 +88,9 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
   @override
   void dispose() {
-    final files = <File?>[_draft.document];
+    final files = <File?>[_draft.document, _draft.selfie];
     _draft.document = null;
+    _draft.selfie = null;
     for (final file in files) {
       if (file != null) {
         unawaited(_deleteTemporaryFile(file));
@@ -153,17 +149,27 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
   Widget _buildContent(WorkerVerificationUiState state) {
     if (_submissionComplete) {
-      // TODO(face-verification): bypass shows the generic message. When face
-      // matching returns, restore the confidence-based "face match passed" copy.
+      final similarity = _formatPercent(_submittedConfidence);
+      if (_submittedVerified) {
+        return _VerificationStatusView(
+          key: const ValueKey('verification_submission_verified'),
+          icon: Icons.verified_outlined,
+          title: 'Verified',
+          description: similarity == null
+              ? 'Your selfie matched your ID. You can now accept jobs.'
+              : 'Your selfie matched your ID with $similarity similarity. '
+                    'You can now accept jobs.',
+          accentColor: Colors.green,
+        );
+      }
       return const _VerificationStatusView(
         key: ValueKey('verification_submission_complete'),
         icon: Icons.schedule_send_outlined,
-        title: 'Submitted for review',
+        title: 'Under review',
         description:
-            'Your verification was submitted successfully. An administrator '
-            'will review your ID and notify you of the decision. You can '
-            'return here to check its review status.',
-        accentColor: AppTheme.ink,
+            'Under review — an admin will check your photos. You can return '
+            'here to check the review status.',
+        accentColor: Colors.blue,
       );
     }
 
@@ -237,12 +243,10 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // TODO(face-verification): ID-only copy while bypassed. Restore
-              // the live-selfie wording when face matching returns.
               const Text(
                 'Verification helps keep customers and workers safe. You will '
                 'enter your ID details, photograph your government ID, and '
-                'submit it for administrator review.',
+                'take a live selfie so we can match your face to the ID.',
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 28),
@@ -257,8 +261,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                 icon: Icons.wb_sunny_outlined,
                 title: 'Find a bright, quiet place',
                 description:
-                    'Avoid glare on your ID and keep all four corners '
-                    'visible inside the frame.',
+                    'Avoid glare on your ID, keep all four corners visible, '
+                    'and remove glasses or hats for the selfie.',
               ),
               const _PreparationItem(
                 icon: Icons.lock_outline,
@@ -291,9 +295,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Widget _buildWizard() {
-    // TODO(face-verification): 3 steps while ID-only. Restore to 4 steps
-    // (idDetails, document, selfie, review) to re-enable face matching.
-    const totalSteps = 3;
+    final totalSteps = _VerificationStep.values.length;
     final stepNumber = _draft.step.index + 1;
     return SingleChildScrollView(
       key: ValueKey('verification_step_$stepNumber'),
@@ -318,7 +320,10 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
               const SizedBox(height: 8),
               LinearProgressIndicator(value: stepNumber / totalSteps),
               const SizedBox(height: 24),
-              if (_stepMessage != null) ...[
+              if (_mismatchSimilarity != null) ...[
+                _buildMismatchCard(),
+                const SizedBox(height: 16),
+              ] else if (_stepMessage != null) ...[
                 _MessageCard(message: _stepMessage!),
                 const SizedBox(height: 16),
               ],
@@ -331,11 +336,10 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Widget _buildCurrentStep() {
-    // TODO(face-verification): selfie step removed while ID-only bypass is
-    // active. Restore `_VerificationStep.selfie => _buildSelfieStep()`.
     return switch (_draft.step) {
       _VerificationStep.idDetails => _buildIdDetailsStep(),
       _VerificationStep.document => _buildDocumentStep(),
+      _VerificationStep.selfie => _buildSelfieStep(),
       _VerificationStep.review => _buildReviewStep(),
     };
   }
@@ -448,8 +452,86 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     );
   }
 
-  // TODO(face-verification): selfie step removed while ID-only bypass is
-  // active. Restore _buildSelfieStep() (live-selfie challenge) to re-enable.
+  Widget _buildMismatchCard() {
+    final similarity = _formatPercent(_mismatchSimilarity);
+    final colors = Theme.of(context).colorScheme;
+    return Material(
+      key: const ValueKey('verification_mismatch'),
+      color: colors.errorContainer,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              similarity == null
+                  ? 'Your selfie did not match your ID'
+                  : 'Your selfie did not match your ID ($similarity similarity)',
+              style: TextStyle(
+                color: colors.onErrorContainer,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Try again in good, even light, remove glasses or hats, and '
+              'hold the ID flat so your photo on it is sharp.',
+              style: TextStyle(color: colors.onErrorContainer),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              key: const ValueKey('verification_retry_selfie'),
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() {
+                      _mismatchSimilarity = null;
+                      _stepMessage = null;
+                      _draft.step = _VerificationStep.selfie;
+                    }),
+              child: const Text('Retake selfie'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSelfieStep() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          'Take a live selfie',
+          style: Theme.of(
+            context,
+          ).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Face the camera in good light and follow the on-screen prompts. '
+          'Remove glasses or hats so we can match your face to your ID.',
+        ),
+        const SizedBox(height: 20),
+        if (_draft.selfie != null) ...[
+          _PhotoPreview(file: _draft.selfie!, semanticLabel: 'Live selfie'),
+          const SizedBox(height: 16),
+        ],
+        FilledButton(
+          key: const ValueKey('verification_capture_selfie'),
+          onPressed: _submitting ? null : () => _captureSelfie(advance: true),
+          child: Text(
+            _draft.selfie == null ? 'Open selfie camera' : 'Take selfie again',
+          ),
+        ),
+        TextButton(
+          onPressed: _submitting ? null : _goBackOneStep,
+          child: const Text('Back'),
+        ),
+      ],
+    );
+  }
+
   Widget _buildReviewStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -462,8 +544,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
         ),
         const SizedBox(height: 8),
         const Text(
-          'Check that your ID is readable before '
-          'sending your verification for review.',
+          'Check that your ID is readable and your selfie is clear before '
+          'submitting your verification.',
         ),
         const SizedBox(height: 20),
         _ReviewPhoto(
@@ -471,6 +553,13 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
           file: _draft.document,
           onRetake: () => _captureDocument(advance: false),
           buttonKey: const ValueKey('verification_retake_id'),
+        ),
+        const SizedBox(height: 16),
+        _ReviewPhoto(
+          title: 'Live selfie',
+          file: _draft.selfie,
+          onRetake: () => _captureSelfie(advance: false),
+          buttonKey: const ValueKey('verification_retake_selfie'),
         ),
         const SizedBox(height: 20),
         Card(
@@ -496,6 +585,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                       ? null
                       : () => setState(() {
                           _stepMessage = null;
+                          _mismatchSimilarity = null;
                           _draft.step = _VerificationStep.idDetails;
                         }),
                   icon: const Icon(Icons.edit_outlined),
@@ -536,6 +626,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   void _goBackOneStep() {
     setState(() {
       _stepMessage = null;
+      _mismatchSimilarity = null;
       if (_draft.step == _VerificationStep.idDetails) {
         _draft.started = false;
       } else {
@@ -552,9 +643,12 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     setState(() {
       _draft.document = captured;
       _stepMessage = null;
-      // TODO(face-verification): ID-only skips straight to review. Restore
-      // `_VerificationStep.selfie` here to re-enable face matching.
-      if (advance) _draft.step = _VerificationStep.review;
+      _mismatchSimilarity = null;
+      if (advance) {
+        _draft.step = _draft.selfie == null
+            ? _VerificationStep.selfie
+            : _VerificationStep.review;
+      }
     });
     if (previous != null && previous.path != captured.path) {
       await _deleteTemporaryFile(previous);
@@ -567,12 +661,32 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     );
   }
 
-  // TODO(face-verification): selfie capture removed while ID-only bypass is
-  // active. Restore _captureSelfie() + _openSelfieCamera() to re-enable.
+  Future<void> _captureSelfie({required bool advance}) async {
+    final launcher = widget.selfieCaptureLauncher ?? _openSelfieCamera;
+    final captured = await launcher(context);
+    if (!mounted || captured == null) return;
+    final previous = _draft.selfie;
+    setState(() {
+      _draft.selfie = captured;
+      _stepMessage = null;
+      _mismatchSimilarity = null;
+      if (advance) _draft.step = _VerificationStep.review;
+    });
+    if (previous != null && previous.path != captured.path) {
+      await _deleteTemporaryFile(previous);
+    }
+  }
+
+  Future<File?> _openSelfieCamera(BuildContext context) {
+    return Navigator.of(context).push<File>(
+      MaterialPageRoute(builder: (_) => const SelfieLivenessScreen()),
+    );
+  }
 
   Future<void> _submit() async {
     final document = _draft.document;
-    if (document == null || _draft.idNumber.trim().isEmpty) {
+    final selfie = _draft.selfie;
+    if (document == null || selfie == null || _draft.idNumber.trim().isEmpty) {
       setState(() {
         _stepMessage = 'Complete all verification steps before submitting.';
       });
@@ -582,29 +696,51 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     setState(() {
       _submitting = true;
       _stepMessage = null;
+      _mismatchSimilarity = null;
     });
     try {
-      await _submitter(
+      final result = await _submitter(
         idType: _draft.idType,
         idNumber: _draft.idNumber.trim(),
         governmentId: document,
+        facePhoto: selfie,
       );
       await _deleteDraftFiles();
       if (!mounted) return;
       setState(() {
         _submitting = false;
         _submissionComplete = true;
+        _submittedConfidence = result.similarity ?? result.confidence;
+        _submittedVerified = result.isVerified;
         _draft.reset();
         _idNumberController.clear();
       });
     } on FaceVerificationException catch (error) {
       if (!mounted) return;
-      // TODO(face-verification): mismatch branch removed while ID-only bypass
-      // is active. Restore the selfie-retake handling to re-enable.
       setState(() {
         _submitting = false;
-        _draft.step = _VerificationStep.review;
-        _stepMessage = error.message;
+        switch (error.failure) {
+          case FaceVerificationFailure.mismatch:
+            // Stay on review so both photos are visible; the mismatch card
+            // offers a button back to the selfie step.
+            _draft.step = _VerificationStep.review;
+            _mismatchSimilarity = error.similarity ?? 0;
+          case FaceVerificationFailure.noFace ||
+                  FaceVerificationFailure.multipleFaces
+              when error.image != null:
+            final retakeId = error.image == VerificationImage.document;
+            _draft.step = retakeId
+                ? _VerificationStep.document
+                : _VerificationStep.selfie;
+            _stepMessage = retakeId
+                ? '${error.message} Photograph your ID again so only the '
+                      'face printed on it is visible.'
+                : '${error.message} Take your selfie again alone, facing '
+                      'the camera in good light.';
+          default:
+            _draft.step = _VerificationStep.review;
+            _stepMessage = error.message;
+        }
       });
     } catch (_) {
       if (!mounted) return;
@@ -653,8 +789,9 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Future<void> _deleteDraftFiles() async {
-    final files = <File?>[_draft.document];
+    final files = <File?>[_draft.document, _draft.selfie];
     _draft.document = null;
+    _draft.selfie = null;
     for (final file in files) {
       if (file != null) await _deleteTemporaryFile(file);
     }
@@ -680,14 +817,18 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
       _draft.started = true;
       _idNumberController.clear();
       _stepMessage = null;
+      _mismatchSimilarity = null;
       _submissionComplete = false;
+      _submittedConfidence = null;
+      _submittedVerified = false;
     });
   }
+
+  String? _formatPercent(double? value) =>
+      value == null ? null : '${value.round()}%';
 }
 
-// TODO(face-verification): `selfie` step removed while ID-only bypass is
-// active. Restore `selfie` in the enum to re-enable face matching.
-enum _VerificationStep { idDetails, document, review }
+enum _VerificationStep { idDetails, document, selfie, review }
 
 class _VerificationDraft {
   bool started = false;
@@ -695,9 +836,13 @@ class _VerificationDraft {
   String idType = 'National ID';
   String idNumber = '';
   File? document;
+  File? selfie;
 
   bool get hasProgress =>
-      started || idNumber.trim().isNotEmpty || document != null;
+      started ||
+      idNumber.trim().isNotEmpty ||
+      document != null ||
+      selfie != null;
 
   String get maskedIdNumber {
     final value = idNumber.trim();
@@ -712,6 +857,7 @@ class _VerificationDraft {
     idType = 'National ID';
     idNumber = '';
     document = null;
+    selfie = null;
   }
 }
 

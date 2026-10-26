@@ -92,3 +92,30 @@ test('builds an absolute same-host image URL', () => {
     'http://localhost:5000/api/admin/verifications/worker-1/image',
   );
 });
+
+test('streams a locally stored selfie when kind=selfie', async () => {
+  await fs.mkdir(path.join(uploadsDir, 'worker_verifications/w1/s1'), { recursive: true });
+  await fs.writeFile(path.join(uploadsDir, 'worker_verifications/w1/s1/face_photo.png'), 'img');
+  const handler = createImageHandler({
+    database: databaseFor({
+      storageBackend: 'local',
+      governmentIdPath: 'worker_verifications/w1/s1/government_id.jpg',
+      facePhotoPath: 'worker_verifications/w1/s1/face_photo.png',
+      facePhotoMimeType: 'image/png',
+    }),
+    uploadsDir,
+  });
+  const res = mockRes();
+  await handler({ params: { workerId: 'w1' }, query: { kind: 'selfie' } }, res);
+
+  assert.equal(res.sent, path.resolve(uploadsDir, 'worker_verifications/w1/s1/face_photo.png'));
+  assert.equal(res.headers['Content-Type'], 'image/png');
+});
+
+test('builds a selfie image URL', () => {
+  const req = { protocol: 'http', get: () => 'localhost:5000' };
+  assert.equal(
+    localImageUrl(req, 'worker-1', 'selfie'),
+    'http://localhost:5000/api/admin/verifications/worker-1/image?kind=selfie',
+  );
+});

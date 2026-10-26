@@ -56,6 +56,7 @@ Widget _harness({
   required DeviceLocationService locationService,
   required JobAddressResolver geocodingService,
   ValueChanged<JobLocationSelection?>? onChanged,
+  JobLocationSelection? initialValue,
   String? errorText,
 }) => MaterialApp(
   home: Scaffold(
@@ -64,6 +65,7 @@ Widget _harness({
         locationService: locationService,
         geocodingService: geocodingService,
         mapBuilder: _testMap,
+        initialValue: initialValue,
         errorText: errorText,
         onChanged: onChanged ?? (_) {},
       ),
@@ -95,6 +97,23 @@ void main() {
       find.text('Choose the service location on the map.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('starts from a saved pin when editing a post', (tester) async {
+    await tester.pumpWidget(
+      _harness(
+        locationService: _FakeLocationService(position: coordinate),
+        geocodingService: _FakeGeocodingService(result: resolved),
+        initialValue: const JobLocationSelection(
+          position: coordinate,
+          exactAddress: '45 Saved Street, Malolos',
+          areaLabel: 'Malolos, Bulacan',
+        ),
+      ),
+    );
+
+    expect(find.text('Pin selected'), findsOneWidget);
+    expect(find.text('45 Saved Street, Malolos'), findsOneWidget);
   });
 
   testWidgets('shows a recoverable permission-denied state', (tester) async {

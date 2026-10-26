@@ -66,7 +66,7 @@ service cloud.firestore {
           'cancelledAt', 'ongoingAt', 'completedAt', 'modality',
           'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
           'itemCostEstimate', 'distanceKm', 'errandStage', 'pickedUpAt',
-          'deliveringAt'
+          'deliveringAt', 'updatedAt'
         ])
         && data.clientId is string
         && data.clientId.size() > 0
@@ -113,7 +113,43 @@ service cloud.firestore {
         && data.status in ['pending', 'accepted', 'ongoing', 'completed', 'cancelled']
         && data.createdAt is timestamp
         && validOptionalString(data, 'workerId', 128)
-        && validOptionalString(data, 'workerName', 120);
+        && validOptionalString(data, 'workerName', 120)
+        && (!('updatedAt' in data) || data.updatedAt is timestamp);
+    }
+    // Where a job happens, checked after a create or a client edit.
+    function validPlacement(requestId, data) {
+      return (
+          // Online jobs carry no map pin; on-site and hybrid jobs need both
+          // the public area and the private exact location.
+          (
+            data.get('modality', 'onsite') == 'online'
+            && !('areaPosition' in data)
+            && !existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          ) || (
+            data.get('modality', 'onsite') != 'online'
+            && data.areaPosition is latlng
+            && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
+          )
+        )
+        // Errands also need a drop-off, publicly as an area and privately as
+        // the exact point. Other work types never carry errand fields.
+        && (
+          (
+            data.get('modality', 'onsite') == 'errand'
+            && data.dropoffAreaPosition is latlng
+            && data.dropoffLocation is string
+            && data.errandItems is string
+            && data.errandItems.size() > 0
+            && data.distanceKm is number
+            && getAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location).data.dropoffPosition is latlng
+          ) || (
+            data.get('modality', 'onsite') != 'errand'
+            && !data.keys().hasAny([
+              'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
+              'itemCostEstimate', 'distanceKm'
+            ])
+          )
+        );
     }
     function validExactLocation(data) {
       return data.keys().hasAll(['position', 'address', 'createdAt'])
@@ -296,18 +332,40 @@ service cloud.firestore {
     match /users/{uid} {
       allow read: if self(uid);
       allow create: if false;
+      // Users edit only these fields; role, phone and verification stay with
+      // the backend. An allowlist also works for older accounts that lack
+      // fields such as verificationStatus, which an equality check cannot read.
       allow update: if self(uid)
         && request.resource.data.diff(resource.data).affectedKeys()
-          .hasAny(['role', 'verificationStatus', 'phoneNumber']) == false
-        && validOptionalString(request.resource.data, 'photoBase64', 65536);
+          .hasOnly(['fullName', 'address', 'photoBase64', 'updatedAt'])
+        && (!('fullName' in request.resource.data.diff(resource.data).affectedKeys())
+          || (request.resource.data.fullName is string
+            && request.resource.data.fullName.size() > 0
+            && request.resource.data.fullName.size() <= 120))
+        && (!('address' in request.resource.data.diff(resource.data).affectedKeys())
+          || validOptionalString(request.resource.data, 'address', 300))
+        && (!('photoBase64' in request.resource.data.diff(resource.data).affectedKeys())
+          || validOptionalString(request.resource.data, 'photoBase64', 65536))
+        && (!('updatedAt' in request.resource.data.diff(resource.data).affectedKeys())
+          || request.resource.data.updatedAt == request.time);
     }
 
     match /public_profiles/{uid} {
       allow read: if signedIn();
       allow create: if self(uid) && validPublicProfile(uid, request.resource.data);
+      // Some older profiles carry extra fields (such as location), so updates
+      // check only what changes instead of the whole document's keys.
       allow update: if self(uid)
-        && resource.data.role == request.resource.data.role
-        && validPublicProfile(uid, request.resource.data);
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['uid', 'fullName', 'role', 'photoBase64', 'updatedAt'])
+        && request.resource.data.uid == uid
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.fullName is string
+        && request.resource.data.fullName.size() > 0
+        && request.resource.data.fullName.size() <= 120
+        && request.resource.data.photoBase64 is string
+        && request.resource.data.photoBase64.size() <= 65536
+        && request.resource.data.updatedAt == request.time;
       allow delete: if false;
     }
 
@@ -338,41 +396,25 @@ service cloud.firestore {
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.status == 'pending'
         && request.resource.data.createdAt == request.time
-        // Online jobs carry no map pin; on-site and hybrid jobs need both the
-        // public area and the private exact location.
-        && (
-          (
-            request.resource.data.get('modality', 'onsite') == 'online'
-            && !('areaPosition' in request.resource.data)
-            && !existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
-          ) || (
-            request.resource.data.get('modality', 'onsite') != 'online'
-            && request.resource.data.areaPosition is latlng
-            && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
-          )
-        )
+        && !('updatedAt' in request.resource.data)
         && !('errandStage' in request.resource.data)
-        // Errands also need a drop-off, publicly as an area and privately as
-        // the exact point. Other work types never carry errand fields.
-        && (
-          (
-            request.resource.data.get('modality', 'onsite') == 'errand'
-            && request.resource.data.dropoffAreaPosition is latlng
-            && request.resource.data.dropoffLocation is string
-            && request.resource.data.errandItems is string
-            && request.resource.data.errandItems.size() > 0
-            && request.resource.data.distanceKm is number
-            && getAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location).data.dropoffPosition is latlng
-          ) || (
-            request.resource.data.get('modality', 'onsite') != 'errand'
-            && !request.resource.data.keys().hasAny([
-              'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
-              'itemCostEstimate', 'distanceKm'
-            ])
-          )
-        );
+        && validPlacement(requestId, request.resource.data);
       allow update: if validServiceRequest(request.resource.data) && (
         (
+          // The client edits their post while nobody has been hired yet.
+          self(resource.data.clientId)
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'pending'
+          && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'title', 'category', 'budget', 'schedule', 'scheduleFrom',
+              'scheduleTo', 'description', 'modality', 'location',
+              'areaPosition', 'dropoffLocation', 'dropoffAreaPosition',
+              'errandItems', 'itemCostEstimate', 'distanceKm', 'updatedAt'
+            ])
+          && validPlacement(requestId, request.resource.data)
+        ) || (
           self(resource.data.clientId)
           && resource.data.status in ['pending', 'accepted']
           && request.resource.data.status == 'cancelled'
@@ -501,6 +543,16 @@ service cloud.firestore {
           && validExactLocation(request.resource.data)
           && request.resource.data.createdAt == request.time
           && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid;
+        // The client moves or removes the pin while editing an open post.
+        allow update: if privateDocumentId == 'location'
+          && signedIn()
+          && parent().clientId == request.auth.uid
+          && parent().status == 'pending'
+          && validExactLocation(request.resource.data);
+        allow delete: if privateDocumentId == 'location'
+          && signedIn()
+          && parent().clientId == request.auth.uid
+          && parent().status == 'pending';
         // Only the assigned rider writes their live position, and only while
         // the errand is underway.
         allow create, update: if privateDocumentId == 'rider_location'

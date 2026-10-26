@@ -25,7 +25,13 @@ void main() {
 
   test('formatDistance uses meters, kilometers, and approximate prefix', () {
     expect(formatDistance(246), '250 m away');
-    expect(formatDistance(2410, approximate: true), '~2.4 km away');
+    expect(formatDistance(2410), '2.4 km away');
+  });
+
+  test('formatDistance keeps approximate distances coarse', () {
+    expect(formatDistance(520, approximate: true), 'Under 1 km away');
+    expect(formatDistance(2410, approximate: true), '~2.5 km away');
+    expect(formatDistance(3100, approximate: true), '~3 km away');
   });
 
   test('service request parses a public GeoPoint and supports legacy data', () {

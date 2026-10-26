@@ -6,7 +6,7 @@ import '../../../../shared/theme/app_theme.dart';
 import '../../../../shared/utils/message_time.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 
-import '../../../../shared/models/service_request.dart';
+
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/conversation_ui.dart';
@@ -89,9 +89,7 @@ class ClientHistoryScreen extends StatelessWidget {
                       onTap: () => Navigator.push(
                         context,
                         clientPageRoute(
-                          ClientRequestDetailsScreen(
-                            request: ServiceRequest.fromDocument(document),
-                          ),
+                          ClientRequestDetailsScreen(requestId: document.id),
                         ),
                       ),
                       child: Card(
