@@ -48,40 +48,45 @@ Future<bool> showActionConfirmation(
             textAlign: TextAlign.center,
             style: TextStyle(color: muted, height: 1.4),
           ),
-          actionsAlignment: MainAxisAlignment.center,
           actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+          // One row sharing the width equally, so the buttons never wrap
+          // into an off-centre stack on narrow phones.
           actions: [
-            SizedBox(
-              width: 120,
-              child: OutlinedButton(
-                onPressed: () => Navigator.pop(dialogContext, false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: text,
-                  minimumSize: const Size.fromHeight(48),
-                  side: BorderSide(color: Theme.of(dialogContext).dividerColor),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: text,
+                      minimumSize: const Size.fromHeight(48),
+                      side: BorderSide(
+                        color: Theme.of(dialogContext).dividerColor,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(cancelLabel),
                   ),
                 ),
-                child: Text(cancelLabel),
-              ),
-            ),
-            const SizedBox(width: 10),
-            SizedBox(
-              width: 120,
-              child: FilledButton(
-                key: confirmButtonKey,
-                onPressed: () => Navigator.pop(dialogContext, true),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppTheme.yellow,
-                  foregroundColor: AppTheme.ink,
-                  minimumSize: const Size.fromHeight(48),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton(
+                    key: confirmButtonKey,
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppTheme.yellow,
+                      foregroundColor: AppTheme.ink,
+                      minimumSize: const Size.fromHeight(48),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: Text(confirmLabel),
                   ),
                 ),
-                child: Text(confirmLabel),
-              ),
+              ],
             ),
           ],
         ),
