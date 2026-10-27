@@ -46,6 +46,9 @@ enum ErrandStage {
 
   final String label;
 
+  /// Whether the rider's next stop is the drop-off rather than the pickup.
+  bool get headsToDropoff => this != headingToPickup;
+
   ErrandStage? get next {
     final nextIndex = index + 1;
     return nextIndex < values.length ? values[nextIndex] : null;

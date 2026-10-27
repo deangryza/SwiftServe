@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import '../../../../shared/widgets/simple_back_button.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/models/job_location.dart';
@@ -16,7 +21,10 @@ import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/services/device_location_service.dart';
 import '../../../../shared/services/rider_location_service.dart';
+import '../../../../shared/services/road_route_service.dart';
 import '../../../../shared/utils/job_location_utils.dart';
+import '../../../../shared/utils/navigation_links.dart';
+import '../../../../shared/utils/reroute_throttle.dart';
 import '../../../../shared/widgets/errand_map_layers.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
@@ -41,7 +49,8 @@ class WorkerJobDetailsScreen extends StatefulWidget {
   State<WorkerJobDetailsScreen> createState() => _WorkerJobDetailsScreenState();
 }
 
-class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
+class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
+    with WidgetsBindingObserver {
   static const _locationService = DeviceLocationService();
   bool _savingAction = false;
   bool _savingReview = false;
@@ -50,11 +59,52 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
   JobCoordinate? _workerPosition;
   ExactJobLocation? _exactLocation;
   DeviceLocationException? _locationError;
+  // Keeps the worker's own marker moving on errand maps.
+  StreamSubscription<Position>? _positionUpdates;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadLocationContext();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _positionUpdates?.cancel();
+    super.dispose();
+  }
+
+  // GPS only runs while the screen is in the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (_workerPosition != null) _followPosition();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _positionUpdates?.cancel();
+      _positionUpdates = null;
+    }
+  }
+
+  void _followPosition() {
+    if (!widget.request.isErrand || _positionUpdates != null) return;
+    _positionUpdates =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 10,
+          ),
+        ).listen((position) {
+          if (!mounted) return;
+          setState(
+            () => _workerPosition = JobCoordinate(
+              latitude: position.latitude,
+              longitude: position.longitude,
+            ),
+          );
+        }, onError: (_) {});
   }
 
   Future<void> _loadLocationContext() async {
@@ -88,7 +138,10 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
 
     try {
       final position = await _locationService.currentPosition();
-      if (mounted) setState(() => _workerPosition = position);
+      if (mounted) {
+        setState(() => _workerPosition = position);
+        _followPosition();
+      }
     } on DeviceLocationException catch (error) {
       if (mounted) setState(() => _locationError = error);
     } finally {
@@ -120,6 +173,9 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen> {
           ? _exactLocation?.dropoffPosition ?? request.dropoffAreaPosition
           : null,
       dropoffAddress: _exactLocation?.dropoffAddress ?? request.dropoffLocation,
+      headsToDropoff:
+          request.status == ServiceRequestStatus.ongoing &&
+          (request.errandStage?.headsToDropoff ?? false),
       workerPosition: _workerPosition,
       loadingDistance: _loadingLocation,
       locationError: _locationError,
@@ -1478,9 +1534,13 @@ class _JobLocationMapCard extends StatefulWidget {
     required this.palette,
     this.dropoffPosition,
     this.dropoffAddress,
+    this.headsToDropoff = false,
   });
 
   final _WorkerDetailsPalette palette;
+
+  /// The worker has the items and is now going to the drop-off.
+  final bool headsToDropoff;
 
   /// The job site, or the pickup point for errands.
   final JobCoordinate position;
@@ -1501,13 +1561,108 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
   bool _mapFailed = false;
   int _mapErrorCount = 0;
   int _mapReloadVersion = 0;
+  RoadRoute? _riderLeg;
+  RoadRoute? _errandLeg;
+  final _reroute = RerouteThrottle();
+  JobCoordinate? _legFrom;
+
+  @override
+  void initState() {
+    super.initState();
+    _legFrom = _reroute.update(widget.workerPosition);
+  }
+
+  @override
+  void didUpdateWidget(_JobLocationMapCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _legFrom = _reroute.update(widget.workerPosition);
+    if (oldWidget.headsToDropoff != widget.headsToDropoff) _riderLeg = null;
+  }
+
+  /// Where the worker goes next: the pickup, then the drop-off.
+  JobCoordinate get _nextStop => widget.headsToDropoff
+      ? widget.dropoffPosition ?? widget.position
+      : widget.position;
+
+  Future<void> _openNavigation() async {
+    final app = await showModalBottomSheet<NavigationApp>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.map_outlined),
+              title: const Text('Google Maps'),
+              onTap: () => Navigator.pop(context, NavigationApp.googleMaps),
+            ),
+            ListTile(
+              leading: const Icon(Icons.navigation_outlined),
+              title: const Text('Waze'),
+              onTap: () => Navigator.pop(context, NavigationApp.waze),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (app == null) return;
+    var opened = false;
+    for (final link in navigationLinks(
+      app,
+      _nextStop,
+      android: defaultTargetPlatform == TargetPlatform.android,
+    )) {
+      try {
+        opened = await launchUrl(link, mode: LaunchMode.externalApplication);
+      } catch (_) {
+        // The app is not installed; try the next link.
+      }
+      if (opened) break;
+    }
+    if (!opened && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open a navigation app.')),
+      );
+    }
+  }
+
+  void _setRiderLeg(RoadRoute route) {
+    if (mounted) setState(() => _riderLeg = route);
+  }
+
+  void _setErrandLeg(RoadRoute route) {
+    if (mounted) setState(() => _errandLeg = route);
+  }
+
+  Widget _tripLeg({
+    required IconData icon,
+    required Color color,
+    required String label,
+    required String value,
+  }) => Padding(
+    padding: const EdgeInsets.only(top: 6),
+    child: Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Expanded(child: Text(label)),
+        Text(
+          value,
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
+        ),
+      ],
+    ),
+  );
 
   String get _distanceLabel {
     if (widget.loadingDistance) return 'Finding your distance…';
     final origin = widget.workerPosition;
     if (origin == null) return 'Distance unavailable';
     return formatDistance(
-      distanceMetersBetween(origin, widget.position),
+      distanceMetersBetween(origin, _nextStop),
       approximate: widget.approximate,
     );
   }
@@ -1558,8 +1713,11 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                       ? 'Map showing the approximate service area.'
                       : 'Map showing the exact job location.',
                   child: FlutterMap(
+                    // Refit once the worker's position arrives so their leg
+                    // to the pickup is in view too.
                     key: ValueKey(
-                      '${widget.position.latitude},${widget.position.longitude}',
+                      '${widget.position.latitude},${widget.position.longitude}'
+                      '|${widget.workerPosition != null}',
                     ),
                     options: MapOptions(
                       initialCenter: target,
@@ -1567,6 +1725,7 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                       initialCameraFit: dropoff == null
                           ? null
                           : errandCameraFit([
+                              ?widget.workerPosition,
                               widget.position,
                               dropoff,
                             ], maxZoom: widget.approximate ? 14 : 16),
@@ -1585,8 +1744,13 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                         ...errandMapLayers(
                           pickup: widget.position,
                           dropoff: dropoff,
+                          rider: widget.workerPosition,
                           routeColor: _detailsInk,
                           approximate: widget.approximate,
+                          riderLegFrom: _legFrom,
+                          riderToDropoff: widget.headsToDropoff,
+                          onRoute: _setErrandLeg,
+                          onRiderLeg: _setRiderLeg,
                         )
                       else if (widget.approximate)
                         CircleLayer(
@@ -1674,13 +1838,67 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                   const SizedBox(height: 4),
                   Text(widget.dropoffAddress ?? ''),
                 ],
-                const SizedBox(height: 6),
-                Text(
-                  _distanceLabel,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-                ),
+                if (dropoff != null) ...[
+                  const SizedBox(height: 6),
+                  _tripLeg(
+                    icon: Icons.near_me_outlined,
+                    color: riderLegColor,
+                    label: widget.headsToDropoff
+                        ? 'You to drop-off'
+                        : 'You to pickup',
+                    value: switch (_riderLeg) {
+                      final leg? => formatRouteLeg(
+                        leg.distanceMeters,
+                        leg.durationSeconds,
+                        approximate: widget.approximate,
+                      ),
+                      null => _distanceLabel,
+                    },
+                  ),
+                  // Once the items are picked up, the worker's own leg is
+                  // the rest of the errand.
+                  if (!widget.headsToDropoff)
+                    _tripLeg(
+                      icon: Icons.route_outlined,
+                      color: errandDropoffColor,
+                      label: 'Pickup to drop-off',
+                      value: switch (_errandLeg) {
+                        final leg? => formatRouteLeg(
+                          leg.distanceMeters,
+                          leg.durationSeconds,
+                          approximate: widget.approximate,
+                        ),
+                        // Straight-line distance until (or if never) routed.
+                        null =>
+                          '${widget.approximate ? '~' : ''}'
+                              '${(distanceMetersBetween(widget.position, dropoff) / 1000).toStringAsFixed(1)} km',
+                      },
+                    ),
+                  if (!widget.approximate) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        key: const ValueKey('errand-navigate'),
+                        onPressed: _openNavigation,
+                        icon: const Icon(Icons.navigation_outlined),
+                        label: Text(
+                          widget.headsToDropoff
+                              ? 'Navigate to drop-off'
+                              : 'Navigate to pickup',
+                        ),
+                      ),
+                    ),
+                  ],
+                ] else ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _distanceLabel,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 if (widget.approximate) ...[
                   const SizedBox(height: 6),
                   Text(

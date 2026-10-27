@@ -8,6 +8,9 @@ import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/rider_location.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/services/road_route_service.dart';
+import '../../../../shared/utils/job_location_utils.dart';
+import '../../../../shared/utils/reroute_throttle.dart';
 import '../../../../shared/widgets/errand_map_layers.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 
@@ -37,6 +40,13 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
   int _mapReloadVersion = 0;
   // Rebuilds the "last seen" text while no new position arrives.
   Timer? _clock;
+  final _reroute = RerouteThrottle();
+  RoadRoute? _riderLeg;
+  bool? _legToDropoff;
+
+  void _setRiderLeg(RoadRoute route) {
+    if (mounted) setState(() => _riderLeg = route);
+  }
 
   @override
   void initState() {
@@ -120,6 +130,17 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
       return const SizedBox.shrink();
     }
     final riderPosition = rider?.position;
+    final toDropoff =
+        request.status == ServiceRequestStatus.ongoing &&
+        (request.errandStage?.headsToDropoff ?? false);
+    if (_legToDropoff != toDropoff) {
+      // A new destination makes the previous leg's ETA meaningless.
+      _legToDropoff = toDropoff;
+      _riderLeg = null;
+    }
+    // The leg is only looked up again every ~100 m, not on every update.
+    final legFrom = _reroute.update(riderPosition);
+    final riderLeg = _riderLeg;
     if (_followRider && riderPosition != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
@@ -171,6 +192,9 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
                       dropoff: dropoff,
                       rider: riderPosition,
                       routeColor: theme.colorScheme.onSurface,
+                      riderLegFrom: riderPosition == null ? null : legFrom,
+                      riderToDropoff: toDropoff,
+                      onRiderLeg: _setRiderLeg,
                     ),
                     const SwiftServeMapAttribution(),
                   ],
@@ -214,6 +238,15 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
+                if (riderLeg != null && riderPosition != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '${toDropoff ? 'Arriving at drop-off' : 'Arriving at pickup'}'
+                    ' · ${formatRouteLeg(riderLeg.distanceMeters, riderLeg.durationSeconds)}',
+                    key: const ValueKey('errand-rider-eta'),
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                ],
               ],
             ),
           ),
