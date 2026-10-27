@@ -1,6 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import '../../features/worker/presentation/screens/become_worker_screen.dart';
+import '../models/app_user.dart';
+import '../services/api_service.dart';
 import '../services/client_theme_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_confirmation_dialog.dart';
@@ -12,11 +15,15 @@ class SwiftServeSettingsScreen extends StatelessWidget {
     required this.darkModeTitle,
     required this.darkModeSubtitle,
     required this.darkModeToggleKey,
+    this.profile,
   });
 
   final String darkModeTitle;
   final String darkModeSubtitle;
   final Key darkModeToggleKey;
+
+  /// Enables the client/worker switch; admins never see it.
+  final AppUser? profile;
 
   @override
   Widget build(BuildContext context) {
@@ -106,23 +113,40 @@ class SwiftServeSettingsScreen extends StatelessWidget {
                     side: BorderSide(color: border),
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: ListTile(
-                    key: const ValueKey('settings-log-out'),
-                    contentPadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
-                    leading: _SettingsIcon(
-                      icon: Icons.logout_rounded,
-                      background: iconBackground,
-                      foreground: text,
-                    ),
-                    title: Text(
-                      'Log out',
-                      style: TextStyle(
-                        color: text,
-                        fontWeight: FontWeight.w700,
+                  child: Column(
+                    children: [
+                      if (profile != null &&
+                          profile!.role != UserRole.admin) ...[
+                        _RoleSwitchTile(
+                          profile: profile!,
+                          text: text,
+                          muted: muted,
+                          iconBackground: iconBackground,
+                        ),
+                        Divider(height: 1, color: border),
+                      ],
+                      ListTile(
+                        key: const ValueKey('settings-log-out'),
+                        contentPadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+                        leading: _SettingsIcon(
+                          icon: Icons.logout_rounded,
+                          background: iconBackground,
+                          foreground: text,
+                        ),
+                        title: Text(
+                          'Log out',
+                          style: TextStyle(
+                            color: text,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        trailing: Icon(
+                          Icons.chevron_right_rounded,
+                          color: muted,
+                        ),
+                        onTap: () => _logOut(context),
                       ),
-                    ),
-                    trailing: Icon(Icons.chevron_right_rounded, color: muted),
-                    onTap: () => _logOut(context),
+                    ],
                   ),
                 ),
               ],
@@ -146,6 +170,112 @@ class SwiftServeSettingsScreen extends StatelessWidget {
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
+}
+
+class _RoleSwitchTile extends StatefulWidget {
+  const _RoleSwitchTile({
+    required this.profile,
+    required this.text,
+    required this.muted,
+    required this.iconBackground,
+  });
+
+  final AppUser profile;
+  final Color text;
+  final Color muted;
+  final Color iconBackground;
+
+  @override
+  State<_RoleSwitchTile> createState() => _RoleSwitchTileState();
+}
+
+class _RoleSwitchTileState extends State<_RoleSwitchTile> {
+  var _busy = false;
+
+  UserRole get _target => widget.profile.otherRole;
+  bool get _owned => widget.profile.hasRole(_target);
+  bool get _toWorker => _target == UserRole.worker;
+
+  String get _title => _owned
+      ? (_toWorker ? 'Switch to Worker' : 'Switch to Client')
+      : (_toWorker ? 'Become a Worker' : 'Also hire as a Client');
+
+  String get _subtitle => _toWorker
+      ? 'Find jobs and earn with the same account'
+      : 'Post requests and hire workers with the same account';
+
+  Future<void> _onTap() async {
+    if (!_owned && _toWorker) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const BecomeWorkerScreen()),
+      );
+      return;
+    }
+    final label = _toWorker ? 'worker' : 'client';
+    final confirmed = await showActionConfirmation(
+      context,
+      title: _owned ? 'Switch to $label mode?' : 'Add a client account?',
+      message: _owned
+          ? 'You can switch back any time from Settings.'
+          : 'Your worker profile stays as it is. You can switch back any time from Settings.',
+      confirmLabel: _owned ? 'Switch' : 'Add and switch',
+      icon: Icons.swap_horiz_rounded,
+      confirmButtonKey: const ValueKey('settings-role-confirm'),
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) throw StateError('Your session has expired.');
+      final token = (await user.getIdToken())!;
+      final api = ApiService();
+      if (!_owned) await api.addRole(idToken: token, role: label);
+      await api.switchRole(idToken: token, role: label);
+      if (!mounted) return;
+      // AuthGate is streaming the profile and swaps in the other home.
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            error is ApiException ? error.message : error.toString(),
+          ),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => ListTile(
+    key: const ValueKey('settings-switch-role'),
+    contentPadding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
+    leading: _SettingsIcon(
+      icon: _toWorker ? Icons.handyman_rounded : Icons.person_search_rounded,
+      background: widget.iconBackground,
+      foreground: widget.text,
+    ),
+    title: Text(
+      _title,
+      style: TextStyle(color: widget.text, fontWeight: FontWeight.w700),
+    ),
+    subtitle: Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Text(
+        _subtitle,
+        style: TextStyle(color: widget.muted, height: 1.25),
+      ),
+    ),
+    trailing: _busy
+        ? const SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+        : Icon(Icons.chevron_right_rounded, color: widget.muted),
+    onTap: _busy ? null : _onTap,
+  );
 }
 
 class _SectionLabel extends StatelessWidget {

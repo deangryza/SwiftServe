@@ -6,6 +6,31 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../widgets/phone_number_field.dart';
 
+const fallbackServiceCategories = ['Electrical', 'Repair', 'Tutoring', 'Other'];
+
+/// Active admin-managed categories, or [fallbackServiceCategories] offline.
+Stream<List<String>> activeServiceCategories() async* {
+  try {
+    await for (final snapshot
+        in FirebaseFirestore.instance
+            .collection('service_categories')
+            .where('status', isEqualTo: 'active')
+            .snapshots()) {
+      final names =
+          snapshot.docs
+              .map((document) => document.data()['name']?.toString().trim())
+              .whereType<String>()
+              .where((name) => name.isNotEmpty)
+              .toSet()
+              .toList()
+            ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      yield names.isEmpty ? fallbackServiceCategories : names;
+    }
+  } catch (_) {
+    yield fallbackServiceCategories;
+  }
+}
+
 class WorkerAccountForm extends StatefulWidget {
   const WorkerAccountForm({
     super.key,
@@ -56,13 +81,6 @@ class WorkerAccountForm extends StatefulWidget {
 
 class _WorkerAccountFormState extends State<WorkerAccountForm> {
   static const _yellow = AppTheme.yellow;
-  static const _fallbackCategories = [
-    'Electrical',
-    'Repair',
-    'Tutoring',
-    'Other',
-  ];
-
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
@@ -136,28 +154,6 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       widget.onRegister();
     } else {
       _goTo(_page + 1);
-    }
-  }
-
-  Stream<List<String>> _categories() async* {
-    try {
-      await for (final snapshot
-          in FirebaseFirestore.instance
-              .collection('service_categories')
-              .where('status', isEqualTo: 'active')
-              .snapshots()) {
-        final names =
-            snapshot.docs
-                .map((document) => document.data()['name']?.toString().trim())
-                .whereType<String>()
-                .where((name) => name.isNotEmpty)
-                .toSet()
-                .toList()
-              ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-        yield names.isEmpty ? _fallbackCategories : names;
-      }
-    } catch (_) {
-      yield _fallbackCategories;
     }
   }
 
@@ -516,10 +512,10 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       ),
       const SizedBox(height: 18),
       StreamBuilder<List<String>>(
-        stream: _categories(),
-        initialData: _fallbackCategories,
+        stream: activeServiceCategories(),
+        initialData: fallbackServiceCategories,
         builder: (context, snapshot) {
-          final categories = snapshot.data ?? _fallbackCategories;
+          final categories = snapshot.data ?? fallbackServiceCategories;
           return GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),

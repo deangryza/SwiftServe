@@ -229,3 +229,29 @@ test('users cannot edit someone else\'s profile', async () => {
     updateDoc(doc(db, 'users/worker-1'), { address: 'Hacked' }),
   );
 });
+
+test('users cannot grant themselves roles or switch modes directly', async () => {
+  const client = environment.authenticatedContext('client-1').firestore();
+  await assertFails(
+    updateDoc(doc(client, 'users/client-1'), { roles: ['client', 'worker'] }),
+  );
+  await assertFails(
+    updateDoc(doc(client, 'public_profiles/client-1'), {
+      roles: ['client', 'worker'],
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  await assertFails(
+    updateDoc(doc(client, 'public_profiles/client-1'), {
+      role: 'worker',
+      updatedAt: serverTimestamp(),
+    }),
+  );
+  // A client cannot open a worker profile without the backend.
+  await assertFails(
+    setDoc(doc(client, 'worker_profiles/client-1'), {
+      workerId: 'client-1',
+      verificationStatus: 'verified',
+    }),
+  );
+});

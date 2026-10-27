@@ -9,12 +9,22 @@ import 'reviews_screen.dart';
 
 enum PublicProfileRole { client, worker }
 
+/// Whether a public profile offers [role]; dual-role accounts list both in
+/// `roles`, older profiles only have `role`.
+bool profileHasRole(Map<String, dynamic> profile, String role) {
+  final roles = profile['roles'];
+  if (roles is Iterable && roles.isNotEmpty) {
+    return roles.map((item) => item.toString()).contains(role);
+  }
+  return (profile['role'] ?? '').toString() == role;
+}
+
 bool publicProfileMatchesQuery(
   Map<String, dynamic> profile,
   String query, {
   PublicProfileRole? role,
 }) {
-  if (role != null && (profile['role'] ?? '').toString() != role.name) {
+  if (role != null && !profileHasRole(profile, role.name)) {
     return false;
   }
   final normalized = query.trim().toLowerCase();

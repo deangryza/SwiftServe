@@ -7,10 +7,12 @@ const { createCanvas } = require('canvas');
 const records = {};
 const phoneClaims = {};
 const publicProfiles = {};
+const workerProfiles = {};
 const collections = {
   users: records,
   phone_number_claims: phoneClaims,
   public_profiles: publicProfiles,
+  worker_profiles: workerProfiles,
 };
 const db = {
   collection: name => ({
@@ -44,12 +46,12 @@ const db = {
         const value = (collections[ref.name] || {})[ref.id];
         return { exists: value !== undefined, data: () => value };
       },
-      set: (ref, data) => pending.push([ref, data]),
+      set: (ref, data, options) => pending.push([ref, data, options]),
     };
     const result = await callback(transaction);
-    pending.forEach(([ref, data]) => {
+    pending.forEach(([ref, data, options]) => {
       const target = collections[ref.name] || (collections[ref.name] = {});
-      target[ref.id] = data;
+      target[ref.id] = options?.merge ? { ...target[ref.id], ...data } : data;
     });
     return result;
   },
@@ -160,4 +162,74 @@ test('profile creation rejects missing or invalid phone numbers', async () => {
     assert.equal(response.status, 400);
     assert.equal(response.body.code, 'INVALID_PHONE_NUMBER');
   }
+});
+
+test('registration records the starting role in roles', async () => {
+  await request(app).post('/api/users/profile').set('Authorization', 'Bearer starter')
+    .send({ fullName: 'Starter', email: 'starter@example.com', phoneNumber: '+639174444444', role: 'client' }).expect(201);
+  assert.deepEqual(records.starter.roles, ['client']);
+  assert.deepEqual(publicProfiles.starter.roles, ['client']);
+});
+
+test('a client can add the worker role without losing profile data', async () => {
+  records.dual = {
+    fullName: 'Dual User', role: 'client', phoneNumber: '+639175555555',
+    address: 'Cebu', photoBase64: 'photo', verificationStatus: 'not_required',
+  };
+  publicProfiles.dual = { fullName: 'Dual User', role: 'client', photoBase64: 'photo' };
+
+  await request(app).post('/api/users/roles').send({ role: 'worker', category: 'Plumbing' }).expect(401);
+  await request(app).post('/api/users/roles').set('Authorization', 'Bearer dual')
+    .send({ role: 'worker' }).expect(400);
+  await request(app).post('/api/users/roles').set('Authorization', 'Bearer dual')
+    .send({ role: 'worker', category: 'Plumbing' }).expect(200);
+
+  assert.equal(records.dual.role, 'client');
+  assert.deepEqual(records.dual.roles, ['client', 'worker']);
+  assert.equal(records.dual.phoneNumber, '+639175555555');
+  assert.equal(records.dual.photoBase64, 'photo');
+  assert.equal(records.dual.verificationStatus, 'pending');
+  assert.deepEqual(records.dual.skills, ['Plumbing']);
+  assert.equal(publicProfiles.dual.photoBase64, 'photo');
+  assert.deepEqual(publicProfiles.dual.roles, ['client', 'worker']);
+  assert.equal(workerProfiles.dual.category, 'Plumbing');
+  assert.equal(workerProfiles.dual.verificationStatus, 'pending');
+
+  const again = await request(app).post('/api/users/roles').set('Authorization', 'Bearer dual')
+    .send({ role: 'worker', category: 'Plumbing' });
+  assert.equal(again.status, 409);
+  assert.equal(again.body.code, 'ROLE_ALREADY_ADDED');
+});
+
+test('adding a role keeps an existing worker verification', async () => {
+  records.verifiedworker = { fullName: 'Vera', role: 'worker', verificationStatus: 'verified' };
+  await request(app).post('/api/users/roles').set('Authorization', 'Bearer verifiedworker')
+    .send({ role: 'client' }).expect(200);
+  assert.deepEqual(records.verifiedworker.roles, ['worker', 'client']);
+  assert.equal(records.verifiedworker.verificationStatus, 'verified');
+});
+
+test('switching is limited to roles the account owns', async () => {
+  records.switcher = { fullName: 'Switcher', role: 'client', roles: ['client', 'worker'] };
+  records.single = { fullName: 'Single', role: 'client' };
+
+  const denied = await request(app).post('/api/users/role').set('Authorization', 'Bearer single')
+    .send({ role: 'worker' });
+  assert.equal(denied.status, 403);
+  assert.equal(denied.body.code, 'ROLE_NOT_ADDED');
+  assert.equal(records.single.role, 'client');
+
+  await request(app).post('/api/users/role').set('Authorization', 'Bearer switcher')
+    .send({ role: 'admin' }).expect(400);
+  await request(app).post('/api/users/role').set('Authorization', 'Bearer switcher')
+    .send({ role: 'worker' }).expect(200);
+  assert.equal(records.switcher.role, 'worker');
+  assert.equal(publicProfiles.switcher.role, 'worker');
+  assert.deepEqual(publicProfiles.switcher.roles, ['client', 'worker']);
+
+  await request(app).post('/api/users/role').set('Authorization', 'Bearer switcher')
+    .send({ role: 'client' }).expect(200);
+  assert.equal(records.switcher.role, 'client');
+  await request(app).post('/api/users/role').set('Authorization', 'Bearer nobody')
+    .send({ role: 'client' }).expect(404);
 });

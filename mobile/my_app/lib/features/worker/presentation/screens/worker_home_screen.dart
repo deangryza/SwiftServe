@@ -1685,7 +1685,7 @@ class _WorkerProfileView extends StatelessWidget {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => const _WorkerSettingsScreen(),
+                      builder: (_) => _WorkerSettingsScreen(profile: worker),
                     ),
                   ),
                 ),
@@ -1866,13 +1866,16 @@ BoxDecoration _workerProfileCardDecoration(Color surface) => BoxDecoration(
 );
 
 class _WorkerSettingsScreen extends StatelessWidget {
-  const _WorkerSettingsScreen();
+  const _WorkerSettingsScreen({required this.profile});
+
+  final AppUser profile;
 
   @override
-  Widget build(BuildContext context) => const SwiftServeSettingsScreen(
+  Widget build(BuildContext context) => SwiftServeSettingsScreen(
     darkModeTitle: 'Dark mode',
     darkModeSubtitle: 'Use the dark theme across worker screens',
-    darkModeToggleKey: ValueKey('worker-dark-mode-toggle'),
+    darkModeToggleKey: const ValueKey('worker-dark-mode-toggle'),
+    profile: profile,
   );
 }
 
