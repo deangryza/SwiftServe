@@ -240,10 +240,22 @@ class _DropoffMarker extends StatelessWidget {
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         shape: BoxShape.circle,
-        border: Border.all(color: errandDropoffColor, width: 3),
-        boxShadow: const [BoxShadow(color: Color(0x44000000), blurRadius: 4)],
+        border: Border.all(
+          color: errandDropoffColor,
+          width: 3,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x44000000),
+            blurRadius: 4,
+          ),
+        ],
       ),
-      child: const Icon(Icons.flag, color: errandDropoffColor, size: 22),
+      child: const Icon(
+        Icons.flag,
+        color: errandDropoffColor,
+        size: 22,
+      ),
     ),
   );
 }

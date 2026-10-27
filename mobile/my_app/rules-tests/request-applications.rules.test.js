@@ -13,6 +13,7 @@ const {
   setDoc,
   updateDoc,
   writeBatch,
+  runTransaction,
   Timestamp,
   GeoPoint,
 } = require('firebase/firestore');
@@ -102,6 +103,74 @@ test('only a verified worker can create their own pending application', async ()
       },
     ),
   );
+});
+
+test('worker can read their missing application before applying', async () => {
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  const missing = await assertSucceeds(
+    getDoc(doc(worker, 'service_requests/request-1/applications/worker-1')),
+  );
+  if (missing.exists()) throw new Error('Expected no existing application.');
+});
+
+async function applyWithNotification(worker, workerId) {
+  const requestRef = doc(worker, 'service_requests/request-1');
+  const applicationRef = doc(
+    worker, `service_requests/request-1/applications/${workerId}`,
+  );
+  await runTransaction(worker, async (transaction) => {
+    const request = await transaction.get(requestRef);
+    const existing = await transaction.get(applicationRef);
+    if (request.data().status !== 'pending' || existing.exists()) {
+      throw new Error('Request is not available for a new application.');
+    }
+    transaction.set(applicationRef, {
+      requestId: 'request-1',
+      clientId: request.data().clientId,
+      workerId,
+      workerName: 'Verified Worker',
+      status: 'pending',
+      appliedAt: serverTimestamp(),
+    });
+    transaction.set(doc(worker, 'notifications/application-notification'), {
+      recipientId: request.data().clientId,
+      senderId: workerId,
+      requestId: 'request-1',
+      type: 'workerApplication',
+      title: 'New worker application',
+      body: 'Verified Worker applied for Repair a kitchen sink.',
+      read: false,
+      createdAt: serverTimestamp(),
+    });
+  });
+}
+
+test('verified worker applies with the client notification in one transaction', async () => {
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  await assertSucceeds(applyWithNotification(worker, 'worker-1'));
+  const client = environment.authenticatedContext('client-1').firestore();
+  await assertSucceeds(getDoc(doc(client, 'notifications/application-notification')));
+  const application = await getDoc(
+    doc(worker, 'service_requests/request-1/applications/worker-1'),
+  );
+  if (application.data().status !== 'pending') {
+    throw new Error('Application was not saved.');
+  }
+});
+
+test('unverified server profile cannot apply even with a verified auth claim', async () => {
+  const worker = environment.authenticatedContext('worker-2', {
+    verificationStatus: 'verified',
+  }).firestore();
+  await assertFails(applyWithNotification(worker, 'worker-2'));
+  await environment.withSecurityRulesDisabled(async (context) => {
+    const notification = await getDoc(
+      doc(context.firestore(), 'notifications/application-notification'),
+    );
+    if (notification.exists()) {
+      throw new Error('A rejected transaction must not save its notification.');
+    }
+  });
 });
 
 test('worker cannot assign the request to themselves', async () => {

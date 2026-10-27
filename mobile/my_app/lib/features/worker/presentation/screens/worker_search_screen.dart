@@ -47,6 +47,7 @@ bool matchesWorkerSearchRequest(ServiceRequest request, String query) {
     request.clientName,
     request.description,
     request.location,
+    request.modality.label,
   ].any((value) => value.toLowerCase().contains(normalized));
 }
 

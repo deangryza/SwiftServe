@@ -284,7 +284,7 @@ class ErrandStageTimeline extends StatelessWidget {
                   i < done ? Icons.check_circle : Icons.radio_button_unchecked,
                   size: 20,
                   color: i < done
-                      ? const Color(0xFF2E7D32)
+                      ? theme.colorScheme.onSurface
                       : theme.colorScheme.outline,
                 ),
                 const SizedBox(height: 4),

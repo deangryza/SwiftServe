@@ -40,8 +40,11 @@ OpenStreetMap tile service is intended for normal interactive viewing only;
 do not add bulk downloading or offline prefetching without changing to a tile
 provider that explicitly permits it.
 
-The app requests location only while it is open. It does not persist worker
-coordinates or request background location access.
+The app requests location only while it is open and does not request background
+location access. During an ongoing errand, it stores the rider's latest
+coordinates in Firestore at
+`service_requests/{requestId}/private/rider_location`. That document is readable
+only by the request's client and assigned rider under the Firestore rules.
 
 Google sign-in uses Firebase Authentication. Existing profiles retain their client/worker routing; new Google users complete a profile through the existing backend API.
 

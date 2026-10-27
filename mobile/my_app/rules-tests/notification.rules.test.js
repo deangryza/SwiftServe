@@ -51,6 +51,26 @@ test('notification sender cannot delete the recipient notification', async () =>
   await assertFails(deleteDoc(doc(database, 'notifications/notification-1')));
 });
 
+test('worker recipient can delete their own notification without being verified', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users/worker-1'), {
+      role: 'worker',
+      verificationStatus: 'pending',
+    });
+    await setDoc(doc(context.firestore(), 'notifications/worker-notification'), {
+      recipientId: 'worker-1',
+      senderId: 'client-1',
+      requestId: 'request-1',
+      title: 'Booking update',
+      body: 'Your booking has changed.',
+      read: false,
+      createdAt: new Date('2026-10-22T00:00:00Z'),
+    });
+  });
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  await assertSucceeds(deleteDoc(doc(worker, 'notifications/worker-notification')));
+});
+
 test('unrelated user cannot delete another user notification', async () => {
   const database = environment.authenticatedContext('other-user').firestore();
   await assertFails(deleteDoc(doc(database, 'notifications/notification-1')));

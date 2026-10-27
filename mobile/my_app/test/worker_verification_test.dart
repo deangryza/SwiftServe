@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/worker/presentation/models/worker_verification_ui_state.dart';
 import 'package:my_app/features/worker/presentation/screens/worker_verification_screen.dart';
@@ -60,6 +61,17 @@ void main() {
   testWidgets('unverified worker is prompted to verify on a pending job', (
     tester,
   ) async {
+    const locationChannel = MethodChannel('flutter.baseflow.com/geolocator');
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          locationChannel,
+          (call) async =>
+              call.method == 'isLocationServiceEnabled' ? false : null,
+        );
+    addTearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(locationChannel, null);
+    });
     await tester.pumpWidget(
       MaterialApp(
         home: WorkerJobDetailsScreen(
@@ -75,6 +87,8 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await tester.scrollUntilVisible(find.text('Verify to apply'), 150);
+    await tester.pumpAndSettle();
     expect(find.text('Verify to apply'), findsOneWidget);
     expect(find.text('Apply for this request'), findsNothing);
   });

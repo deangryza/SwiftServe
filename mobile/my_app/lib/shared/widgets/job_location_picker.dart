@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
@@ -43,6 +45,7 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   static const _philippinesCenter = LatLng(12.8797, 121.7740);
 
   final _addressController = TextEditingController();
+  final _searchController = TextEditingController();
   final _mapController = MapController();
   late final JobAddressResolver _geocodingService;
   JobCoordinate? _position;
@@ -50,6 +53,9 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   String? _statusMessage;
   DeviceLocationFailure? _failure;
   bool _loading = false;
+  bool _locating = false;
+  bool _searchUnresolved = false;
+  Timer? _searchDebounce;
   bool _mapReady = false;
   bool _mapFailed = false;
   int _mapErrorCount = 0;
@@ -73,6 +79,8 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
+    _searchController.dispose();
     _addressController
       ..removeListener(_notifySelection)
       ..dispose();
@@ -83,7 +91,7 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   void _notifySelection() {
     final position = _position;
     final address = _addressController.text.trim();
-    if (position == null) {
+    if (position == null || _searchUnresolved || address.isEmpty) {
       widget.onChanged(null);
       return;
     }
@@ -96,20 +104,83 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
     );
   }
 
-  Future<void> _useCurrentLocation() async {
+  int _beginLookup() {
+    _searchDebounce?.cancel();
+    _pendingCameraPosition = null;
+    return ++_lookupVersion;
+  }
+
+  void _searchChanged(String text) {
+    final version = _beginLookup();
+    final query = text.trim();
+    setState(() {
+      _searchUnresolved = true;
+      _loading = false;
+      _locating = false;
+      _failure = null;
+      _statusMessage = query.length < 3
+          ? 'Enter at least 3 characters, or choose a point on the map.'
+          : 'Pause typing to find this location.';
+    });
+    _notifySelection();
+    if (query.length < 3) return;
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 650),
+      () => _searchAddress(query, version),
+    );
+  }
+
+  Future<void> _searchAddress(String query, int version) async {
     setState(() {
       _loading = true;
+      _statusMessage = 'Finding this location…';
+    });
+    try {
+      final selection = await _geocodingService
+          .search(query)
+          .timeout(const Duration(seconds: 15));
+      if (!mounted || version != _lookupVersion) return;
+      setState(() {
+        _position = selection.position;
+        _areaLabel = selection.areaLabel;
+        _searchUnresolved = false;
+        _loading = false;
+        _searchController.text = selection.exactAddress;
+        _addressController.text = selection.exactAddress;
+        _statusMessage = 'Location found. Check the pin before posting.';
+      });
+      _showPosition(selection.position);
+      _notifySelection();
+    } catch (_) {
+      if (!mounted || version != _lookupVersion) return;
+      setState(() {
+        _loading = false;
+        _statusMessage =
+            'Could not find this location. Add a city or nearby landmark, '
+            'check your connection, or choose a point on the map.';
+      });
+      // Keep the last marker, but never associate unresolved text with it.
+      _notifySelection();
+    }
+  }
+
+  Future<void> _useCurrentLocation() async {
+    final version = _beginLookup();
+    setState(() {
+      _loading = true;
+      _locating = true;
       _failure = null;
       _statusMessage = 'Finding your location…';
     });
     try {
       final position = await widget.locationService.currentPosition();
-      if (!mounted) return;
+      if (!mounted || version != _lookupVersion) return;
       await _selectPosition(position, moveCamera: true);
     } on DeviceLocationException catch (error) {
-      if (!mounted) return;
+      if (!mounted || version != _lookupVersion) return;
       setState(() {
         _loading = false;
+        _locating = false;
         _failure = error.failure;
         _statusMessage = error.userMessage;
       });
@@ -120,31 +191,33 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
     JobCoordinate position, {
     bool moveCamera = false,
   }) async {
-    final version = ++_lookupVersion;
+    final version = _beginLookup();
+    _searchUnresolved = false;
     _areaLabel = 'Pinned service area';
+    _searchController.clear();
     _addressController.clear();
     setState(() {
       _position = position;
       _loading = true;
+      _locating = false;
       _failure = null;
       _statusMessage = 'Looking up the pinned address…';
     });
     _notifySelection();
     if (moveCamera) {
-      if (_mapReady) {
-        _moveMapTo(position);
-      } else {
-        _pendingCameraPosition = position;
-      }
+      _showPosition(position);
     }
 
     try {
-      final address = await _geocodingService.resolve(position);
+      final address = await _geocodingService
+          .resolve(position)
+          .timeout(const Duration(seconds: 10));
       if (!mounted || version != _lookupVersion) return;
       _areaLabel = address.areaLabel.isEmpty
           ? 'Pinned service area'
           : address.areaLabel;
       _addressController.text = address.exactAddress;
+      _searchController.text = address.exactAddress;
       setState(() {
         _loading = false;
         _statusMessage = address.exactAddress.isEmpty
@@ -161,6 +234,14 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
             'Address lookup failed. Keep the pin and enter the address manually.';
       });
       _notifySelection();
+    }
+  }
+
+  void _showPosition(JobCoordinate position) {
+    if (_mapReady) {
+      _moveMapTo(position);
+    } else {
+      _pendingCameraPosition = position;
     }
   }
 
@@ -205,6 +286,30 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        TextField(
+          key: const ValueKey('job-location-search'),
+          controller: _searchController,
+          onChanged: _searchChanged,
+          textInputAction: TextInputAction.done,
+          minLines: 1,
+          maxLines: 2,
+          decoration: InputDecoration(
+            labelText: 'Find a location',
+            hintText: 'Address, street, landmark or place',
+            prefixIcon: const Icon(Icons.search),
+            suffixIcon: _loading && !_locating
+                ? const Padding(
+                    padding: EdgeInsets.all(14),
+                    child: SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        const SizedBox(height: 10),
         if (widget.mapBuilder != null)
           widget.mapBuilder!(context, _position, _selectPosition)
         else
@@ -283,19 +388,20 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
           width: double.infinity,
           height: 48,
           child: OutlinedButton.icon(
-            onPressed: _loading ? null : _useCurrentLocation,
-            icon: _loading
+            onPressed: _locating ? null : _useCurrentLocation,
+            icon: _locating
                 ? const SizedBox(
                     width: 18,
                     height: 18,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.my_location_outlined),
-            label: Text(_loading ? 'Locating…' : 'Use my current location'),
+            label: Text(_locating ? 'Locating…' : 'Use my current location'),
           ),
         ),
         const SizedBox(height: 10),
         TextField(
+          key: const ValueKey('job-location-exact-address'),
           controller: _addressController,
           enabled: _position != null,
           minLines: 1,
