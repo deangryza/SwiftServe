@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../widgets/phone_number_field.dart';
+import '../widgets/registration_address_fields.dart';
 
 class WorkerAccountForm extends StatefulWidget {
   const WorkerAccountForm({
@@ -454,7 +455,15 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         borderColor: _border,
         focusColor: _yellow,
       ),
-      _input('Address / Location', '123 Street, Tech City', widget.address),
+      RegistrationAddressFields(
+        address: widget.address,
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted,
+        borderColor: _border,
+        focusColor: _yellow,
+      ),
       if (!widget.federatedAccount) ...[
         _input(
           'Password',

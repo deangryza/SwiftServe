@@ -10,6 +10,7 @@ import '../../../../shared/services/profile_photo_picker.dart';
 import '../../../../shared/widgets/client_rating_summary.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/screens/reviews_screen.dart';
+import '../../../auth/presentation/widgets/registration_address_fields.dart';
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_sections.dart' show ClientMessagesScreen;
@@ -327,6 +328,7 @@ class ClientEditProfileScreen extends StatefulWidget {
 }
 
 class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
+  final _addressFormKey = GlobalKey<FormState>();
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
@@ -411,6 +413,11 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
   }
 
   Future<void> _save() async {
+    if (_saving) return;
+    final addressChanged =
+        _addressController.text.trim() !=
+        (widget.initialData['address'] ?? '').toString().trim();
+    if (addressChanged && !_addressFormKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
     final name = _nameController.text.trim();
     if (user == null || name.isEmpty || _saving) return;
@@ -434,7 +441,7 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
           'fullName': name,
           'role': role,
           'photoBase64': _photoBase64,
-          'location': _addressController.text.trim(),
+          // Address belongs in users/{uid}; public location edits are denied.
           'updatedAt': timestamp,
         },
         SetOptions(merge: true),
@@ -565,13 +572,19 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 14),
-                      _EditField(
-                        controller: _addressController,
-                        label: 'Address',
-                        icon: Icons.location_on_outlined,
-                        text: text,
-                        muted: muted,
-                        maxLines: 2,
+                      Form(
+                        key: _addressFormKey,
+                        child: RegistrationAddressFields(
+                          address: _addressController,
+                          enabled: !_saving,
+                          fieldColor: surface,
+                          textColor: text,
+                          mutedColor: muted,
+                          borderColor: dark
+                              ? const Color(0xFF777777)
+                              : AppTheme.line,
+                          focusColor: _profileYellow,
+                        ),
                       ),
                     ],
                   ),
@@ -780,7 +793,6 @@ class _EditField extends StatelessWidget {
     required this.muted,
     this.readOnly = false,
     this.keyboardType,
-    this.maxLines = 1,
   });
 
   final TextEditingController controller;
@@ -790,14 +802,12 @@ class _EditField extends StatelessWidget {
   final Color muted;
   final bool readOnly;
   final TextInputType? keyboardType;
-  final int maxLines;
 
   @override
   Widget build(BuildContext context) => TextField(
     controller: controller,
     readOnly: readOnly,
     keyboardType: keyboardType,
-    maxLines: maxLines,
     style: TextStyle(color: text),
     decoration: InputDecoration(
       labelText: label,

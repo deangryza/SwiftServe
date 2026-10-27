@@ -3,8 +3,111 @@ import 'package:my_app/features/worker/presentation/screens/worker_home_screen.d
 import 'package:my_app/features/worker/presentation/screens/worker_search_screen.dart';
 import 'package:my_app/shared/models/service_application.dart';
 import 'package:my_app/shared/models/service_request.dart';
+import 'package:my_app/shared/models/job_location.dart';
 
 void main() {
+  const home = JobCoordinate(latitude: 14.84, longitude: 120.81);
+  List<ServiceRequest> nearby(
+    Iterable<ServiceRequest> jobs, {
+    JobCoordinate? origin = home,
+    Iterable<ServiceApplication> applications = const [],
+  }) => filterWorkerDashboardRequests(
+    requests: jobs,
+    applications: applications,
+    filter: WorkerDashboardRequestFilter.nearby,
+    workerAddressPosition: origin,
+  );
+
+  test('nearby uses saved address radius and sorts nearest first', () {
+    final jobs = [
+      _request('far', DateTime(2026), latitude: 15.84),
+      _request('middle', DateTime(2026), latitude: 14.89),
+      _request('nearest', DateTime(2025), latitude: 14.841),
+      _request('outside-radius', DateTime(2026), latitude: 14.94),
+    ];
+    expect(nearby(jobs).map((job) => job.id), ['nearest', 'middle']);
+    // A different saved address changes which jobs qualify.
+    expect(
+      nearby(
+        jobs,
+        origin: const JobCoordinate(latitude: 15.84, longitude: 120.81),
+      ).map((job) => job.id),
+      ['far'],
+    );
+  });
+
+  test(
+    'nearby excludes online and unlocated jobs, includes hybrid and errands',
+    () {
+      final jobs = [
+        _request('no-pin', DateTime(2026)),
+        _request(
+          'online',
+          DateTime(2026),
+          latitude: 14.84,
+          modality: JobModality.online,
+        ),
+        _request(
+          'hybrid',
+          DateTime(2026),
+          latitude: 14.841,
+          modality: JobModality.hybrid,
+        ),
+        _request(
+          'errand-pickup',
+          DateTime(2026),
+          latitude: 14.842,
+          modality: JobModality.errand,
+        ),
+      ];
+      expect(nearby(jobs).map((job) => job.id), ['hybrid', 'errand-pickup']);
+    },
+  );
+
+  test('nearby never falls back to all jobs without a resolved address', () {
+    expect(
+      nearby([_request('near', DateTime(2026), latitude: 14.84)], origin: null),
+      isEmpty,
+    );
+  });
+
+  test('nearby keeps pending unapplied jobs only', () {
+    final jobs = [
+      _request('applied', DateTime(2026), latitude: 14.84),
+      _request(
+        'accepted',
+        DateTime(2026),
+        latitude: 14.84,
+        status: ServiceRequestStatus.accepted,
+      ),
+      _request('open', DateTime(2026), latitude: 14.84),
+    ];
+    expect(
+      nearby(
+        jobs,
+        applications: const [
+          ServiceApplication(
+            workerId: 'worker',
+            workerName: 'Worker',
+            requestId: 'applied',
+            clientId: 'client-1',
+            status: ServiceApplicationStatus.pending,
+          ),
+        ],
+      ).map((job) => job.id),
+      ['open'],
+    );
+  });
+
+  test('nearby keeps newest first for jobs at the same distance', () {
+    expect(
+      nearby([
+        _request('older', DateTime(2025), latitude: 14.84),
+        _request('newer', DateTime(2026), latitude: 14.84),
+      ]).map((job) => job.id),
+      ['newer', 'older'],
+    );
+  });
   test('applied requests are removed and recent requests are newest first', () {
     final requests = List.generate(
       7,
@@ -99,6 +202,8 @@ ServiceRequest _request(
   DateTime createdAt, {
   ServiceRequestStatus status = ServiceRequestStatus.pending,
   String title = 'Math tutoring',
+  double? latitude,
+  JobModality modality = JobModality.onsite,
 }) => ServiceRequest(
   id: id,
   clientId: 'client-1',
@@ -110,4 +215,7 @@ ServiceRequest _request(
   budget: 500,
   status: status,
   createdAt: createdAt,
+  modality: modality,
+  areaLatitude: latitude,
+  areaLongitude: latitude == null ? null : 120.81,
 );

@@ -1,0 +1,4002 @@
+diff --git a/.vscode/launch.json b/.vscode/launch.json
+index 7c81f3a..ec07412 100644
+--- a/.vscode/launch.json
++++ b/.vscode/launch.json
+@@ -6,18 +6,7 @@
+       "request": "launch",
+       "type": "dart",
+       "cwd": "${workspaceFolder}/mobile/my_app",
+-      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart",
+-      "preLaunchTask": "SwiftServe: forward USB API",
+-      "toolArgs": ["--dart-define=API_BASE_URL=http://127.0.0.1:5000"]
+-    },
+-    {
+-      "name": "SwiftServe Mobile (USB phone)",
+-      "request": "launch",
+-      "type": "dart",
+-      "cwd": "${workspaceFolder}/mobile/my_app",
+-      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart",
+-      "preLaunchTask": "SwiftServe: forward USB API",
+-      "toolArgs": ["--dart-define=API_BASE_URL=http://127.0.0.1:5000"]
++      "program": "${workspaceFolder}/mobile/my_app/lib/main.dart"
+     }
+   ]
+ }
+diff --git a/.vscode/tasks.json b/.vscode/tasks.json
+deleted file mode 100644
+index 23d2ff1..0000000
+--- a/.vscode/tasks.json
++++ /dev/null
+@@ -1,12 +0,0 @@
+-{
+-  "version": "2.0.0",
+-  "tasks": [
+-    {
+-      "label": "SwiftServe: forward USB API",
+-      "type": "process",
+-      "command": "${env:LOCALAPPDATA}/Android/sdk/platform-tools/adb.exe",
+-      "args": ["reverse", "tcp:5000", "tcp:5000"],
+-      "problemMatcher": []
+-    }
+-  ]
+-}
+diff --git a/mobile/my_app/.metadata b/mobile/my_app/.metadata
+index 54737a7..00b74be 100644
+--- a/mobile/my_app/.metadata
++++ b/mobile/my_app/.metadata
+@@ -4,7 +4,7 @@
+ # This file should be version controlled and should not be manually edited.
+ 
+ version:
+-  revision: "19074d12f7eaf6a8180cd4036a430c1d76de904e"
++  revision: "3b62efc2a3da49882f43c372e0bc53daef7295a6"
+   channel: "stable"
+ 
+ project_type: app
+@@ -13,14 +13,11 @@ project_type: app
+ migration:
+   platforms:
+     - platform: root
+-      create_revision: 19074d12f7eaf6a8180cd4036a430c1d76de904e
+-      base_revision: 19074d12f7eaf6a8180cd4036a430c1d76de904e
++      create_revision: 3b62efc2a3da49882f43c372e0bc53daef7295a6
++      base_revision: 3b62efc2a3da49882f43c372e0bc53daef7295a6
+     - platform: android
+-      create_revision: 19074d12f7eaf6a8180cd4036a430c1d76de904e
+-      base_revision: 19074d12f7eaf6a8180cd4036a430c1d76de904e
+-    - platform: ios
+-      create_revision: 19074d12f7eaf6a8180cd4036a430c1d76de904e
+-      base_revision: 19074d12f7eaf6a8180cd4036a430c1d76de904e
++      create_revision: 3b62efc2a3da49882f43c372e0bc53daef7295a6
++      base_revision: 3b62efc2a3da49882f43c372e0bc53daef7295a6
+ 
+   # User provided section
+ 
+diff --git a/mobile/my_app/README.md b/mobile/my_app/README.md
+index 0d13be2..28ae982 100644
+--- a/mobile/my_app/README.md
++++ b/mobile/my_app/README.md
+@@ -2,22 +2,26 @@
+ 
+ The canonical Flutter application targets Android and iOS. Its Dart source uses feature-first folders under `lib/features`, application startup under `lib/app`, and shared models/repositories/services under `lib/shared`.
+ 
+-Provide the profile API URL at build time:
+-
+-For a physical Android phone connected by USB, start the backend, then run:
++For a physical Android phone, connected by USB cable or wireless debugging,
++start the backend, then run:
+ 
+ ```powershell
+-adb reverse tcp:5000 tcp:5000
+-flutter run --dart-define=API_BASE_URL=http://127.0.0.1:5000
++flutter run
+ ```
+ 
+-Repeat `adb reverse` after reconnecting the phone. Keep USB connected while using
+-the local API. Rebuild the app when changing `API_BASE_URL`; hot reload does not
+-change this build-time setting. Debug Android builds allow local HTTP traffic.
+-Release builds should use a reachable HTTPS backend.
++The app's default API address is `http://127.0.0.1:5000`. Every Android debug
++build runs `adb reverse tcp:5000 tcp:5000` on each connected device (see
++`android/app/build.gradle.kts`), so that address reaches the backend on this
++computer. If the phone reconnects while the app is running, stop and run
++`flutter run` again to restore the forward.
++
++USB checklist: enable Developer options and USB debugging on the phone, accept
++the "Allow USB debugging?" prompt, and confirm `adb devices` lists the phone as
++`device` (not `unauthorized`).
+ 
+-The default API address is `http://127.0.0.1:5000`. Both VS Code mobile launch
+-configurations automatically forward port 5000 through ADB before launching.
++Rebuild the app when changing `API_BASE_URL`; hot reload does not change this
++build-time setting. Debug Android builds allow local HTTP traffic. Release
++builds should use a reachable HTTPS backend.
+ 
+ For an Android emulator:
+ 
+@@ -27,6 +31,18 @@ flutter run --dart-define=API_BASE_URL=http://10.0.2.2:5000
+ 
+ Firebase project: `swiftserve-production`. Do not replace these files with the archived root project configuration.
+ 
++## Maps and foreground location
++
++SwiftServe uses `flutter_map` with OpenStreetMap tiles for client job pins and
++foreground device location for worker-to-job distance. It does not require a
++Google Maps API key or a billing-enabled Google Cloud project. The standard
++OpenStreetMap tile service is intended for normal interactive viewing only;
++do not add bulk downloading or offline prefetching without changing to a tile
++provider that explicitly permits it.
++
++The app requests location only while it is open. It does not persist worker
++coordinates or request background location access.
++
+ Google sign-in uses Firebase Authentication. Existing profiles retain their client/worker routing; new Google users complete a profile through the existing backend API.
+ 
+ Before testing Google sign-in on Android:
+diff --git a/mobile/my_app/android/app/build.gradle.kts b/mobile/my_app/android/app/build.gradle.kts
+index 35d7e7b..2b6e25f 100644
+--- a/mobile/my_app/android/app/build.gradle.kts
++++ b/mobile/my_app/android/app/build.gradle.kts
+@@ -45,3 +45,37 @@ android {
+ flutter {
+     source = "../.."
+ }
++
++// Debug builds forward each connected device's port 5000 to this computer, so
++// the app's default API_BASE_URL (http://127.0.0.1:5000) reaches the local
++// backend with a plain `flutter run`, over USB or wireless debugging.
++val adbPath = provider { android.adbExecutable.absolutePath }
++val forwardLocalApi by tasks.registering {
++    doLast {
++        val adb = adbPath.get()
++        val devices = try {
++            ProcessBuilder(adb, "devices").start().inputStream.bufferedReader()
++                .readLines()
++                .drop(1)
++                .map { it.split("\t") }
++                .filter { it.size == 2 && it[1] == "device" }
++                .map { it[0] }
++        } catch (error: Exception) {
++            logger.warn("Skipping adb reverse: ${error.message}")
++            emptyList()
++        }
++        devices.forEach { device ->
++            val exitCode = ProcessBuilder(adb, "-s", device, "reverse", "tcp:5000", "tcp:5000")
++                .start()
++                .waitFor()
++            if (exitCode == 0) {
++                logger.lifecycle("Forwarded port 5000 to the local backend on $device")
++            } else {
++                logger.warn("adb reverse failed on $device")
++            }
++        }
++    }
++}
++tasks.matching { it.name == "preDebugBuild" }.configureEach {
++    dependsOn(forwardLocalApi)
++}
+diff --git a/mobile/my_app/android/app/src/main/AndroidManifest.xml b/mobile/my_app/android/app/src/main/AndroidManifest.xml
+index 5df8b2f..3234cda 100644
+--- a/mobile/my_app/android/app/src/main/AndroidManifest.xml
++++ b/mobile/my_app/android/app/src/main/AndroidManifest.xml
+@@ -1,6 +1,8 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+     <uses-permission android:name="android.permission.CAMERA" />
+     <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
++    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+     <application
+         android:label="SwiftServe"
+         android:name="${applicationName}"
+diff --git a/mobile/my_app/firestore.rules b/mobile/my_app/firestore.rules
+index b82b29a..851b221 100644
+--- a/mobile/my_app/firestore.rules
++++ b/mobile/my_app/firestore.rules
+@@ -62,8 +62,11 @@ service cloud.firestore {
+         && data.keys().hasOnly([
+           'clientId', 'clientName', 'title', 'category', 'budget', 'schedule',
+           'scheduleFrom', 'scheduleTo', 'location', 'description', 'status',
+-          'createdAt', 'workerId', 'workerName', 'acceptedAt', 'cancelledAt',
+-          'ongoingAt', 'completedAt'
++          'areaPosition', 'createdAt', 'workerId', 'workerName', 'acceptedAt',
++          'cancelledAt', 'ongoingAt', 'completedAt', 'modality',
++          'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
++          'itemCostEstimate', 'distanceKm', 'errandStage', 'pickedUpAt',
++          'deliveringAt'
+         ])
+         && data.clientId is string
+         && data.clientId.size() > 0
+@@ -88,6 +91,22 @@ service cloud.firestore {
+         && data.location is string
+         && data.location.size() > 0
+         && data.location.size() <= 300
++        && (!('areaPosition' in data) || data.areaPosition is latlng)
++        && (!('modality' in data)
++          || data.modality in ['onsite', 'online', 'hybrid', 'errand'])
++        && validOptionalString(data, 'dropoffLocation', 300)
++        && (!('dropoffAreaPosition' in data) || data.dropoffAreaPosition is latlng)
++        && validOptionalString(data, 'errandItems', 500)
++        && (!('itemCostEstimate' in data)
++          || (data.itemCostEstimate is number
++            && data.itemCostEstimate > 0
++            && data.itemCostEstimate <= 10000000))
++        && (!('distanceKm' in data)
++          || (data.distanceKm is number
++            && data.distanceKm >= 0
++            && data.distanceKm <= 1000))
++        && (!('errandStage' in data)
++          || data.errandStage in ['headingToPickup', 'pickedUp', 'delivering'])
+         && data.description is string
+         && data.description.size() > 0
+         && data.description.size() <= 5000
+@@ -96,6 +115,31 @@ service cloud.firestore {
+         && validOptionalString(data, 'workerId', 128)
+         && validOptionalString(data, 'workerName', 120);
+     }
++    function validExactLocation(data) {
++      return data.keys().hasAll(['position', 'address', 'createdAt'])
++        && data.keys().hasOnly([
++          'position', 'address', 'dropoffPosition', 'dropoffAddress',
++          'createdAt'
++        ])
++        && data.position is latlng
++        && data.address is string
++        && data.address.size() > 0
++        && data.address.size() <= 300
++        && (!('dropoffPosition' in data) || data.dropoffPosition is latlng)
++        && (!('dropoffAddress' in data)
++          || (data.dropoffAddress is string
++            && data.dropoffAddress.size() > 0
++            && data.dropoffAddress.size() <= 300))
++        && data.createdAt is timestamp;
++    }
++    function validRiderLocation(data) {
++      return data.keys().hasAll(['position', 'updatedAt'])
++        && data.keys().hasOnly(['position', 'heading', 'speed', 'updatedAt'])
++        && data.position is latlng
++        && (!('heading' in data) || data.heading is number)
++        && (!('speed' in data) || data.speed is number)
++        && data.updatedAt == request.time;
++    }
+     function validApplication(data) {
+       return data.keys().hasAll([
+           'requestId', 'clientId', 'workerId', 'workerName', 'status',
+@@ -281,7 +325,8 @@ service cloud.firestore {
+     }
+ 
+     match /service_categories/{categoryId} {
+-      allow read: if signedIn();
++      // Public so the registration form can list categories before sign-in.
++      allow read: if true;
+       // Category management is restricted to the authenticated admin backend.
+       allow create, update, delete: if false;
+     }
+@@ -292,7 +337,40 @@ service cloud.firestore {
+         && validServiceRequest(request.resource.data)
+         && request.resource.data.clientId == request.auth.uid
+         && request.resource.data.status == 'pending'
+-        && request.resource.data.createdAt == request.time;
++        && request.resource.data.createdAt == request.time
++        // Online jobs carry no map pin; on-site and hybrid jobs need both the
++        // public area and the private exact location.
++        && (
++          (
++            request.resource.data.get('modality', 'onsite') == 'online'
++            && !('areaPosition' in request.resource.data)
++            && !existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
++          ) || (
++            request.resource.data.get('modality', 'onsite') != 'online'
++            && request.resource.data.areaPosition is latlng
++            && existsAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location)
++          )
++        )
++        && !('errandStage' in request.resource.data)
++        // Errands also need a drop-off, publicly as an area and privately as
++        // the exact point. Other work types never carry errand fields.
++        && (
++          (
++            request.resource.data.get('modality', 'onsite') == 'errand'
++            && request.resource.data.dropoffAreaPosition is latlng
++            && request.resource.data.dropoffLocation is string
++            && request.resource.data.errandItems is string
++            && request.resource.data.errandItems.size() > 0
++            && request.resource.data.distanceKm is number
++            && getAfter(/databases/$(database)/documents/service_requests/$(requestId)/private/location).data.dropoffPosition is latlng
++          ) || (
++            request.resource.data.get('modality', 'onsite') != 'errand'
++            && !request.resource.data.keys().hasAny([
++              'dropoffLocation', 'dropoffAreaPosition', 'errandItems',
++              'itemCostEstimate', 'distanceKm'
++            ])
++          )
++        );
+       allow update: if validServiceRequest(request.resource.data) && (
+         (
+           self(resource.data.clientId)
+@@ -319,14 +397,48 @@ service cloud.firestore {
+               resource.data.status == 'accepted'
+               && request.resource.data.status == 'ongoing'
+               && request.resource.data.ongoingAt == request.time
+-              && request.resource.data.diff(resource.data).affectedKeys()
+-                .hasOnly(['status', 'ongoingAt'])
++              && (
++                (
++                  resource.data.get('modality', 'onsite') != 'errand'
++                  && request.resource.data.diff(resource.data).affectedKeys()
++                    .hasOnly(['status', 'ongoingAt'])
++                ) || (
++                  // Starting an errand puts the rider on the way to pickup.
++                  resource.data.get('modality', 'onsite') == 'errand'
++                  && request.resource.data.errandStage == 'headingToPickup'
++                  && request.resource.data.diff(resource.data).affectedKeys()
++                    .hasOnly(['status', 'ongoingAt', 'errandStage'])
++                )
++              )
+             ) || (
+               resource.data.status == 'ongoing'
+               && request.resource.data.status == 'completed'
+               && request.resource.data.completedAt == request.time
+               && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['status', 'completedAt'])
++              // An errand is delivered only after the rider is on the way.
++              // Errands started before stages existed have no stage.
++              && resource.data.get('errandStage', 'delivering') == 'delivering'
++            ) || (
++              // Errand stages only move forward, one step at a time.
++              resource.data.status == 'ongoing'
++              && request.resource.data.status == 'ongoing'
++              && resource.data.get('modality', 'onsite') == 'errand'
++              && (
++                (
++                  resource.data.get('errandStage', '') == 'headingToPickup'
++                  && request.resource.data.errandStage == 'pickedUp'
++                  && request.resource.data.pickedUpAt == request.time
++                  && request.resource.data.diff(resource.data).affectedKeys()
++                    .hasOnly(['errandStage', 'pickedUpAt'])
++                ) || (
++                  resource.data.get('errandStage', '') == 'pickedUp'
++                  && request.resource.data.errandStage == 'delivering'
++                  && request.resource.data.deliveringAt == request.time
++                  && request.resource.data.diff(resource.data).affectedKeys()
++                    .hasOnly(['errandStage', 'deliveringAt'])
++                )
++              )
+             )
+           )
+         )
+@@ -370,6 +482,35 @@ service cloud.firestore {
+           );
+         allow delete: if false;
+       }
++
++      match /private/{privateDocumentId} {
++        function parent() {
++          return get(/databases/$(database)/documents/service_requests/$(requestId)).data;
++        }
++        allow read: if privateDocumentId in ['location', 'rider_location']
++          && signedIn()
++          && (
++            parent().clientId == request.auth.uid
++            || (
++              parent().workerId == request.auth.uid
++              && parent().status in ['accepted', 'ongoing', 'completed']
++            )
++          );
++        allow create: if privateDocumentId == 'location'
++          && signedIn()
++          && validExactLocation(request.resource.data)
++          && request.resource.data.createdAt == request.time
++          && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid;
++        // Only the assigned rider writes their live position, and only while
++        // the errand is underway.
++        allow create, update: if privateDocumentId == 'rider_location'
++          && signedIn()
++          && parent().get('modality', 'onsite') == 'errand'
++          && parent().workerId == request.auth.uid
++          && parent().status == 'ongoing'
++          && validRiderLocation(request.resource.data);
++        allow delete: if false;
++      }
+     }
+ 
+     match /conversations/{conversationId} {
+diff --git a/mobile/my_app/ios/Podfile b/mobile/my_app/ios/Podfile
+index c267afb..ae8c0ed 100644
+--- a/mobile/my_app/ios/Podfile
++++ b/mobile/my_app/ios/Podfile
+@@ -47,6 +47,10 @@ post_install do |installer|
+       if Gem::Version.new('15.5') > Gem::Version.new(current)
+         config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.5'
+       end
++      if target.name == 'geolocator_apple'
++        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
++        config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'BYPASS_PERMISSION_LOCATION_ALWAYS=1'
++      end
+     end
+   end
+ end
+diff --git a/mobile/my_app/ios/Runner/Info.plist b/mobile/my_app/ios/Runner/Info.plist
+index 39e0c9a..aa60751 100644
+--- a/mobile/my_app/ios/Runner/Info.plist
++++ b/mobile/my_app/ios/Runner/Info.plist
+@@ -4,6 +4,8 @@
+ <dict>
+ 	<key>NSCameraUsageDescription</key>
+ 	<string>SwiftServe uses the camera to capture an ID and complete a live selfie check for worker verification.</string>
++	<key>NSLocationWhenInUseUsageDescription</key>
++	<string>SwiftServe uses your location while the app is open to pin service jobs and show workers their approximate distance.</string>
+ 	<key>CFBundleDevelopmentRegion</key>
+ 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+ 	<key>CFBundleDisplayName</key>
+diff --git a/mobile/my_app/lib/features/auth/presentation/screens/client_register_screen.dart b/mobile/my_app/lib/features/auth/presentation/screens/client_register_screen.dart
+index 3856882..69017bd 100644
+--- a/mobile/my_app/lib/features/auth/presentation/screens/client_register_screen.dart
++++ b/mobile/my_app/lib/features/auth/presentation/screens/client_register_screen.dart
+@@ -73,6 +73,17 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
+           ? const []
+           : [_category.text.trim()],
+     );
++    try {
++      await ApiService().checkReachable();
++    } on ApiConnectionException catch (error) {
++      if (mounted) {
++        setState(() => _loading = false);
++        ScaffoldMessenger.of(
++          context,
++        ).showSnackBar(SnackBar(content: Text(error.message)));
++      }
++      return;
++    }
+     UserCredential? credential;
+     try {
+       credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+* Unmerged path mobile/my_app/lib/features/client/presentation/screens/client_booking_flow.dart
+diff --git a/mobile/my_app/lib/features/client/presentation/screens/client_request_details_screen.dart b/mobile/my_app/lib/features/client/presentation/screens/client_request_details_screen.dart
+index aafb06a..8b84460 100644
+--- a/mobile/my_app/lib/features/client/presentation/screens/client_request_details_screen.dart
++++ b/mobile/my_app/lib/features/client/presentation/screens/client_request_details_screen.dart
+@@ -8,6 +8,7 @@ import '../../../../shared/repositories/service_request_repository.dart';
+ import '../../../../shared/services/client_theme_controller.dart';
+ import '../../../../shared/widgets/action_confirmation_dialog.dart';
+ import '../../../../shared/widgets/live_profile_avatar.dart';
++import '../widgets/errand_tracking_map.dart';
+ import 'client_sections.dart';
+ 
+ class ClientRequestDetailsScreen extends StatefulWidget {
+@@ -202,13 +203,58 @@ class _ClientRequestDetailsScreenState
+             subtitle: const Text('Requested date range'),
+           ),
+           ListTile(
+-            leading: const Icon(Icons.location_on_outlined),
+-            title: Text(request.location),
++            leading: Icon(
++              request.modality.needsLocation
++                  ? Icons.work_outline
++                  : Icons.laptop_mac_outlined,
++            ),
++            title: Text(request.modality.label),
++            subtitle: const Text('Work type'),
+           ),
++          if (request.isErrand) ...[
++            ListTile(
++              leading: const Icon(Icons.storefront_outlined),
++              title: Text(request.location),
++              subtitle: const Text('Pickup'),
++            ),
++            ListTile(
++              leading: const Icon(Icons.flag_outlined),
++              title: Text(request.dropoffLocation ?? 'Not set'),
++              subtitle: const Text('Drop-off'),
++            ),
++            if (request.errandItems?.isNotEmpty ?? false)
++              ListTile(
++                leading: const Icon(Icons.shopping_bag_outlined),
++                title: Text(request.errandItems!),
++                subtitle: request.itemCostEstimate == null
++                    ? null
++                    : Text(
++                        'Items ~₱${request.itemCostEstimate!.toStringAsFixed(0)}, '
++                        'paid back to the rider',
++                      ),
++              ),
++          ] else if (request.modality.needsLocation)
++            ListTile(
++              leading: const Icon(Icons.location_on_outlined),
++              title: Text(request.location),
++            ),
+           ListTile(
+             leading: const Icon(Icons.payments_outlined),
+             title: Text('₱${request.budget.toStringAsFixed(0)}'),
++            subtitle: request.isErrand
++                ? Text(
++                    'Delivery fee'
++                    '${request.distanceKm == null ? '' : ' · ~${request.distanceKm!.toStringAsFixed(1)} km'}',
++                  )
++                : null,
+           ),
++          if (request.isErrand &&
++              (request.status == ServiceRequestStatus.accepted ||
++                  request.status == ServiceRequestStatus.ongoing))
++            Padding(
++              padding: const EdgeInsets.symmetric(vertical: 8),
++              child: ErrandTrackingMap(request: request),
++            ),
+           Padding(
+             padding: const EdgeInsets.all(16),
+             child: Text(request.description),
+* Unmerged path mobile/my_app/lib/features/client/presentation/screens/post_request_screen.dart
+diff --git a/mobile/my_app/lib/features/client/presentation/widgets/errand_tracking_map.dart b/mobile/my_app/lib/features/client/presentation/widgets/errand_tracking_map.dart
+new file mode 100644
+index 0000000..44c320c
+--- /dev/null
++++ b/mobile/my_app/lib/features/client/presentation/widgets/errand_tracking_map.dart
+@@ -0,0 +1,304 @@
++import 'dart:async';
++
++import 'package:flutter/material.dart';
++import 'package:flutter_map/flutter_map.dart';
++import 'package:latlong2/latlong.dart';
++
++import '../../../../shared/models/job_location.dart';
++import '../../../../shared/models/rider_location.dart';
++import '../../../../shared/models/service_request.dart';
++import '../../../../shared/repositories/service_request_repository.dart';
++import '../../../../shared/widgets/errand_map_layers.dart';
++import '../../../../shared/widgets/open_street_map_layers.dart';
++
++/// After this long without an update the rider's position is shown as stale.
++const riderLocationStaleAfter = Duration(seconds: 60);
++
++/// Live map of an errand for the client: pickup, drop-off, the rider's
++/// position and which stage the errand is in.
++class ErrandTrackingMap extends StatefulWidget {
++  const ErrandTrackingMap({super.key, required this.request, this.repository});
++
++  final ServiceRequest request;
++  final ServiceRequestRepository? repository;
++
++  @override
++  State<ErrandTrackingMap> createState() => _ErrandTrackingMapState();
++}
++
++class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
++  late final ServiceRequestRepository _repository =
++      widget.repository ?? ServiceRequestRepository();
++  final _mapController = MapController();
++  ExactJobLocation? _exact;
++  bool _followRider = true;
++  bool _mapFailed = false;
++  int _mapErrorCount = 0;
++  int _mapReloadVersion = 0;
++  // Rebuilds the "last seen" text while no new position arrives.
++  Timer? _clock;
++
++  @override
++  void initState() {
++    super.initState();
++    _loadExact();
++    _clock = Timer.periodic(
++      const Duration(seconds: 15),
++      (_) => mounted ? setState(() {}) : null,
++    );
++  }
++
++  @override
++  void dispose() {
++    _clock?.cancel();
++    _mapController.dispose();
++    super.dispose();
++  }
++
++  Future<void> _loadExact() async {
++    try {
++      final exact = await _repository.getExactLocation(widget.request.id);
++      if (mounted) setState(() => _exact = exact);
++    } catch (_) {
++      // The public, approximate points are still shown.
++    }
++  }
++
++  void _handleMapTileError(Object error) {
++    if (_mapFailed || !mounted) return;
++    _mapErrorCount += 1;
++    if (_mapErrorCount < 3) return;
++    setState(() => _mapFailed = true);
++  }
++
++  void _retryMap() => setState(() {
++    _mapFailed = false;
++    _mapErrorCount = 0;
++    _mapReloadVersion += 1;
++  });
++
++  void _fitAll(
++    JobCoordinate pickup,
++    JobCoordinate dropoff,
++    JobCoordinate? rider,
++  ) {
++    setState(() => _followRider = false);
++    _mapController.fitCamera(errandCameraFit([pickup, dropoff, ?rider]));
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    return StreamBuilder<ServiceRequest?>(
++      stream: _repository.watchRequest(widget.request.id),
++      initialData: widget.request,
++      builder: (context, requestSnapshot) {
++        final request = requestSnapshot.data ?? widget.request;
++        final tracking = request.status == ServiceRequestStatus.ongoing;
++        return StreamBuilder<RiderLocation?>(
++          stream: tracking
++              ? _repository.watchRiderLocation(request.id)
++              : const Stream.empty(),
++          builder: (context, riderSnapshot) => _buildCard(
++            context,
++            request,
++            tracking ? riderSnapshot.data : null,
++          ),
++        );
++      },
++    );
++  }
++
++  Widget _buildCard(
++    BuildContext context,
++    ServiceRequest request,
++    RiderLocation? rider,
++  ) {
++    final pickup = _exact?.position ?? request.areaPosition;
++    final dropoff = _exact?.dropoffPosition ?? request.dropoffAreaPosition;
++    final theme = Theme.of(context);
++    if (pickup == null || dropoff == null) {
++      return const SizedBox.shrink();
++    }
++    final riderPosition = rider?.position;
++    if (_followRider && riderPosition != null) {
++      WidgetsBinding.instance.addPostFrameCallback((_) {
++        if (!mounted) return;
++        _mapController.move(
++          LatLng(riderPosition.latitude, riderPosition.longitude),
++          _mapController.camera.zoom,
++        );
++      });
++    }
++
++    return Material(
++      key: const ValueKey('errand-tracking-map'),
++      color: theme.colorScheme.surface,
++      borderRadius: BorderRadius.circular(18),
++      clipBehavior: Clip.antiAlias,
++      elevation: 2,
++      shadowColor: const Color(0x33000000),
++      child: Column(
++        crossAxisAlignment: CrossAxisAlignment.start,
++        children: [
++          SizedBox(
++            height: 240,
++            child: Stack(
++              children: [
++                FlutterMap(
++                  mapController: _mapController,
++                  options: MapOptions(
++                    initialCameraFit: errandCameraFit([
++                      pickup,
++                      dropoff,
++                      ?riderPosition,
++                    ]),
++                    minZoom: 3,
++                    maxZoom: 18,
++                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
++                    onPositionChanged: (_, hasGesture) {
++                      if (hasGesture && _followRider) {
++                        setState(() => _followRider = false);
++                      }
++                    },
++                  ),
++                  children: [
++                    SwiftServeMapTiles(
++                      key: ValueKey(_mapReloadVersion),
++                      onError: (_, error, _) => _handleMapTileError(error),
++                    ),
++                    ...errandMapLayers(
++                      pickup: pickup,
++                      dropoff: dropoff,
++                      rider: riderPosition,
++                      routeColor: theme.colorScheme.onSurface,
++                    ),
++                    const SwiftServeMapAttribution(),
++                  ],
++                ),
++                Positioned(
++                  right: 8,
++                  top: 8,
++                  child: Column(
++                    children: [
++                      if (riderPosition != null)
++                        IconButton.filledTonal(
++                          tooltip: 'Follow rider',
++                          isSelected: _followRider,
++                          onPressed: () => setState(() => _followRider = true),
++                          icon: const Icon(Icons.my_location),
++                        ),
++                      IconButton.filledTonal(
++                        tooltip: 'Show whole route',
++                        onPressed: () =>
++                            _fitAll(pickup, dropoff, riderPosition),
++                        icon: const Icon(Icons.zoom_out_map),
++                      ),
++                    ],
++                  ),
++                ),
++                if (_mapFailed) MapUnavailableOverlay(onRetry: _retryMap),
++              ],
++            ),
++          ),
++          Padding(
++            padding: const EdgeInsets.all(16),
++            child: Column(
++              crossAxisAlignment: CrossAxisAlignment.start,
++              children: [
++                ErrandStageTimeline(request: request),
++                const SizedBox(height: 10),
++                Text(
++                  riderStatusText(request, rider, DateTime.now()),
++                  key: const ValueKey('errand-rider-status'),
++                  style: theme.textTheme.bodyMedium?.copyWith(
++                    fontWeight: FontWeight.w700,
++                  ),
++                ),
++              ],
++            ),
++          ),
++        ],
++      ),
++    );
++  }
++}
++
++/// One line telling the client where the rider is.
++String riderStatusText(
++  ServiceRequest request,
++  RiderLocation? rider,
++  DateTime now,
++) {
++  final riderName = request.workerName ?? 'Your rider';
++  switch (request.status) {
++    case ServiceRequestStatus.accepted:
++      return '$riderName will share their location once they start.';
++    case ServiceRequestStatus.completed:
++      return 'Delivered.';
++    case ServiceRequestStatus.ongoing:
++      break;
++    case ServiceRequestStatus.pending:
++    case ServiceRequestStatus.cancelled:
++      return '';
++  }
++  final updatedAt = rider?.updatedAt;
++  if (rider == null || updatedAt == null) {
++    return 'Waiting for $riderName\'s location…';
++  }
++  final age = now.difference(updatedAt);
++  if (age < riderLocationStaleAfter) return '$riderName is live on the map.';
++  final minutes = age.inMinutes;
++  return minutes < 1
++      ? 'Last seen less than a minute ago.'
++      : 'Last seen $minutes min ago.';
++}
++
++class ErrandStageTimeline extends StatelessWidget {
++  const ErrandStageTimeline({super.key, required this.request});
++
++  final ServiceRequest request;
++
++  /// How many of the four steps are done, from 0 to 4.
++  static int completedSteps(ServiceRequest request) => switch (request.status) {
++    ServiceRequestStatus.completed => 4,
++    ServiceRequestStatus.ongoing =>
++      (request.errandStage ?? ErrandStage.headingToPickup).index + 1,
++    _ => 0,
++  };
++
++  @override
++  Widget build(BuildContext context) {
++    final done = completedSteps(request);
++    final labels = [
++      ...ErrandStage.values.map((stage) => stage.label),
++      'Delivered',
++    ];
++    final theme = Theme.of(context);
++    return Row(
++      children: [
++        for (var i = 0; i < labels.length; i++)
++          Expanded(
++            child: Column(
++              children: [
++                Icon(
++                  i < done ? Icons.check_circle : Icons.radio_button_unchecked,
++                  size: 20,
++                  color: i < done
++                      ? const Color(0xFF2E7D32)
++                      : theme.colorScheme.outline,
++                ),
++                const SizedBox(height: 4),
++                Text(
++                  labels[i],
++                  textAlign: TextAlign.center,
++                  style: theme.textTheme.labelSmall?.copyWith(
++                    fontWeight: i == done - 1 ? FontWeight.w700 : null,
++                  ),
++                ),
++              ],
++            ),
++          ),
++      ],
++    );
++  }
++}
+diff --git a/mobile/my_app/lib/features/client/presentation/widgets/legacy/map_tracking_card.dart b/mobile/my_app/lib/features/client/presentation/widgets/legacy/map_tracking_card.dart
+index 96c7b12..fdfc955 100644
+--- a/mobile/my_app/lib/features/client/presentation/widgets/legacy/map_tracking_card.dart
++++ b/mobile/my_app/lib/features/client/presentation/widgets/legacy/map_tracking_card.dart
+@@ -1,68 +1,15 @@
+ import 'package:flutter/material.dart';
+-import 'package:google_maps_flutter/google_maps_flutter.dart';
++import 'package:flutter_map/flutter_map.dart';
++import 'package:latlong2/latlong.dart';
+ 
+-class MapTrackingCard extends StatefulWidget {
+-  const MapTrackingCard({super.key});
+-
+-  @override
+-  State<MapTrackingCard> createState() => _MapTrackingCardState();
+-}
+-
+-class _MapTrackingCardState extends State<MapTrackingCard> {
+-  GoogleMapController? mapController;
+-
+-  // Markers
+-  final Set<Marker> markers = {};
++import '../../../../../shared/widgets/open_street_map_layers.dart';
+ 
+-  // Polylines
+-  final Set<Polyline> polylines = {};
++class MapTrackingCard extends StatelessWidget {
++  const MapTrackingCard({super.key});
+ 
+-  // Sample Locations
+   static const LatLng clientLocation = LatLng(14.844100, 120.811900);
+   static const LatLng workerLocation = LatLng(14.846000, 120.814500);
+ 
+-  // Initial Camera Position
+-  static const CameraPosition initialPosition = CameraPosition(
+-    target: clientLocation,
+-    zoom: 15,
+-  );
+-
+-  @override
+-  void initState() {
+-    super.initState();
+-    loadMarkers();
+-    loadPolyline();
+-  }
+-
+-  void loadMarkers() {
+-    markers.add(
+-      const Marker(
+-        markerId: MarkerId("client"),
+-        position: clientLocation,
+-        infoWindow: InfoWindow(title: "Client"),
+-      ),
+-    );
+-
+-    markers.add(
+-      const Marker(
+-        markerId: MarkerId("worker"),
+-        position: workerLocation,
+-        infoWindow: InfoWindow(title: "Worker"),
+-      ),
+-    );
+-  }
+-
+-  void loadPolyline() {
+-    polylines.add(
+-      const Polyline(
+-        polylineId: PolylineId("route"),
+-        color: Color(0xFF2F80ED),
+-        width: 5,
+-        points: [workerLocation, clientLocation],
+-      ),
+-    );
+-  }
+-
+   @override
+   Widget build(BuildContext context) {
+     return Container(
+@@ -70,18 +17,51 @@ class _MapTrackingCardState extends State<MapTrackingCard> {
+       decoration: BoxDecoration(borderRadius: BorderRadius.circular(18)),
+       child: ClipRRect(
+         borderRadius: BorderRadius.circular(18),
+-        child: GoogleMap(
+-          initialCameraPosition: initialPosition,
+-          markers: markers,
+-          polylines: polylines,
+-          onMapCreated: (GoogleMapController controller) {
+-            mapController = controller;
+-          },
+-          myLocationEnabled: false,
+-          myLocationButtonEnabled: false,
+-          zoomControlsEnabled: false,
+-          mapToolbarEnabled: false,
+-          compassEnabled: false,
++        child: FlutterMap(
++          options: MapOptions(
++            initialCenter: clientLocation,
++            initialZoom: 15,
++            minZoom: 3,
++            maxZoom: 18,
++            backgroundColor: Theme.of(
++              context,
++            ).colorScheme.surfaceContainerHighest,
++          ),
++          children: [
++            const SwiftServeMapTiles(),
++            PolylineLayer(
++              polylines: [
++                Polyline(
++                  points: const [workerLocation, clientLocation],
++                  color: const Color(0xFF2F80ED),
++                  strokeWidth: 5,
++                ),
++              ],
++            ),
++            const MarkerLayer(
++              markers: [
++                Marker(
++                  point: clientLocation,
++                  width: 48,
++                  height: 48,
++                  alignment: Alignment.bottomCenter,
++                  child: SwiftServeMapPin(label: 'Client location'),
++                ),
++                Marker(
++                  point: workerLocation,
++                  width: 42,
++                  height: 42,
++                  alignment: Alignment.bottomCenter,
++                  child: Icon(
++                    Icons.person_pin_circle,
++                    size: 42,
++                    color: Color(0xFF2F80ED),
++                  ),
++                ),
++              ],
++            ),
++            const SwiftServeMapAttribution(),
++          ],
+         ),
+       ),
+     );
+* Unmerged path mobile/my_app/lib/features/worker/presentation/screens/worker_home_screen.dart
+* Unmerged path mobile/my_app/lib/features/worker/presentation/screens/worker_job_details_screen.dart
+diff --git a/mobile/my_app/lib/features/worker/presentation/widgets/legacy/job_offer_card.dart b/mobile/my_app/lib/features/worker/presentation/widgets/legacy/job_offer_card.dart
+index 071173d..6ff4487 100644
+--- a/mobile/my_app/lib/features/worker/presentation/widgets/legacy/job_offer_card.dart
++++ b/mobile/my_app/lib/features/worker/presentation/widgets/legacy/job_offer_card.dart
+@@ -5,6 +5,7 @@ class JobOfferCard extends StatelessWidget {
+   final String client;
+   final String location;
+   final String price;
++  final String? distanceLabel;
+   final VoidCallback onTap;
+ 
+   const JobOfferCard({
+@@ -13,6 +14,7 @@ class JobOfferCard extends StatelessWidget {
+     required this.client,
+     required this.location,
+     required this.price,
++    this.distanceLabel,
+     required this.onTap,
+   });
+ 
+@@ -25,7 +27,11 @@ class JobOfferCard extends StatelessWidget {
+           service,
+           style: const TextStyle(fontWeight: FontWeight.w700),
+         ),
+-        subtitle: Text('$client\n$location • $price'),
++        subtitle: Text(
++          '$client\n$location • $price${distanceLabel == null ? '' : '\n$distanceLabel'}',
++          maxLines: 3,
++          overflow: TextOverflow.ellipsis,
++        ),
+         isThreeLine: true,
+         trailing: FilledButton(onPressed: onTap, child: const Text('View')),
+       ),
+diff --git a/mobile/my_app/lib/shared/models/job_location.dart b/mobile/my_app/lib/shared/models/job_location.dart
+new file mode 100644
+index 0000000..90ba8d9
+--- /dev/null
++++ b/mobile/my_app/lib/shared/models/job_location.dart
+@@ -0,0 +1,67 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++
++class JobCoordinate {
++  const JobCoordinate({required this.latitude, required this.longitude});
++
++  final double latitude;
++  final double longitude;
++
++  GeoPoint toGeoPoint() => GeoPoint(latitude, longitude);
++
++  static JobCoordinate? fromGeoPoint(Object? value) {
++    if (value is! GeoPoint) return null;
++    return JobCoordinate(latitude: value.latitude, longitude: value.longitude);
++  }
++}
++
++class JobLocationSelection {
++  const JobLocationSelection({
++    required this.position,
++    required this.exactAddress,
++    required this.areaLabel,
++  });
++
++  final JobCoordinate position;
++  final String exactAddress;
++  final String areaLabel;
++
++  JobLocationSelection copyWith({
++    JobCoordinate? position,
++    String? exactAddress,
++    String? areaLabel,
++  }) => JobLocationSelection(
++    position: position ?? this.position,
++    exactAddress: exactAddress ?? this.exactAddress,
++    areaLabel: areaLabel ?? this.areaLabel,
++  );
++}
++
++class ExactJobLocation {
++  const ExactJobLocation({
++    required this.position,
++    required this.address,
++    this.dropoffPosition,
++    this.dropoffAddress,
++  });
++
++  /// The job site, or the pickup point for errands.
++  final JobCoordinate position;
++  final String address;
++
++  /// Errands only.
++  final JobCoordinate? dropoffPosition;
++  final String? dropoffAddress;
++
++  factory ExactJobLocation.fromMap(Map<String, dynamic> data) {
++    final position = JobCoordinate.fromGeoPoint(data['position']);
++    if (position == null) {
++      throw const FormatException('Exact job location has no valid position.');
++    }
++    return ExactJobLocation(
++      position: position,
++      address: (data['address'] ?? '').toString(),
++      dropoffPosition: JobCoordinate.fromGeoPoint(data['dropoffPosition']),
++      dropoffAddress: data['dropoffAddress']?.toString(),
++    );
++  }
++}
+diff --git a/mobile/my_app/lib/shared/models/rider_location.dart b/mobile/my_app/lib/shared/models/rider_location.dart
+new file mode 100644
+index 0000000..9a3ae25
+--- /dev/null
++++ b/mobile/my_app/lib/shared/models/rider_location.dart
+@@ -0,0 +1,29 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++
++import 'job_location.dart';
++
++/// The assigned rider's latest position during an errand.
++class RiderLocation {
++  const RiderLocation({
++    required this.position,
++    this.heading,
++    this.speed,
++    this.updatedAt,
++  });
++
++  final JobCoordinate position;
++  final double? heading;
++  final double? speed;
++  final DateTime? updatedAt;
++
++  static RiderLocation? fromMap(Map<String, dynamic>? data) {
++    final position = JobCoordinate.fromGeoPoint(data?['position']);
++    if (data == null || position == null) return null;
++    return RiderLocation(
++      position: position,
++      heading: (data['heading'] as num?)?.toDouble(),
++      speed: (data['speed'] as num?)?.toDouble(),
++      updatedAt: (data['updatedAt'] as Timestamp?)?.toDate(),
++    );
++  }
++}
+diff --git a/mobile/my_app/lib/shared/models/service_request.dart b/mobile/my_app/lib/shared/models/service_request.dart
+index 12fc4c8..22ca055 100644
+--- a/mobile/my_app/lib/shared/models/service_request.dart
++++ b/mobile/my_app/lib/shared/models/service_request.dart
+@@ -1,5 +1,7 @@
+ import 'package:cloud_firestore/cloud_firestore.dart';
+ 
++import 'job_location.dart';
++
+ enum ServiceRequestStatus {
+   pending,
+   accepted,
+@@ -13,6 +15,50 @@ enum ServiceRequestStatus {
+   );
+ }
+ 
++enum JobModality {
++  onsite('On-site'),
++  online('Online'),
++  hybrid('Hybrid'),
++  errand('Errand');
++
++  const JobModality(this.label);
++
++  final String label;
++
++  /// Whether the job needs a physical location pinned on the map.
++  bool get needsLocation => this != JobModality.online;
++
++  // Requests posted before modality existed were all physical jobs.
++  static JobModality fromWire(Object? value) => values.firstWhere(
++    (modality) => modality.name == value,
++    orElse: () => JobModality.onsite,
++  );
++}
++
++/// Where the rider is within an ongoing errand. Delivery is the request's
++/// `completed` status, so it has no stage of its own.
++enum ErrandStage {
++  headingToPickup('Heading to pickup'),
++  pickedUp('Picked up'),
++  delivering('On the way');
++
++  const ErrandStage(this.label);
++
++  final String label;
++
++  ErrandStage? get next {
++    final nextIndex = index + 1;
++    return nextIndex < values.length ? values[nextIndex] : null;
++  }
++
++  static ErrandStage? fromWire(Object? value) {
++    for (final stage in values) {
++      if (stage.name == value) return stage;
++    }
++    return null;
++  }
++}
++
+ class ServiceRequest {
+   const ServiceRequest({
+     required this.id,
+@@ -24,12 +70,22 @@ class ServiceRequest {
+     required this.description,
+     required this.budget,
+     required this.status,
++    this.modality = JobModality.onsite,
++    this.areaLatitude,
++    this.areaLongitude,
+     this.workerId,
+     this.workerName,
+     this.schedule,
+     this.scheduleFrom,
+     this.scheduleTo,
+     this.createdAt,
++    this.dropoffLocation,
++    this.dropoffLatitude,
++    this.dropoffLongitude,
++    this.errandItems,
++    this.itemCostEstimate,
++    this.distanceKm,
++    this.errandStage,
+   });
+ 
+   final String id;
+@@ -41,6 +97,9 @@ class ServiceRequest {
+   final String description;
+   final double budget;
+   final ServiceRequestStatus status;
++  final JobModality modality;
++  final double? areaLatitude;
++  final double? areaLongitude;
+   final String? workerId;
+   final String? workerName;
+   final DateTime? schedule;
+@@ -48,12 +107,50 @@ class ServiceRequest {
+   final DateTime? scheduleTo;
+   final DateTime? createdAt;
+ 
++  // Errand-only fields. For errands, [location] and [areaPosition] are the
++  // pickup point, so code that only knows about one place keeps working.
++  final String? dropoffLocation;
++  final double? dropoffLatitude;
++  final double? dropoffLongitude;
++  final String? errandItems;
++  final double? itemCostEstimate;
++  final double? distanceKm;
++  final ErrandStage? errandStage;
++
++  bool get isErrand => modality == JobModality.errand;
++
++  /// Short "where" text for cards: the area, prefixed for hybrid jobs.
++  String get placeLabel => switch (modality) {
++    JobModality.online => 'Online',
++    JobModality.hybrid => 'Hybrid · $location',
++    JobModality.onsite => location,
++    JobModality.errand => '$location → ${dropoffLocation ?? 'Drop-off'}',
++  };
++
++  JobCoordinate? get areaPosition =>
++      areaLatitude == null || areaLongitude == null
++      ? null
++      : JobCoordinate(latitude: areaLatitude!, longitude: areaLongitude!);
++
++  JobCoordinate? get dropoffAreaPosition =>
++      dropoffLatitude == null || dropoffLongitude == null
++      ? null
++      : JobCoordinate(latitude: dropoffLatitude!, longitude: dropoffLongitude!);
++
+   factory ServiceRequest.fromDocument(
+     DocumentSnapshot<Map<String, dynamic>> document,
+-  ) {
+-    final data = document.data() ?? const <String, dynamic>{};
++  ) => ServiceRequest.fromMap(
++    document.id,
++    document.data() ?? const <String, dynamic>{},
++  );
++
++  factory ServiceRequest.fromMap(String id, Map<String, dynamic> data) {
++    final areaPosition = JobCoordinate.fromGeoPoint(data['areaPosition']);
++    final dropoffAreaPosition = JobCoordinate.fromGeoPoint(
++      data['dropoffAreaPosition'],
++    );
+     return ServiceRequest(
+-      id: document.id,
++      id: id,
+       clientId: (data['clientId'] ?? '').toString(),
+       clientName: (data['clientName'] ?? 'Client').toString(),
+       title: (data['title'] ?? 'Untitled request').toString(),
+@@ -62,6 +159,9 @@ class ServiceRequest {
+       description: (data['description'] ?? '').toString(),
+       budget: (data['budget'] as num?)?.toDouble() ?? 0,
+       status: ServiceRequestStatus.fromWire(data['status']),
++      modality: JobModality.fromWire(data['modality']),
++      areaLatitude: areaPosition?.latitude,
++      areaLongitude: areaPosition?.longitude,
+       workerId: data['workerId']?.toString(),
+       workerName: data['workerName']?.toString(),
+       schedule: (data['schedule'] as Timestamp?)?.toDate(),
+@@ -72,6 +172,13 @@ class ServiceRequest {
+           (data['scheduleTo'] as Timestamp?)?.toDate() ??
+           (data['schedule'] as Timestamp?)?.toDate(),
+       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
++      dropoffLocation: data['dropoffLocation']?.toString(),
++      dropoffLatitude: dropoffAreaPosition?.latitude,
++      dropoffLongitude: dropoffAreaPosition?.longitude,
++      errandItems: data['errandItems']?.toString(),
++      itemCostEstimate: (data['itemCostEstimate'] as num?)?.toDouble(),
++      distanceKm: (data['distanceKm'] as num?)?.toDouble(),
++      errandStage: ErrandStage.fromWire(data['errandStage']),
+     );
+   }
+ }
+diff --git a/mobile/my_app/lib/shared/repositories/service_request_repository.dart b/mobile/my_app/lib/shared/repositories/service_request_repository.dart
+index 806f138..36d14d4 100644
+--- a/mobile/my_app/lib/shared/repositories/service_request_repository.dart
++++ b/mobile/my_app/lib/shared/repositories/service_request_repository.dart
+@@ -1,20 +1,115 @@
+ import 'package:cloud_firestore/cloud_firestore.dart';
+ 
+ import '../models/app_user.dart';
++import '../models/job_location.dart';
++import '../models/rider_location.dart';
+ import '../models/service_application.dart';
+ import '../models/service_request.dart';
++import '../utils/job_location_utils.dart';
+ 
+ String conversationIdFor({
+   required String clientId,
+   required String workerId,
+ }) => '${clientId}_$workerId';
+ 
++/// The extra details a client gives when posting an errand.
++class ErrandDetails {
++  const ErrandDetails({
++    required this.dropoff,
++    required this.items,
++    required this.distanceKm,
++    this.itemCostEstimate,
++  });
++
++  final JobLocationSelection dropoff;
++  final String items;
++  final double distanceKm;
++  final double? itemCostEstimate;
++}
++
+ class ServiceRequestRepository {
+   ServiceRequestRepository({FirebaseFirestore? firestore})
+     : _firestore = firestore ?? FirebaseFirestore.instance;
+ 
+   final FirebaseFirestore _firestore;
+ 
++  Future<void> createRequest({
++    required String clientId,
++    required String clientName,
++    required String title,
++    required String category,
++    required double budget,
++    required DateTime scheduleFrom,
++    required DateTime scheduleTo,
++    required String description,
++    required JobModality modality,
++    JobLocationSelection? location,
++    ErrandDetails? errand,
++  }) async {
++    if (modality.needsLocation && location == null) {
++      throw ArgumentError.notNull('location');
++    }
++    if (modality == JobModality.errand && errand == null) {
++      throw ArgumentError.notNull('errand');
++    }
++    final errandDetails = modality == JobModality.errand ? errand : null;
++    // Online jobs have no physical place, so no pin is stored for them.
++    final pinned = modality.needsLocation ? location : null;
++    final requestRef = _firestore.collection('service_requests').doc();
++    final batch = _firestore.batch();
++
++    batch.set(requestRef, {
++      'clientId': clientId,
++      'clientName': clientName,
++      'title': title,
++      'category': category,
++      'budget': budget,
++      'schedule': Timestamp.fromDate(scheduleFrom),
++      'scheduleFrom': Timestamp.fromDate(scheduleFrom),
++      'scheduleTo': Timestamp.fromDate(scheduleTo),
++      'modality': modality.name,
++      'location': pinned?.areaLabel ?? JobModality.online.label,
++      if (pinned != null)
++        'areaPosition': roundToPublicArea(pinned.position).toGeoPoint(),
++      if (errandDetails != null) ...{
++        'dropoffLocation': errandDetails.dropoff.areaLabel,
++        'dropoffAreaPosition': roundToPublicArea(
++          errandDetails.dropoff.position,
++        ).toGeoPoint(),
++        'errandItems': errandDetails.items,
++        'distanceKm': errandDetails.distanceKm,
++        if (errandDetails.itemCostEstimate != null)
++          'itemCostEstimate': errandDetails.itemCostEstimate,
++      },
++      'description': description,
++      'status': ServiceRequestStatus.pending.name,
++      'createdAt': FieldValue.serverTimestamp(),
++    });
++    if (pinned != null) {
++      batch.set(requestRef.collection('private').doc('location'), {
++        'position': pinned.position.toGeoPoint(),
++        'address': pinned.exactAddress,
++        if (errandDetails != null) ...{
++          'dropoffPosition': errandDetails.dropoff.position.toGeoPoint(),
++          'dropoffAddress': errandDetails.dropoff.exactAddress,
++        },
++        'createdAt': FieldValue.serverTimestamp(),
++      });
++    }
++    await batch.commit();
++  }
++
++  Future<ExactJobLocation?> getExactLocation(String requestId) async {
++    final document = await _firestore
++        .collection('service_requests')
++        .doc(requestId)
++        .collection('private')
++        .doc('location')
++        .get();
++    final data = document.data();
++    return data == null ? null : ExactJobLocation.fromMap(data);
++  }
++
+   Stream<List<ServiceRequest>> watchAvailable() => _firestore
+       .collection('service_requests')
+       .where('status', isEqualTo: ServiceRequestStatus.pending.name)
+@@ -281,7 +376,71 @@ class ServiceRequestRepository {
+       transaction.update(reference, {
+         'status': to.name,
+         '${to.name}At': FieldValue.serverTimestamp(),
++        // Starting an errand means the rider is on the way to the pickup.
++        if (data['modality'] == JobModality.errand.name &&
++            to == ServiceRequestStatus.ongoing)
++          'errandStage': ErrandStage.headingToPickup.name,
++      });
++    });
++  }
++
++  /// Moves an ongoing errand one stage forward.
++  Future<void> advanceErrandStage({
++    required String requestId,
++    required ErrandStage from,
++    required String workerId,
++  }) async {
++    final to = from.next;
++    if (to == null) {
++      throw StateError('Mark the errand as delivered instead.');
++    }
++    final reference = _firestore.collection('service_requests').doc(requestId);
++    await _firestore.runTransaction((transaction) async {
++      final snapshot = await transaction.get(reference);
++      final data = snapshot.data();
++      if (data == null ||
++          data['workerId'] != workerId ||
++          data['status'] != ServiceRequestStatus.ongoing.name ||
++          data['errandStage'] != from.name) {
++        throw StateError('The errand changed before this action completed.');
++      }
++      transaction.update(reference, {
++        'errandStage': to.name,
++        '${to.name}At': FieldValue.serverTimestamp(),
+       });
+     });
+   }
++
++  DocumentReference<Map<String, dynamic>> _riderLocationRef(String requestId) =>
++      _firestore
++          .collection('service_requests')
++          .doc(requestId)
++          .collection('private')
++          .doc('rider_location');
++
++  Future<void> publishRiderLocation({
++    required String requestId,
++    required JobCoordinate position,
++    double? heading,
++    double? speed,
++  }) => _riderLocationRef(requestId).set({
++    'position': position.toGeoPoint(),
++    'heading': ?heading,
++    'speed': ?speed,
++    'updatedAt': FieldValue.serverTimestamp(),
++  });
++
++  Stream<RiderLocation?> watchRiderLocation(String requestId) =>
++      _riderLocationRef(
++        requestId,
++      ).snapshots().map((document) => RiderLocation.fromMap(document.data()));
++
++  Stream<ServiceRequest?> watchRequest(String requestId) => _firestore
++      .collection('service_requests')
++      .doc(requestId)
++      .snapshots()
++      .map(
++        (document) =>
++            document.exists ? ServiceRequest.fromDocument(document) : null,
++      );
+ }
+diff --git a/mobile/my_app/lib/shared/services/api_service.dart b/mobile/my_app/lib/shared/services/api_service.dart
+index d9ad479..51edae9 100644
+--- a/mobile/my_app/lib/shared/services/api_service.dart
++++ b/mobile/my_app/lib/shared/services/api_service.dart
+@@ -11,6 +11,30 @@ class ApiService {
+   final http.Client _client;
+   static const _requestTimeout = Duration(seconds: 30);
+ 
++  /// Throws [ApiConnectionException] when the backend cannot be reached, so
++  /// sign-up can stop before creating a Firebase account without a profile.
++  Future<void> checkReachable() async {
++    late final http.Response response;
++    try {
++      response = await _client
++          .get(Uri.parse('${ApiConfig.baseUrl}/api/health'))
++          .timeout(_requestTimeout);
++    } on TimeoutException {
++      throw const ApiConnectionException(
++        'The SwiftServe server did not respond. Make sure the backend is running and try again.',
++      );
++    } on http.ClientException {
++      throw const ApiConnectionException(
++        'The SwiftServe server could not be reached. Check the backend connection and try again.',
++      );
++    }
++    if (response.statusCode != 200) {
++      throw const ApiConnectionException(
++        'The SwiftServe server is not ready. Try again in a moment.',
++      );
++    }
++  }
++
+   Future<void> createUserProfile({
+     required String idToken,
+     required String fullName,
+diff --git a/mobile/my_app/lib/shared/services/device_location_service.dart b/mobile/my_app/lib/shared/services/device_location_service.dart
+new file mode 100644
+index 0000000..e6df174
+--- /dev/null
++++ b/mobile/my_app/lib/shared/services/device_location_service.dart
+@@ -0,0 +1,91 @@
++import 'dart:async';
++
++import 'package:geolocator/geolocator.dart';
++
++import '../models/job_location.dart';
++
++enum DeviceLocationFailure {
++  serviceDisabled,
++  permissionDenied,
++  permissionPermanentlyDenied,
++  timedOut,
++  unavailable,
++}
++
++class DeviceLocationException implements Exception {
++  const DeviceLocationException(this.failure);
++
++  final DeviceLocationFailure failure;
++
++  String get userMessage => switch (failure) {
++    DeviceLocationFailure.serviceDisabled =>
++      'Turn on location services, then try again.',
++    DeviceLocationFailure.permissionDenied =>
++      'Location permission was denied. You can try again or choose a pin manually.',
++    DeviceLocationFailure.permissionPermanentlyDenied =>
++      'Location permission is blocked. Enable it in your device settings.',
++    DeviceLocationFailure.timedOut =>
++      'Your location took too long to load. Try again or choose a pin manually.',
++    DeviceLocationFailure.unavailable =>
++      'Your location is unavailable right now. Try again or choose a pin manually.',
++  };
++
++  @override
++  String toString() => userMessage;
++}
++
++class DeviceLocationService {
++  const DeviceLocationService();
++
++  Future<JobCoordinate> currentPosition() async {
++    if (!await Geolocator.isLocationServiceEnabled()) {
++      throw const DeviceLocationException(
++        DeviceLocationFailure.serviceDisabled,
++      );
++    }
++
++    var permission = await Geolocator.checkPermission();
++    if (permission == LocationPermission.denied) {
++      permission = await Geolocator.requestPermission();
++    }
++    if (permission == LocationPermission.denied) {
++      throw const DeviceLocationException(
++        DeviceLocationFailure.permissionDenied,
++      );
++    }
++    if (permission == LocationPermission.deniedForever) {
++      throw const DeviceLocationException(
++        DeviceLocationFailure.permissionPermanentlyDenied,
++      );
++    }
++
++    try {
++      final position = await Geolocator.getCurrentPosition(
++        locationSettings: const LocationSettings(
++          accuracy: LocationAccuracy.high,
++          timeLimit: Duration(seconds: 15),
++        ),
++      );
++      return JobCoordinate(
++        latitude: position.latitude,
++        longitude: position.longitude,
++      );
++    } on TimeoutException {
++      throw const DeviceLocationException(DeviceLocationFailure.timedOut);
++    } on DeviceLocationException {
++      rethrow;
++    } catch (_) {
++      throw const DeviceLocationException(DeviceLocationFailure.unavailable);
++    }
++  }
++
++  Future<bool> openRecoverySettings(DeviceLocationFailure failure) => switch (
++    failure
++  ) {
++    DeviceLocationFailure.serviceDisabled =>
++      Geolocator.openLocationSettings(),
++    DeviceLocationFailure.permissionPermanentlyDenied =>
++      Geolocator.openAppSettings(),
++    _ => Future.value(false),
++  };
++}
+diff --git a/mobile/my_app/lib/shared/services/job_geocoding_service.dart b/mobile/my_app/lib/shared/services/job_geocoding_service.dart
+new file mode 100644
+index 0000000..dd0114e
+--- /dev/null
++++ b/mobile/my_app/lib/shared/services/job_geocoding_service.dart
+@@ -0,0 +1,62 @@
++import 'package:geocoding/geocoding.dart';
++
++import '../models/job_location.dart';
++
++class ResolvedJobAddress {
++  const ResolvedJobAddress({
++    required this.exactAddress,
++    required this.areaLabel,
++  });
++
++  final String exactAddress;
++  final String areaLabel;
++}
++
++abstract interface class JobAddressResolver {
++  Future<ResolvedJobAddress> resolve(JobCoordinate coordinate);
++}
++
++class JobGeocodingService implements JobAddressResolver {
++  JobGeocodingService({Geocoding? geocoding})
++    : _geocoding = geocoding ?? Geocoding();
++
++  final Geocoding _geocoding;
++
++  @override
++  Future<ResolvedJobAddress> resolve(JobCoordinate coordinate) async {
++    final placemarks = await _geocoding.placemarkFromCoordinates(
++      coordinate.latitude,
++      coordinate.longitude,
++    );
++    if (placemarks.isEmpty) {
++      throw StateError('No address was found for this pin.');
++    }
++    final placemark = placemarks.first;
++    final exactParts = <String?>[
++      placemark.street,
++      placemark.subLocality,
++      placemark.locality,
++      placemark.subAdministrativeArea,
++      placemark.administrativeArea,
++      placemark.postalCode,
++    ];
++    final areaParts = <String?>[
++      placemark.locality,
++      placemark.subAdministrativeArea,
++      placemark.administrativeArea,
++    ];
++    return ResolvedJobAddress(
++      exactAddress: _uniqueParts(exactParts).join(', '),
++      areaLabel: _uniqueParts(areaParts).take(2).join(', '),
++    );
++  }
++
++  List<String> _uniqueParts(Iterable<String?> parts) {
++    final values = <String>[];
++    for (final part in parts) {
++      final value = part?.trim() ?? '';
++      if (value.isNotEmpty && !values.contains(value)) values.add(value);
++    }
++    return values;
++  }
++}
+diff --git a/mobile/my_app/lib/shared/services/rider_location_service.dart b/mobile/my_app/lib/shared/services/rider_location_service.dart
+new file mode 100644
+index 0000000..e01fc87
+--- /dev/null
++++ b/mobile/my_app/lib/shared/services/rider_location_service.dart
+@@ -0,0 +1,101 @@
++import 'dart:async';
++
++import 'package:geolocator/geolocator.dart';
++
++import '../models/job_location.dart';
++import '../repositories/service_request_repository.dart';
++import 'device_location_service.dart';
++
++/// Streams the rider's position to an errand while the rider's app is open.
++///
++/// Writes are throttled so a moving rider costs a handful of Firestore writes
++/// per minute, not one per GPS fix.
++class RiderLocationPublisher {
++  RiderLocationPublisher({
++    required this.requestId,
++    ServiceRequestRepository? repository,
++    DeviceLocationService locationService = const DeviceLocationService(),
++    this.minInterval = const Duration(seconds: 8),
++  }) : _repository = repository ?? ServiceRequestRepository(),
++       _locationService = locationService;
++
++  final String requestId;
++  final Duration minInterval;
++  final ServiceRequestRepository _repository;
++  final DeviceLocationService _locationService;
++
++  StreamSubscription<Position>? _subscription;
++  DateTime? _lastSentAt;
++  Position? _pending;
++  Timer? _pendingTimer;
++
++  bool get isRunning => _subscription != null;
++
++  /// Starts sharing. Throws [DeviceLocationException] when location is off or
++  /// permission is refused.
++  Future<void> start() async {
++    if (isRunning) return;
++    // Runs the same service and permission checks as a one-off lookup and
++    // sends that first fix right away so the client sees the rider at once.
++    final first = await _locationService.currentPosition();
++    unawaited(_send(first, null, null));
++    _subscription = Geolocator.getPositionStream(
++      locationSettings: const LocationSettings(
++        accuracy: LocationAccuracy.high,
++        distanceFilter: 15,
++      ),
++    ).listen(_onPosition, onError: (_) {});
++  }
++
++  void _onPosition(Position position) {
++    final lastSentAt = _lastSentAt;
++    final now = DateTime.now();
++    if (lastSentAt == null || now.difference(lastSentAt) >= minInterval) {
++      _sendPosition(position);
++      return;
++    }
++    // Keep only the newest fix and send it once the interval has passed.
++    _pending = position;
++    _pendingTimer ??= Timer(minInterval - now.difference(lastSentAt), () {
++      _pendingTimer = null;
++      final pending = _pending;
++      _pending = null;
++      if (pending != null && isRunning) _sendPosition(pending);
++    });
++  }
++
++  void _sendPosition(Position position) => unawaited(
++    _send(
++      JobCoordinate(latitude: position.latitude, longitude: position.longitude),
++      position.heading >= 0 ? position.heading : null,
++      position.speed >= 0 ? position.speed : null,
++    ),
++  );
++
++  Future<void> _send(
++    JobCoordinate position,
++    double? heading,
++    double? speed,
++  ) async {
++    _lastSentAt = DateTime.now();
++    try {
++      await _repository.publishRiderLocation(
++        requestId: requestId,
++        position: position,
++        heading: heading,
++        speed: speed,
++      );
++    } catch (_) {
++      // A dropped update is replaced by the next one; the client shows how
++      // old the last position is.
++    }
++  }
++
++  Future<void> stop() async {
++    _pendingTimer?.cancel();
++    _pendingTimer = null;
++    _pending = null;
++    await _subscription?.cancel();
++    _subscription = null;
++  }
++}
+diff --git a/mobile/my_app/lib/shared/utils/errand_pricing.dart b/mobile/my_app/lib/shared/utils/errand_pricing.dart
+new file mode 100644
+index 0000000..52790f0
+--- /dev/null
++++ b/mobile/my_app/lib/shared/utils/errand_pricing.dart
+@@ -0,0 +1,18 @@
++import '../models/job_location.dart';
++import 'job_location_utils.dart';
++
++// Straight-line distance undercounts real roads, so it is scaled up.
++const double errandRoadFactor = 1.3;
++const double errandBaseFee = 50;
++const double errandPerKmFee = 10;
++const double errandFeeStep = 5;
++
++/// Estimated road distance in km between pickup and drop-off.
++double errandDistanceKm(JobCoordinate pickup, JobCoordinate dropoff) =>
++    distanceMetersBetween(pickup, dropoff) / 1000 * errandRoadFactor;
++
++/// Delivery fee in pesos: base + per-km, rounded up to the nearest ₱5.
++double errandDeliveryFee(double distanceKm) {
++  final raw = errandBaseFee + errandPerKmFee * distanceKm;
++  return (raw / errandFeeStep).ceil() * errandFeeStep;
++}
+diff --git a/mobile/my_app/lib/shared/utils/job_location_utils.dart b/mobile/my_app/lib/shared/utils/job_location_utils.dart
+new file mode 100644
+index 0000000..2409a50
+--- /dev/null
++++ b/mobile/my_app/lib/shared/utils/job_location_utils.dart
+@@ -0,0 +1,37 @@
++import 'dart:math' as math;
++
++import '../models/job_location.dart';
++
++const double _earthRadiusMeters = 6371000;
++
++JobCoordinate roundToPublicArea(JobCoordinate coordinate) => JobCoordinate(
++  latitude: _roundToTwoDecimals(coordinate.latitude),
++  longitude: _roundToTwoDecimals(coordinate.longitude),
++);
++
++double _roundToTwoDecimals(double value) => (value * 100).round() / 100;
++
++double distanceMetersBetween(JobCoordinate from, JobCoordinate to) {
++  final latitudeDelta = _radians(to.latitude - from.latitude);
++  final longitudeDelta = _radians(to.longitude - from.longitude);
++  final fromLatitude = _radians(from.latitude);
++  final toLatitude = _radians(to.latitude);
++  final a = math.sin(latitudeDelta / 2) * math.sin(latitudeDelta / 2) +
++      math.cos(fromLatitude) *
++          math.cos(toLatitude) *
++          math.sin(longitudeDelta / 2) *
++          math.sin(longitudeDelta / 2);
++  final angularDistance = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
++  return _earthRadiusMeters * angularDistance;
++}
++
++String formatDistance(double meters, {bool approximate = false}) {
++  final prefix = approximate ? '~' : '';
++  if (meters < 1000) {
++    final roundedMeters = (meters / 10).round() * 10;
++    return '$prefix$roundedMeters m away';
++  }
++  return '$prefix${(meters / 1000).toStringAsFixed(1)} km away';
++}
++
++double _radians(double degrees) => degrees * math.pi / 180;
+diff --git a/mobile/my_app/lib/shared/widgets/errand_map_layers.dart b/mobile/my_app/lib/shared/widgets/errand_map_layers.dart
+new file mode 100644
+index 0000000..9a6491f
+--- /dev/null
++++ b/mobile/my_app/lib/shared/widgets/errand_map_layers.dart
+@@ -0,0 +1,101 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_map/flutter_map.dart';
++import 'package:latlong2/latlong.dart';
++
++import '../models/job_location.dart';
++import 'open_street_map_layers.dart';
++
++LatLng _latLng(JobCoordinate coordinate) =>
++    LatLng(coordinate.latitude, coordinate.longitude);
++
++/// Camera fit that keeps every given point on screen.
++CameraFit errandCameraFit(List<JobCoordinate> points) => CameraFit.coordinates(
++  coordinates: points.map(_latLng).toList(growable: false),
++  padding: const EdgeInsets.all(48),
++  maxZoom: 16,
++);
++
++/// Map layers for an errand: a line from pickup to drop-off, both pins, and
++/// the rider when their position is known.
++List<Widget> errandMapLayers({
++  required JobCoordinate pickup,
++  required JobCoordinate dropoff,
++  JobCoordinate? rider,
++  required Color routeColor,
++}) => [
++  PolylineLayer(
++    polylines: [
++      Polyline(
++        points: [_latLng(pickup), _latLng(dropoff)],
++        color: routeColor,
++        strokeWidth: 4,
++        pattern: StrokePattern.dashed(segments: const [10, 8]),
++      ),
++    ],
++  ),
++  MarkerLayer(
++    markers: [
++      Marker(
++        point: _latLng(pickup),
++        width: 48,
++        height: 48,
++        alignment: Alignment.bottomCenter,
++        child: const SwiftServeMapPin(label: 'Pickup point'),
++      ),
++      Marker(
++        point: _latLng(dropoff),
++        width: 40,
++        height: 40,
++        child: const _DropoffMarker(),
++      ),
++      if (rider != null)
++        Marker(
++          point: _latLng(rider),
++          width: 44,
++          height: 44,
++          child: const RiderMarker(),
++        ),
++    ],
++  ),
++];
++
++class _DropoffMarker extends StatelessWidget {
++  const _DropoffMarker();
++
++  @override
++  Widget build(BuildContext context) => Semantics(
++    label: 'Drop-off point',
++    image: true,
++    child: Container(
++      decoration: BoxDecoration(
++        color: Theme.of(context).colorScheme.surface,
++        shape: BoxShape.circle,
++        border: Border.all(color: const Color(0xFF2E7D32), width: 3),
++        boxShadow: const [BoxShadow(color: Color(0x44000000), blurRadius: 4)],
++      ),
++      child: const Icon(Icons.flag, color: Color(0xFF2E7D32), size: 22),
++    ),
++  );
++}
++
++class RiderMarker extends StatelessWidget {
++  const RiderMarker({super.key});
++
++  @override
++  Widget build(BuildContext context) => Semantics(
++    label: 'Rider location',
++    image: true,
++    child: Container(
++      decoration: const BoxDecoration(
++        color: Color(0xFFFFC72C),
++        shape: BoxShape.circle,
++        boxShadow: [BoxShadow(color: Color(0x55000000), blurRadius: 5)],
++      ),
++      child: const Icon(
++        Icons.delivery_dining,
++        color: Color(0xFF242424),
++        size: 26,
++      ),
++    ),
++  );
++}
+diff --git a/mobile/my_app/lib/shared/widgets/job_location_picker.dart b/mobile/my_app/lib/shared/widgets/job_location_picker.dart
+new file mode 100644
+index 0000000..af034a4
+--- /dev/null
++++ b/mobile/my_app/lib/shared/widgets/job_location_picker.dart
+@@ -0,0 +1,334 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_map/flutter_map.dart';
++import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
++import 'package:latlong2/latlong.dart';
++
++import '../models/job_location.dart';
++import '../services/device_location_service.dart';
++import '../services/job_geocoding_service.dart';
++import 'open_street_map_layers.dart';
++
++typedef JobLocationMapBuilder =
++    Widget Function(
++      BuildContext context,
++      JobCoordinate? position,
++      ValueChanged<JobCoordinate> onSelected,
++    );
++
++class JobLocationPicker extends StatefulWidget {
++  const JobLocationPicker({
++    super.key,
++    required this.onChanged,
++    this.errorText,
++    this.locationService = const DeviceLocationService(),
++    this.geocodingService,
++    this.mapBuilder,
++  });
++
++  final ValueChanged<JobLocationSelection?> onChanged;
++  final String? errorText;
++  final DeviceLocationService locationService;
++  final JobAddressResolver? geocodingService;
++  final JobLocationMapBuilder? mapBuilder;
++
++  @override
++  State<JobLocationPicker> createState() => _JobLocationPickerState();
++}
++
++class _JobLocationPickerState extends State<JobLocationPicker> {
++  static const _philippinesCenter = LatLng(12.8797, 121.7740);
++
++  final _addressController = TextEditingController();
++  final _mapController = MapController();
++  late final JobAddressResolver _geocodingService;
++  JobCoordinate? _position;
++  String _areaLabel = 'Pinned service area';
++  String? _statusMessage;
++  DeviceLocationFailure? _failure;
++  bool _loading = false;
++  bool _mapReady = false;
++  bool _mapFailed = false;
++  int _mapErrorCount = 0;
++  int _mapReloadVersion = 0;
++  int _lookupVersion = 0;
++  JobCoordinate? _pendingCameraPosition;
++
++  @override
++  void initState() {
++    super.initState();
++    _geocodingService = widget.geocodingService ?? JobGeocodingService();
++    _addressController.addListener(_notifySelection);
++  }
++
++  @override
++  void dispose() {
++    _addressController
++      ..removeListener(_notifySelection)
++      ..dispose();
++    _mapController.dispose();
++    super.dispose();
++  }
++
++  void _notifySelection() {
++    final position = _position;
++    final address = _addressController.text.trim();
++    if (position == null) {
++      widget.onChanged(null);
++      return;
++    }
++    widget.onChanged(
++      JobLocationSelection(
++        position: position,
++        exactAddress: address,
++        areaLabel: _areaLabel,
++      ),
++    );
++  }
++
++  Future<void> _useCurrentLocation() async {
++    setState(() {
++      _loading = true;
++      _failure = null;
++      _statusMessage = 'Finding your location…';
++    });
++    try {
++      final position = await widget.locationService.currentPosition();
++      if (!mounted) return;
++      await _selectPosition(position, moveCamera: true);
++    } on DeviceLocationException catch (error) {
++      if (!mounted) return;
++      setState(() {
++        _loading = false;
++        _failure = error.failure;
++        _statusMessage = error.userMessage;
++      });
++    }
++  }
++
++  Future<void> _selectPosition(
++    JobCoordinate position, {
++    bool moveCamera = false,
++  }) async {
++    final version = ++_lookupVersion;
++    _areaLabel = 'Pinned service area';
++    _addressController.clear();
++    setState(() {
++      _position = position;
++      _loading = true;
++      _failure = null;
++      _statusMessage = 'Looking up the pinned address…';
++    });
++    _notifySelection();
++    if (moveCamera) {
++      if (_mapReady) {
++        _moveMapTo(position);
++      } else {
++        _pendingCameraPosition = position;
++      }
++    }
++
++    try {
++      final address = await _geocodingService.resolve(position);
++      if (!mounted || version != _lookupVersion) return;
++      _areaLabel = address.areaLabel.isEmpty
++          ? 'Pinned service area'
++          : address.areaLabel;
++      _addressController.text = address.exactAddress;
++      setState(() {
++        _loading = false;
++        _statusMessage = address.exactAddress.isEmpty
++            ? 'Enter a recognizable address for this pin.'
++            : 'Exact address is shared only with the accepted worker.';
++      });
++      _notifySelection();
++    } catch (_) {
++      if (!mounted || version != _lookupVersion) return;
++      _areaLabel = 'Pinned service area';
++      setState(() {
++        _loading = false;
++        _statusMessage =
++            'Address lookup failed. Keep the pin and enter the address manually.';
++      });
++      _notifySelection();
++    }
++  }
++
++  Future<void> _openSettings() async {
++    final failure = _failure;
++    if (failure == null) return;
++    await widget.locationService.openRecoverySettings(failure);
++  }
++
++  void _moveMapTo(JobCoordinate position) {
++    _mapController.move(LatLng(position.latitude, position.longitude), 16);
++  }
++
++  void _handleMapReady() {
++    _mapReady = true;
++    final pendingPosition = _pendingCameraPosition;
++    _pendingCameraPosition = null;
++    if (pendingPosition != null) _moveMapTo(pendingPosition);
++  }
++
++  void _handleMapTileError(Object error) {
++    if (_mapFailed || !mounted) return;
++    _mapErrorCount += 1;
++    if (_mapErrorCount < 3) return;
++    setState(() => _mapFailed = true);
++  }
++
++  void _retryMap() {
++    setState(() {
++      _mapFailed = false;
++      _mapErrorCount = 0;
++      _mapReloadVersion += 1;
++    });
++  }
++
++  @override
++  Widget build(BuildContext context) {
++    final canOpenSettings =
++        _failure == DeviceLocationFailure.serviceDisabled ||
++        _failure == DeviceLocationFailure.permissionPermanentlyDenied;
++
++    return Column(
++      crossAxisAlignment: CrossAxisAlignment.start,
++      children: [
++        if (widget.mapBuilder != null)
++          widget.mapBuilder!(context, _position, _selectPosition)
++        else
++          ClipRRect(
++            borderRadius: BorderRadius.circular(12),
++            child: SizedBox(
++              height: 230,
++              child: Stack(
++                children: [
++                  Semantics(
++                    label:
++                        'Job location map. Tap the map or drag the marker to choose the service location.',
++                    child: FlutterMap(
++                      mapController: _mapController,
++                      options: MapOptions(
++                        initialCenter: _philippinesCenter,
++                        initialZoom: 5.3,
++                        minZoom: 3,
++                        maxZoom: 18,
++                        onMapReady: _handleMapReady,
++                        backgroundColor: Theme.of(
++                          context,
++                        ).colorScheme.surfaceContainerHighest,
++                        onTap: (_, position) => _selectPosition(
++                          JobCoordinate(
++                            latitude: position.latitude,
++                            longitude: position.longitude,
++                          ),
++                        ),
++                      ),
++                      children: [
++                        SwiftServeMapTiles(
++                          key: ValueKey(_mapReloadVersion),
++                          onError: (_, error, _) => _handleMapTileError(error),
++                        ),
++                        if (_position != null)
++                          DragMarkers(
++                            markers: [
++                              DragMarker(
++                                point: LatLng(
++                                  _position!.latitude,
++                                  _position!.longitude,
++                                ),
++                                size: const Size(48, 48),
++                                alignment: Alignment.bottomCenter,
++                                scrollMapNearEdge: true,
++                                builder: (_, _, isDragging) =>
++                                    SwiftServeMapPin(isDragging: isDragging),
++                                onDragEnd: (_, position) => _selectPosition(
++                                  JobCoordinate(
++                                    latitude: position.latitude,
++                                    longitude: position.longitude,
++                                  ),
++                                ),
++                              ),
++                            ],
++                          ),
++                        const SwiftServeMapAttribution(),
++                      ],
++                    ),
++                  ),
++                  if (_mapFailed) MapUnavailableOverlay(onRetry: _retryMap),
++                ],
++              ),
++            ),
++          ),
++        const SizedBox(height: 10),
++        SizedBox(
++          width: double.infinity,
++          height: 48,
++          child: OutlinedButton.icon(
++            onPressed: _loading ? null : _useCurrentLocation,
++            icon: _loading
++                ? const SizedBox(
++                    width: 18,
++                    height: 18,
++                    child: CircularProgressIndicator(strokeWidth: 2),
++                  )
++                : const Icon(Icons.my_location_outlined),
++            label: Text(_loading ? 'Locating…' : 'Use my current location'),
++          ),
++        ),
++        const SizedBox(height: 10),
++        TextField(
++          controller: _addressController,
++          enabled: _position != null,
++          minLines: 1,
++          maxLines: 2,
++          decoration: InputDecoration(
++            labelText: 'Exact service address',
++            hintText: _position == null
++                ? 'Choose a pin first'
++                : 'Enter the address for the selected pin',
++            prefixIcon: const Icon(Icons.location_on_outlined),
++            border: const OutlineInputBorder(),
++          ),
++        ),
++        if (_statusMessage != null) ...[
++          const SizedBox(height: 8),
++          Semantics(
++            liveRegion: true,
++            child: Text(
++              _statusMessage!,
++              style: Theme.of(context).textTheme.bodySmall?.copyWith(
++                color: _failure == null
++                    ? Theme.of(context).colorScheme.onSurfaceVariant
++                    : Theme.of(context).colorScheme.error,
++              ),
++            ),
++          ),
++        ],
++        if (canOpenSettings)
++          TextButton.icon(
++            onPressed: _openSettings,
++            icon: const Icon(Icons.settings_outlined),
++            label: Text(
++              _failure == DeviceLocationFailure.serviceDisabled
++                  ? 'Open location settings'
++                  : 'Open app settings',
++            ),
++          ),
++        if (widget.errorText != null) ...[
++          const SizedBox(height: 6),
++          Semantics(
++            liveRegion: true,
++            child: Text(
++              widget.errorText!,
++              style: TextStyle(
++                color: Theme.of(context).colorScheme.error,
++                fontSize: 12,
++              ),
++            ),
++          ),
++        ],
++      ],
++    );
++  }
++}
+diff --git a/mobile/my_app/lib/shared/widgets/open_street_map_layers.dart b/mobile/my_app/lib/shared/widgets/open_street_map_layers.dart
+new file mode 100644
+index 0000000..97c5048
+--- /dev/null
++++ b/mobile/my_app/lib/shared/widgets/open_street_map_layers.dart
+@@ -0,0 +1,109 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_map/flutter_map.dart';
++
++const openStreetMapTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
++
++class SwiftServeMapTiles extends StatelessWidget {
++  const SwiftServeMapTiles({super.key, this.onError});
++
++  final ErrorTileCallBack? onError;
++
++  @override
++  Widget build(BuildContext context) {
++    return TileLayer(
++      urlTemplate: openStreetMapTileUrl,
++      userAgentPackageName: 'com.example.my_app',
++      maxNativeZoom: 19,
++      errorTileCallback: onError,
++    );
++  }
++}
++
++class SwiftServeMapAttribution extends StatelessWidget {
++  const SwiftServeMapAttribution({super.key});
++
++  @override
++  Widget build(BuildContext context) {
++    return const SimpleAttributionWidget(
++      source: Text('OpenStreetMap contributors'),
++    );
++  }
++}
++
++class SwiftServeMapPin extends StatelessWidget {
++  const SwiftServeMapPin({
++    super.key,
++    this.label = 'Selected job location',
++    this.isDragging = false,
++  });
++
++  final String label;
++  final bool isDragging;
++
++  @override
++  Widget build(BuildContext context) {
++    final colorScheme = Theme.of(context).colorScheme;
++    return Semantics(
++      label: label,
++      image: true,
++      child: AnimatedScale(
++        scale: isDragging ? 1.12 : 1,
++        duration: const Duration(milliseconds: 120),
++        child: Icon(
++          Icons.location_pin,
++          size: 48,
++          color: colorScheme.primary,
++          shadows: const [
++            Shadow(
++              color: Color(0x66000000),
++              offset: Offset(0, 2),
++              blurRadius: 4,
++            ),
++          ],
++        ),
++      ),
++    );
++  }
++}
++
++class MapUnavailableOverlay extends StatelessWidget {
++  const MapUnavailableOverlay({super.key, required this.onRetry});
++
++  final VoidCallback onRetry;
++
++  @override
++  Widget build(BuildContext context) {
++    return Positioned.fill(
++      child: ColoredBox(
++        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.94),
++        child: Center(
++          child: Padding(
++            padding: const EdgeInsets.all(20),
++            child: Column(
++              mainAxisSize: MainAxisSize.min,
++              children: [
++                const Icon(Icons.map_outlined, size: 36),
++                const SizedBox(height: 8),
++                Text(
++                  'Map unavailable',
++                  style: Theme.of(context).textTheme.titleSmall,
++                ),
++                const SizedBox(height: 4),
++                const Text(
++                  'Check your internet connection, then try again.',
++                  textAlign: TextAlign.center,
++                ),
++                const SizedBox(height: 8),
++                OutlinedButton.icon(
++                  onPressed: onRetry,
++                  icon: const Icon(Icons.refresh),
++                  label: const Text('Retry map'),
++                ),
++              ],
++            ),
++          ),
++        ),
++      ),
++    );
++  }
++}
+diff --git a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_picker b/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_picker
+deleted file mode 120000
+index 61466e7..0000000
+--- a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_picker
++++ /dev/null
+@@ -1 +0,0 @@
+-C:/Users/User/AppData/Local/Pub/Cache/hosted/pub.dev/file_picker-10.3.10/
+\ No newline at end of file
+diff --git a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux b/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux
+deleted file mode 120000
+index 6953b24..0000000
+--- a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux
++++ /dev/null
+@@ -1 +0,0 @@
+-C:/Users/User/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_linux-0.9.4+1/
+\ No newline at end of file
+diff --git a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux b/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
+deleted file mode 120000
+index 4e66fcf..0000000
+--- a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
++++ /dev/null
+@@ -1 +0,0 @@
+-C:/Users/User/AppData/Local/Pub/Cache/hosted/pub.dev/image_picker_linux-0.2.2/
+\ No newline at end of file
+diff --git a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux b/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux
+deleted file mode 120000
+index a69ba41..0000000
+--- a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux
++++ /dev/null
+@@ -1 +0,0 @@
+-C:/Users/User/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_linux-2.2.2/
+\ No newline at end of file
+diff --git a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux b/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux
+deleted file mode 120000
+index 88edb21..0000000
+--- a/mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux
++++ /dev/null
+@@ -1 +0,0 @@
+-C:/Users/User/AppData/Local/Pub/Cache/hosted/pub.dev/shared_preferences_linux-2.4.1/
+\ No newline at end of file
+diff --git a/mobile/my_app/linux/flutter/generated_plugins.cmake b/mobile/my_app/linux/flutter/generated_plugins.cmake
+index 2db3c22..a630fa9 100644
+--- a/mobile/my_app/linux/flutter/generated_plugins.cmake
++++ b/mobile/my_app/linux/flutter/generated_plugins.cmake
+@@ -7,6 +7,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
+ )
+ 
+ list(APPEND FLUTTER_FFI_PLUGIN_LIST
++  jni
+ )
+ 
+ set(PLUGIN_BUNDLED_LIBRARIES)
+diff --git a/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift b/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
+index a344229..602b53d 100644
+--- a/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
++++ b/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
+@@ -11,7 +11,10 @@ import file_selector_macos
+ import firebase_auth
+ import firebase_core
+ import firebase_storage
++import geocoding_darwin
++import geolocator_apple
+ import google_sign_in_ios
++import package_info_plus
+ import shared_preferences_foundation
+ 
+ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+@@ -21,6 +24,9 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+   FLTFirebaseAuthPlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseAuthPlugin"))
+   FLTFirebaseCorePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseCorePlugin"))
+   FLTFirebaseStoragePlugin.register(with: registry.registrar(forPlugin: "FLTFirebaseStoragePlugin"))
++  GeocodingDarwinPlugin.register(with: registry.registrar(forPlugin: "GeocodingDarwinPlugin"))
++  GeolocatorPlugin.register(with: registry.registrar(forPlugin: "GeolocatorPlugin"))
+   GoogleSignInPlugin.register(with: registry.registrar(forPlugin: "GoogleSignInPlugin"))
++  FPPPackageInfoPlusPlugin.register(with: registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))
+   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
+ }
+diff --git a/mobile/my_app/pubspec.lock b/mobile/my_app/pubspec.lock
+index 3a1ad67..d5ae606 100644
+--- a/mobile/my_app/pubspec.lock
++++ b/mobile/my_app/pubspec.lock
+@@ -9,6 +9,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.3.77"
++  archive:
++    dependency: transitive
++    description:
++      name: archive
++      sha256: "0d58d1fa1fddf6588251ccf2819f3fb3b6d0452c1b2813ac7413a05592bfbefe"
++      url: "https://pub.dev"
++    source: hosted
++    version: "4.5.2"
+   args:
+     dependency: transitive
+     description:
+@@ -113,6 +121,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "5.7.3"
++  code_assets:
++    dependency: transitive
++    description:
++      name: code_assets
++      sha256: bf394f466ba9205f1812a0433b392d6af280f155f56651eda7c18cc32ed493b8
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.2.1"
+   collection:
+     dependency: transitive
+     description:
+@@ -129,14 +145,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "0.3.5+5"
+-  csslib:
++  crypto:
+     dependency: transitive
+     description:
+-      name: csslib
+-      sha256: "09bad715f418841f976c77db72d5398dc1253c21fb9c0c7f0b0b985860b2d58e"
++      name: crypto
++      sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
+       url: "https://pub.dev"
+     source: hosted
+-    version: "1.0.2"
++    version: "3.0.7"
+   cupertino_icons:
+     dependency: "direct main"
+     description:
+@@ -145,6 +161,22 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.0.9"
++  dart_earcut:
++    dependency: transitive
++    description:
++      name: dart_earcut
++      sha256: e485001bfc05dcbc437d7bfb666316182e3522d4c3f9668048e004d0eb2ce43b
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.2.0"
++  dart_polylabel2:
++    dependency: transitive
++    description:
++      name: dart_polylabel2
++      sha256: "7eeab15ce72894e4bdba6a8765712231fc81be0bd95247de4ad9966abc57adc6"
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.0.0"
+   dbus:
+     dependency: transitive
+     description:
+@@ -289,6 +321,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "3.11.13"
++  fixnum:
++    dependency: transitive
++    description:
++      name: fixnum
++      sha256: b6dc7065e46c974bc7c5f143080a6764ec7a4be6da1285ececdc37be96de53be
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.1.1"
+   flutter:
+     dependency: "direct main"
+     description: flutter
+@@ -302,6 +342,22 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "6.0.0"
++  flutter_map:
++    dependency: "direct main"
++    description:
++      name: flutter_map
++      sha256: "9bbe5472f66ae648d2ca2efbce97fcaa04e71261fabd3e062f26728222d7f767"
++      url: "https://pub.dev"
++    source: hosted
++    version: "8.3.2"
++  flutter_map_dragmarker:
++    dependency: "direct main"
++    description:
++      name: flutter_map_dragmarker
++      sha256: d73ca9e1c30b1a906a010053594f5957a5d1d8551d3d3ff1267a6f3ff88f4d26
++      url: "https://pub.dev"
++    source: hosted
++    version: "8.0.3"
+   flutter_plugin_android_lifecycle:
+     dependency: transitive
+     description:
+@@ -328,62 +384,110 @@ packages:
+     description: flutter
+     source: sdk
+     version: "0.0.0"
+-  google_identity_services_web:
++  geoclue:
+     dependency: transitive
+     description:
+-      name: google_identity_services_web
+-      sha256: "5d187c46dc59e02646e10fe82665fc3884a9b71bc1c90c2b8b749316d33ee454"
++      name: geoclue
++      sha256: c2a998c77474fc57aa00c6baa2928e58f4b267649057a1c76738656e9dbd2a7f
+       url: "https://pub.dev"
+     source: hosted
+-    version: "0.3.3+1"
+-  google_maps:
++    version: "0.1.1"
++  geocoding:
++    dependency: "direct main"
++    description:
++      name: geocoding
++      sha256: "40f845e0a5505d4b47da991057f2ab25cd1c68bc4570255c7d4cfbb03a952063"
++      url: "https://pub.dev"
++    source: hosted
++    version: "5.0.0"
++  geocoding_android:
+     dependency: transitive
+     description:
+-      name: google_maps
+-      sha256: "6811afff50dc410b860622ac89df125f5be1eada3ad69197e4c24dd18f2ef0e0"
++      name: geocoding_android
++      sha256: c4f49a08f1761a3d078f35969b20f50445ff023b861c00316ac01554f0786942
+       url: "https://pub.dev"
+     source: hosted
+-    version: "8.3.0"
+-  google_maps_flutter:
++    version: "5.0.2"
++  geocoding_darwin:
++    dependency: transitive
++    description:
++      name: geocoding_darwin
++      sha256: "97552aa24f1453defc17e4d8e40b13ddf097e669c2edfa17ed86349cacdbc1ae"
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.0.3"
++  geocoding_platform_interface:
++    dependency: transitive
++    description:
++      name: geocoding_platform_interface
++      sha256: "5164b8871705af7573698b3aa0746337faf818d72b488988741bcc7aeedd2f6e"
++      url: "https://pub.dev"
++    source: hosted
++    version: "5.0.0"
++  geolocator:
+     dependency: "direct main"
+     description:
+-      name: google_maps_flutter
+-      sha256: "392492775b6928b7419bd1d04c7562dab73a543e71078088a40ae7324acd3641"
++      name: geolocator
++      sha256: "79939537046c9025be47ec645f35c8090ecadb6fe98eba146a0d25e8c1357516"
++      url: "https://pub.dev"
++    source: hosted
++    version: "14.0.2"
++  geolocator_android:
++    dependency: transitive
++    description:
++      name: geolocator_android
++      sha256: "1be90ea8aaaf9db8e7816b4fe0387f082ee8b5cf03355912dad90fb0a75717fa"
++      url: "https://pub.dev"
++    source: hosted
++    version: "5.1.1+1"
++  geolocator_apple:
++    dependency: transitive
++    description:
++      name: geolocator_apple
++      sha256: "3b3189beba8b59b2a0eee970b466e991e4ac1564a9034f82a825a3c45c4be1fa"
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.3.15"
++  geolocator_linux:
++    dependency: transitive
++    description:
++      name: geolocator_linux
++      sha256: d64112a205931926f4363bb6bd48f14cb38e7326833041d170615586cd143797
+       url: "https://pub.dev"
+     source: hosted
+-    version: "2.18.1"
+-  google_maps_flutter_android:
++    version: "0.2.4"
++  geolocator_platform_interface:
+     dependency: transitive
+     description:
+-      name: google_maps_flutter_android
+-      sha256: "06c9c886e887dd61b9a8728c43344e58071279182bbc7a3c4001d322fc3cd111"
++      name: geolocator_platform_interface
++      sha256: b640b6b687b14c66f51fe1130b1c2e8babbd408e0158052b92006b6675ca77fc
+       url: "https://pub.dev"
+     source: hosted
+-    version: "2.19.10"
+-  google_maps_flutter_ios:
++    version: "4.4.0"
++  geolocator_web:
+     dependency: transitive
+     description:
+-      name: google_maps_flutter_ios
+-      sha256: "9638557fa31d451d64c815d415b685f9959e314606bfa5daf2a77bc63f1eba04"
++      name: geolocator_web
++      sha256: "19e485a0f8d6a88abcf9c53cba3a4105e14b7435ed8ac1c108c067b938fe8429"
+       url: "https://pub.dev"
+     source: hosted
+-    version: "2.18.6"
+-  google_maps_flutter_platform_interface:
++    version: "4.1.4"
++  geolocator_windows:
+     dependency: transitive
+     description:
+-      name: google_maps_flutter_platform_interface
+-      sha256: "742e86787abac8b08352aaf31b2d1fffc77038ab2e9ebd8d4d7013eec9e97218"
++      name: geolocator_windows
++      sha256: "175435404d20278ffd220de83c2ca293b73db95eafbdc8131fe8609be1421eb6"
+       url: "https://pub.dev"
+     source: hosted
+-    version: "2.17.0"
+-  google_maps_flutter_web:
++    version: "0.2.5"
++  google_identity_services_web:
+     dependency: transitive
+     description:
+-      name: google_maps_flutter_web
+-      sha256: "903db0e985e831d3883cf0971dd5b4dbee83468b748c3753dc94da0e9a269b93"
++      name: google_identity_services_web
++      sha256: "5d187c46dc59e02646e10fe82665fc3884a9b71bc1c90c2b8b749316d33ee454"
+       url: "https://pub.dev"
+     source: hosted
+-    version: "0.6.3+1"
++    version: "0.3.3+1"
+   google_mlkit_commons:
+     dependency: transitive
+     description:
+@@ -440,14 +544,22 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.1.3"
+-  html:
++  gsettings:
++    dependency: transitive
++    description:
++      name: gsettings
++      sha256: "1b0ce661f5436d2db1e51f3c4295a49849f03d304003a7ba177d01e3a858249c"
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.2.8"
++  hooks:
+     dependency: transitive
+     description:
+-      name: html
+-      sha256: "43b67b8f43321ab066817dfac5619596c98bb1b61624e77203bb4351785f9699"
++      name: hooks
++      sha256: "9a62a50b50b769a737bc0a8ff381f333529df3ab746b2f6b02e83760231455ba"
+       url: "https://pub.dev"
+     source: hosted
+-    version: "0.15.7"
++    version: "2.0.2"
+   http:
+     dependency: "direct main"
+     description:
+@@ -528,6 +640,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "0.2.2"
++  intl:
++    dependency: transitive
++    description:
++      name: intl
++      sha256: "1ca20c894b1717686a2319b8548763d812bc0aabdac580420a44c5178c57a867"
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.20.3"
+   intl_phone_field:
+     dependency: "direct main"
+     description:
+@@ -536,6 +656,38 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "3.2.0"
++  jni:
++    dependency: transitive
++    description:
++      name: jni
++      sha256: "6b9ca0602fef0230e83149afbe3f9f8227e94f2bbe84a1da4f14d699742f402d"
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.1.0"
++  jni_flutter:
++    dependency: transitive
++    description:
++      name: jni_flutter
++      sha256: "0dd33d67797560f66e961a6053882d4df54bd345bf063b8fe7ea133f7ad8b191"
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.0.4+1"
++  jni_util:
++    dependency: transitive
++    description:
++      name: jni_util
++      sha256: "1ba86da04a5f2bf18fde2edb235587e70c5b0fc5bd4ba955f46b00942c3fc35f"
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.0.0"
++  latlong2:
++    dependency: "direct main"
++    description:
++      name: latlong2
++      sha256: "98227922caf49e6056f91b6c56945ea1c7b166f28ffcd5fb8e72fc0b453cc8fe"
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.9.1"
+   leak_tracker:
+     dependency: transitive
+     description:
+@@ -568,6 +720,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "6.1.0"
++  logging:
++    dependency: transitive
++    description:
++      name: logging
++      sha256: c8245ada5f1717ed44271ed1c26b8ce85ca3228fd2ffdb75468ab01979309d61
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.3.0"
+   matcher:
+     dependency: transitive
+     description:
+@@ -592,6 +752,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.17.0"
++  mgrs_dart:
++    dependency: transitive
++    description:
++      name: mgrs_dart
++      sha256: "385e7168ecc77eb545220223c49eef8ab249da7bf57f22781c40a04d23fb196f"
++      url: "https://pub.dev"
++    source: hosted
++    version: "3.0.0"
+   mime:
+     dependency: transitive
+     description:
+@@ -600,6 +768,38 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "2.1.0"
++  objective_c:
++    dependency: transitive
++    description:
++      name: objective_c
++      sha256: b7fb95a6d9a4f009edd63dc5ac69f07420b23a16161c6dd8660290b59c602e8e
++      url: "https://pub.dev"
++    source: hosted
++    version: "9.5.0"
++  package_config:
++    dependency: transitive
++    description:
++      name: package_config
++      sha256: f096c55ebb7deb7e384101542bfba8c52696c1b56fca2eb62827989ef2353bbc
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.2.0"
++  package_info_plus:
++    dependency: transitive
++    description:
++      name: package_info_plus
++      sha256: "468c26b4254ab01979fa5e4a98cb343ea3631b9acee6f21028997419a80e1a20"
++      url: "https://pub.dev"
++    source: hosted
++    version: "9.0.1"
++  package_info_plus_platform_interface:
++    dependency: transitive
++    description:
++      name: package_info_plus_platform_interface
++      sha256: "202a487f08836a592a6bd4f901ac69b3a8f146af552bbd14407b6b41e1c3f086"
++      url: "https://pub.dev"
++    source: hosted
++    version: "3.2.1"
+   path:
+     dependency: transitive
+     description:
+@@ -616,6 +816,30 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.1.0"
++  path_provider:
++    dependency: transitive
++    description:
++      name: path_provider
++      sha256: a7f4874f987173da295a61c181b8ee71dab59b332a486b391babf26a1b884825
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.1.6"
++  path_provider_android:
++    dependency: transitive
++    description:
++      name: path_provider_android
++      sha256: "69cbd515a62b94d32a7944f086b2f82b4ac40a1d45bebfc00813a430ab2dabcd"
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.3.1"
++  path_provider_foundation:
++    dependency: transitive
++    description:
++      name: path_provider_foundation
++      sha256: "2a376b7d6392d80cd3705782d2caa734ca4727776db0b6ec36ef3f1855197699"
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.6.0"
+   path_provider_linux:
+     dependency: transitive
+     description:
+@@ -664,14 +888,38 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "2.1.8"
+-  sanitize_html:
++  posix:
+     dependency: transitive
+     description:
+-      name: sanitize_html
+-      sha256: "60257e2b8fd8b13b7c755065c2639a6c800031bb5bd3e30a007fc6739c77b2e1"
++      name: posix
++      sha256: bc1bad54ad2b735816e31f8d4600cfde6c7839975085ddfbca48b6c9f7c4044e
+       url: "https://pub.dev"
+     source: hosted
+-    version: "2.2.0"
++    version: "6.5.2"
++  proj4dart:
++    dependency: transitive
++    description:
++      name: proj4dart
++      sha256: ddcedc1f7876e62717de43ab3491e2829bdad0b028261805f94aa080967e5859
++      url: "https://pub.dev"
++    source: hosted
++    version: "3.0.0"
++  pub_semver:
++    dependency: transitive
++    description:
++      name: pub_semver
++      sha256: "261236774e8b1d69cfc6b9eabbc96c40f25e7a2d6b171f3385d4f65d5734fb24"
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.2.1"
++  record_use:
++    dependency: transitive
++    description:
++      name: record_use
++      sha256: "2551bd8eecfe95d14ae75f6021ad0248be5c27f138c2ec12fcb52b500b3ba1ed"
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.6.0"
+   shared_preferences:
+     dependency: "direct main"
+     description:
+@@ -728,6 +976,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "2.4.1"
++  simple_sparse_list:
++    dependency: transitive
++    description:
++      name: simple_sparse_list
++      sha256: aa648fd240fa39b49dcd11c19c266990006006de6699a412de485695910fbc1f
++      url: "https://pub.dev"
++    source: hosted
++    version: "0.1.4"
+   sky_engine:
+     dependency: transitive
+     description: flutter
+@@ -797,6 +1053,22 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "1.4.0"
++  unicode:
++    dependency: transitive
++    description:
++      name: unicode
++      sha256: a6f7bcfc8ea1d5ce1f6c0b1c39117a9919f4953edd9fd7a64090a9796c499b57
++      url: "https://pub.dev"
++    source: hosted
++    version: "1.1.9"
++  uuid:
++    dependency: transitive
++    description:
++      name: uuid
++      sha256: "9b129329f58692f6e6578329498a8fe9fbe98f090beb764ffbb8ee2eadd01dcd"
++      url: "https://pub.dev"
++    source: hosted
++    version: "4.6.0"
+   vector_graphics:
+     dependency: transitive
+     description:
+@@ -853,6 +1125,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "5.15.0"
++  wkt_parser:
++    dependency: transitive
++    description:
++      name: wkt_parser
++      sha256: "8a555fc60de3116c00aad67891bcab20f81a958e4219cc106e3c037aa3937f13"
++      url: "https://pub.dev"
++    source: hosted
++    version: "2.0.0"
+   xdg_directories:
+     dependency: transitive
+     description:
+@@ -869,6 +1149,14 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "6.6.1"
++  yaml:
++    dependency: transitive
++    description:
++      name: yaml
++      sha256: f67cdd8e07d3c6329146aaef1ba043542b3134c12489f553ca9a7435d1068aea
++      url: "https://pub.dev"
++    source: hosted
++    version: "3.1.4"
+ sdks:
+-  dart: ">=3.10.1 <4.0.0"
+-  flutter: ">=3.38.0"
++  dart: ">=3.10.3 <4.0.0"
++  flutter: ">=3.38.4"
+diff --git a/mobile/my_app/pubspec.yaml b/mobile/my_app/pubspec.yaml
+index ea0b4a5..443a567 100644
+--- a/mobile/my_app/pubspec.yaml
++++ b/mobile/my_app/pubspec.yaml
+@@ -43,7 +43,11 @@ dependencies:
+   firebase_storage: ^13.0.5
+   image_picker: ^1.1.2
+   file_picker: ^10.3.3
+-  google_maps_flutter: ^2.12.3
++  flutter_map: ^8.3.2
++  flutter_map_dragmarker: ^8.0.3
++  latlong2: ^0.9.1
++  geolocator: ^14.0.2
++  geocoding: ^5.0.0
+   shared_preferences: ^2.5.5
+   camera: ^0.12.0+2
+   google_mlkit_face_detection: ^0.14.0
+diff --git a/mobile/my_app/rules-tests/errands.rules.test.js b/mobile/my_app/rules-tests/errands.rules.test.js
+new file mode 100644
+index 0000000..90fe894
+--- /dev/null
++++ b/mobile/my_app/rules-tests/errands.rules.test.js
+@@ -0,0 +1,233 @@
++const fs = require('node:fs');
++const path = require('node:path');
++const { after, before, beforeEach, test } = require('node:test');
++const {
++  assertFails,
++  assertSucceeds,
++  initializeTestEnvironment,
++} = require('@firebase/rules-unit-testing');
++const {
++  doc,
++  getDoc,
++  serverTimestamp,
++  setDoc,
++  updateDoc,
++  writeBatch,
++  Timestamp,
++  GeoPoint,
++} = require('firebase/firestore');
++
++const projectRoot = path.resolve(__dirname, '..');
++let environment;
++
++const errandData = {
++  clientId: 'client-1',
++  clientName: 'Client One',
++  title: 'Buy groceries',
++  category: 'Errands',
++  budget: 99,
++  schedule: Timestamp.fromDate(new Date('2026-10-20T00:00:00Z')),
++  scheduleFrom: Timestamp.fromDate(new Date('2026-10-20T00:00:00Z')),
++  scheduleTo: Timestamp.fromDate(new Date('2026-10-21T00:00:00Z')),
++  modality: 'errand',
++  location: 'Malolos',
++  areaPosition: new GeoPoint(14.84, 120.81),
++  dropoffLocation: 'Bulakan',
++  dropoffAreaPosition: new GeoPoint(14.79, 120.88),
++  errandItems: '2 kg rice',
++  distanceKm: 5.1,
++  description: 'Pick up rice from the market and bring it home.',
++  status: 'pending',
++};
++
++const exactLocation = {
++  position: new GeoPoint(14.8441, 120.8119),
++  address: 'Public Market, Malolos',
++  dropoffPosition: new GeoPoint(14.7912, 120.8811),
++  dropoffAddress: '45 Example Street, Bulakan',
++};
++
++const riderPath = 'service_requests/errand-1/private/rider_location';
++
++before(async () => {
++  environment = await initializeTestEnvironment({
++    projectId: 'swiftserve-rules-test',
++    firestore: {
++      rules: fs.readFileSync(path.join(projectRoot, 'firestore.rules'), 'utf8'),
++    },
++  });
++});
++
++beforeEach(async () => {
++  await environment.clearFirestore();
++});
++
++after(async () => {
++  await environment.cleanup();
++});
++
++async function seedErrand(fields) {
++  await environment.withSecurityRulesDisabled(async (context) => {
++    await setDoc(doc(context.firestore(), 'service_requests/errand-1'), {
++      ...errandData,
++      createdAt: Timestamp.fromDate(new Date('2026-10-10T00:00:00Z')),
++      workerId: 'worker-1',
++      workerName: 'Rider One',
++      ...fields,
++    });
++  });
++}
++
++function createErrand(client, id, requestFields, privateFields) {
++  const batch = writeBatch(client);
++  batch.set(doc(client, `service_requests/${id}`), {
++    ...errandData,
++    createdAt: serverTimestamp(),
++    ...requestFields,
++  });
++  batch.set(doc(client, `service_requests/${id}/private/location`), {
++    ...exactLocation,
++    createdAt: serverTimestamp(),
++    ...privateFields,
++  });
++  return batch.commit();
++}
++
++test('client creates an errand with pickup and drop-off', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++  await assertSucceeds(createErrand(client, 'ok', {}, {}));
++});
++
++test('errands need a drop-off both publicly and privately', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++  const { dropoffAreaPosition, ...noPublicDropoff } = errandData;
++  const batch = writeBatch(client);
++  batch.set(doc(client, 'service_requests/no-public'), {
++    ...noPublicDropoff,
++    createdAt: serverTimestamp(),
++  });
++  batch.set(doc(client, 'service_requests/no-public/private/location'), {
++    ...exactLocation,
++    createdAt: serverTimestamp(),
++  });
++  await assertFails(batch.commit());
++
++  const { dropoffPosition, dropoffAddress, ...noPrivateDropoff } =
++    exactLocation;
++  const second = writeBatch(client);
++  second.set(doc(client, 'service_requests/no-private'), {
++    ...errandData,
++    createdAt: serverTimestamp(),
++  });
++  second.set(doc(client, 'service_requests/no-private/private/location'), {
++    ...noPrivateDropoff,
++    createdAt: serverTimestamp(),
++  });
++  await assertFails(second.commit());
++});
++
++test('errands cannot be created already in progress', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++  await assertFails(
++    createErrand(client, 'staged', { errandStage: 'pickedUp' }, {}),
++  );
++});
++
++test('other work types cannot carry errand fields', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++  await assertFails(createErrand(client, 'onsite', { modality: 'onsite' }, {}));
++});
++
++test('starting an errand sets the rider heading to pickup', async () => {
++  await seedErrand({ status: 'accepted' });
++  const rider = environment.authenticatedContext('worker-1').firestore();
++  const ref = doc(rider, 'service_requests/errand-1');
++
++  await assertFails(
++    updateDoc(ref, { status: 'ongoing', ongoingAt: serverTimestamp() }),
++  );
++  await assertSucceeds(
++    updateDoc(ref, {
++      status: 'ongoing',
++      ongoingAt: serverTimestamp(),
++      errandStage: 'headingToPickup',
++    }),
++  );
++});
++
++test('errand stages move forward one step and only for the rider', async () => {
++  await seedErrand({ status: 'ongoing', errandStage: 'headingToPickup' });
++  const rider = environment.authenticatedContext('worker-1').firestore();
++  const client = environment.authenticatedContext('client-1').firestore();
++  const ref = doc(rider, 'service_requests/errand-1');
++
++  // No skipping ahead, and no delivering before being on the way.
++  await assertFails(
++    updateDoc(ref, { errandStage: 'delivering', deliveringAt: serverTimestamp() }),
++  );
++  await assertFails(
++    updateDoc(ref, { status: 'completed', completedAt: serverTimestamp() }),
++  );
++  await assertFails(
++    updateDoc(doc(client, 'service_requests/errand-1'), {
++      errandStage: 'pickedUp',
++      pickedUpAt: serverTimestamp(),
++    }),
++  );
++
++  await assertSucceeds(
++    updateDoc(ref, { errandStage: 'pickedUp', pickedUpAt: serverTimestamp() }),
++  );
++  await assertFails(
++    updateDoc(ref, { errandStage: 'headingToPickup' }),
++  );
++  await assertSucceeds(
++    updateDoc(ref, { errandStage: 'delivering', deliveringAt: serverTimestamp() }),
++  );
++  await assertSucceeds(
++    updateDoc(ref, { status: 'completed', completedAt: serverTimestamp() }),
++  );
++});
++
++test('only the assigned rider shares location, only while ongoing', async () => {
++  await seedErrand({ status: 'accepted' });
++  const rider = environment.authenticatedContext('worker-1').firestore();
++  const otherRider = environment.authenticatedContext('worker-2').firestore();
++  const position = {
++    position: new GeoPoint(14.83, 120.82),
++    heading: 90,
++    speed: 4.2,
++    updatedAt: serverTimestamp(),
++  };
++
++  await assertFails(setDoc(doc(rider, riderPath), position));
++
++  await seedErrand({ status: 'ongoing', errandStage: 'headingToPickup' });
++  await assertSucceeds(setDoc(doc(rider, riderPath), position));
++  await assertSucceeds(setDoc(doc(rider, riderPath), position));
++  await assertFails(setDoc(doc(otherRider, riderPath), position));
++  await assertFails(
++    setDoc(doc(rider, riderPath), { ...position, note: 'extra field' }),
++  );
++
++  await seedErrand({ status: 'completed', errandStage: 'delivering' });
++  await assertFails(setDoc(doc(rider, riderPath), position));
++});
++
++test('rider location is visible only to the client and the rider', async () => {
++  await seedErrand({ status: 'ongoing', errandStage: 'pickedUp' });
++  await environment.withSecurityRulesDisabled(async (context) => {
++    await setDoc(doc(context.firestore(), riderPath), {
++      position: new GeoPoint(14.83, 120.82),
++      updatedAt: Timestamp.now(),
++    });
++  });
++
++  const client = environment.authenticatedContext('client-1').firestore();
++  const rider = environment.authenticatedContext('worker-1').firestore();
++  const outsider = environment.authenticatedContext('client-2').firestore();
++
++  await assertSucceeds(getDoc(doc(client, riderPath)));
++  await assertSucceeds(getDoc(doc(rider, riderPath)));
++  await assertFails(getDoc(doc(outsider, riderPath)));
++});
+diff --git a/mobile/my_app/rules-tests/request-applications.rules.test.js b/mobile/my_app/rules-tests/request-applications.rules.test.js
+index 55da167..4175923 100644
+--- a/mobile/my_app/rules-tests/request-applications.rules.test.js
++++ b/mobile/my_app/rules-tests/request-applications.rules.test.js
+@@ -14,6 +14,7 @@ const {
+   updateDoc,
+   writeBatch,
+   Timestamp,
++  GeoPoint,
+ } = require('firebase/firestore');
+ 
+ const projectRoot = path.resolve(__dirname, '..');
+@@ -145,7 +146,7 @@ test('request owner can atomically select an existing applicant', async () => {
+     doc(client, 'service_requests/request-1/applications/worker-1'),
+     { status: 'accepted', reviewedAt: serverTimestamp() },
+   );
+-  batch.set(doc(client, 'conversations/request-1'), {
++  batch.set(doc(client, 'conversations/client-1_worker-1'), {
+     requestId: 'request-1',
+     participantIds: ['client-1', 'worker-1'],
+     clientId: 'client-1',
+@@ -191,3 +192,152 @@ test('another client cannot review applications or select a worker', async () =>
+     }),
+   );
+ });
++
++test('client atomically creates a request with public and private locations', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++  const batch = writeBatch(client);
++  batch.set(doc(client, 'service_requests/new-request'), {
++    ...requestData,
++    areaPosition: new GeoPoint(14.84, 120.81),
++    createdAt: serverTimestamp(),
++  });
++  batch.set(doc(client, 'service_requests/new-request/private/location'), {
++    position: new GeoPoint(14.8441, 120.8119),
++    address: '123 Example Street, Malolos, Bulacan',
++    createdAt: serverTimestamp(),
++  });
++
++  await assertSucceeds(batch.commit());
++});
++
++test('new requests require both a public coordinate and private location', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++
++  await assertFails(
++    setDoc(doc(client, 'service_requests/no-private-location'), {
++      ...requestData,
++      areaPosition: new GeoPoint(14.84, 120.81),
++      createdAt: serverTimestamp(),
++    }),
++  );
++
++  const batch = writeBatch(client);
++  batch.set(doc(client, 'service_requests/no-public-location'), {
++    ...requestData,
++    createdAt: serverTimestamp(),
++  });
++  batch.set(
++    doc(client, 'service_requests/no-public-location/private/location'),
++    {
++      position: new GeoPoint(14.8441, 120.8119),
++      address: '123 Example Street, Malolos, Bulacan',
++      createdAt: serverTimestamp(),
++    },
++  );
++  await assertFails(batch.commit());
++});
++
++test('online requests are created without any map location', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++
++  await assertSucceeds(
++    setDoc(doc(client, 'service_requests/online-request'), {
++      ...requestData,
++      modality: 'online',
++      location: 'Online',
++      createdAt: serverTimestamp(),
++    }),
++  );
++
++  // An online job must not carry a public pin.
++  await assertFails(
++    setDoc(doc(client, 'service_requests/online-with-pin'), {
++      ...requestData,
++      modality: 'online',
++      location: 'Online',
++      areaPosition: new GeoPoint(14.84, 120.81),
++      createdAt: serverTimestamp(),
++    }),
++  );
++});
++
++test('on-site and hybrid requests still need both locations', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++
++  for (const modality of ['onsite', 'hybrid']) {
++    await assertFails(
++      setDoc(doc(client, `service_requests/${modality}-no-pin`), {
++        ...requestData,
++        modality,
++        createdAt: serverTimestamp(),
++      }),
++    );
++
++    const batch = writeBatch(client);
++    batch.set(doc(client, `service_requests/${modality}-pinned`), {
++      ...requestData,
++      modality,
++      areaPosition: new GeoPoint(14.84, 120.81),
++      createdAt: serverTimestamp(),
++    });
++    batch.set(
++      doc(client, `service_requests/${modality}-pinned/private/location`),
++      {
++        position: new GeoPoint(14.8441, 120.8119),
++        address: '123 Example Street, Malolos, Bulacan',
++        createdAt: serverTimestamp(),
++      },
++    );
++    await assertSucceeds(batch.commit());
++  }
++});
++
++test('unknown work types are rejected', async () => {
++  const client = environment.authenticatedContext('client-1').firestore();
++
++  await assertFails(
++    setDoc(doc(client, 'service_requests/remote-request'), {
++      ...requestData,
++      modality: 'remote',
++      createdAt: serverTimestamp(),
++    }),
++  );
++});
++
++test('exact location is private until a worker is selected', async () => {
++  await environment.withSecurityRulesDisabled(async (context) => {
++    await setDoc(
++      doc(
++        context.firestore(),
++        'service_requests/request-1/private/location',
++      ),
++      {
++        position: new GeoPoint(14.8441, 120.8119),
++        address: '123 Example Street, Malolos, Bulacan',
++        createdAt: Timestamp.fromDate(new Date('2026-10-10T00:00:00Z')),
++      },
++    );
++  });
++
++  const client = environment.authenticatedContext('client-1').firestore();
++  const worker = environment.authenticatedContext('worker-1').firestore();
++  const privatePath = 'service_requests/request-1/private/location';
++
++  await assertSucceeds(getDoc(doc(client, privatePath)));
++  await assertFails(getDoc(doc(worker, privatePath)));
++
++  await environment.withSecurityRulesDisabled(async (context) => {
++    await updateDoc(doc(context.firestore(), 'service_requests/request-1'), {
++      status: 'accepted',
++      workerId: 'worker-1',
++      workerName: 'Verified Worker',
++      acceptedAt: Timestamp.fromDate(new Date('2026-10-11T00:00:00Z')),
++    });
++  });
++
++  await assertSucceeds(getDoc(doc(worker, privatePath)));
++  const otherWorker = environment
++    .authenticatedContext('worker-2')
++    .firestore();
++  await assertFails(getDoc(doc(otherWorker, privatePath)));
++});
+diff --git a/mobile/my_app/test/errand_pricing_test.dart b/mobile/my_app/test/errand_pricing_test.dart
+new file mode 100644
+index 0000000..5f19790
+--- /dev/null
++++ b/mobile/my_app/test/errand_pricing_test.dart
+@@ -0,0 +1,92 @@
++import 'package:flutter_test/flutter_test.dart';
++import 'package:my_app/features/client/presentation/screens/post_request_screen.dart';
++import 'package:my_app/features/client/presentation/widgets/errand_tracking_map.dart';
++import 'package:my_app/shared/models/job_location.dart';
++import 'package:my_app/shared/models/rider_location.dart';
++import 'package:my_app/shared/models/service_request.dart';
++import 'package:my_app/shared/utils/errand_pricing.dart';
++
++ServiceRequest _errand(Map<String, dynamic> overrides) =>
++    ServiceRequest.fromMap('errand-1', {
++      'clientId': 'client-1',
++      'title': 'Buy groceries',
++      'location': 'Malolos',
++      'budget': 99,
++      'modality': 'errand',
++      'workerName': 'Rider One',
++      ...overrides,
++    });
++
++void main() {
++  test('distance is the straight line scaled for roads', () {
++    const pickup = JobCoordinate(latitude: 14.8441, longitude: 120.8119);
++    const dropoff = JobCoordinate(latitude: 14.7912, longitude: 120.8811);
++    final km = errandDistanceKm(pickup, dropoff);
++    // About 9.5 km straight, so about 12.4 km by road.
++    expect(km, closeTo(12.4, 0.3));
++    expect(errandDistanceKm(pickup, pickup), 0);
++  });
++
++  test('fee is base plus per km, rounded up to the nearest 5 pesos', () {
++    expect(errandDeliveryFee(0), 50);
++    expect(errandDeliveryFee(1), 60);
++    expect(errandDeliveryFee(2.3), 75);
++    expect(errandDeliveryFee(12.4), 175);
++  });
++
++  test('errand categories pick the errand work type', () {
++    expect(isErrandCategory('Errands'), isTrue);
++    expect(isErrandCategory('Delivery & pickup'), isTrue);
++    expect(isErrandCategory('Repairs'), isFalse);
++    expect(isErrandCategory(null), isFalse);
++  });
++
++  test('stage timeline counts finished steps', () {
++    expect(
++      ErrandStageTimeline.completedSteps(_errand({'status': 'accepted'})),
++      0,
++    );
++    expect(
++      ErrandStageTimeline.completedSteps(
++        _errand({'status': 'ongoing', 'errandStage': 'headingToPickup'}),
++      ),
++      1,
++    );
++    expect(
++      ErrandStageTimeline.completedSteps(
++        _errand({'status': 'ongoing', 'errandStage': 'delivering'}),
++      ),
++      3,
++    );
++    expect(
++      ErrandStageTimeline.completedSteps(_errand({'status': 'completed'})),
++      4,
++    );
++  });
++
++  test('rider status shows live, stale and waiting states', () {
++    final now = DateTime(2026, 10, 23, 12);
++    final ongoing = _errand({'status': 'ongoing'});
++    RiderLocation seenAgo(Duration age) => RiderLocation(
++      position: const JobCoordinate(latitude: 14.8, longitude: 120.8),
++      updatedAt: now.subtract(age),
++    );
++
++    expect(
++      riderStatusText(ongoing, null, now),
++      "Waiting for Rider One's location…",
++    );
++    expect(
++      riderStatusText(ongoing, seenAgo(const Duration(seconds: 10)), now),
++      'Rider One is live on the map.',
++    );
++    expect(
++      riderStatusText(ongoing, seenAgo(const Duration(minutes: 3)), now),
++      'Last seen 3 min ago.',
++    );
++    expect(
++      riderStatusText(_errand({'status': 'accepted'}), null, now),
++      'Rider One will share their location once they start.',
++    );
++  });
++}
+diff --git a/mobile/my_app/test/job_location_picker_test.dart b/mobile/my_app/test/job_location_picker_test.dart
+new file mode 100644
+index 0000000..2c183fd
+--- /dev/null
++++ b/mobile/my_app/test/job_location_picker_test.dart
+@@ -0,0 +1,191 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:my_app/shared/models/job_location.dart';
++import 'package:my_app/shared/services/device_location_service.dart';
++import 'package:my_app/shared/services/job_geocoding_service.dart';
++import 'package:my_app/shared/widgets/job_location_picker.dart';
++
++class _FakeLocationService extends DeviceLocationService {
++  _FakeLocationService({this.position, this.error});
++
++  final JobCoordinate? position;
++  final DeviceLocationException? error;
++  int settingsOpenCount = 0;
++
++  @override
++  Future<JobCoordinate> currentPosition() async {
++    if (error != null) throw error!;
++    return position!;
++  }
++
++  @override
++  Future<bool> openRecoverySettings(DeviceLocationFailure failure) async {
++    settingsOpenCount += 1;
++    return true;
++  }
++}
++
++class _FakeGeocodingService implements JobAddressResolver {
++  _FakeGeocodingService({this.result, this.shouldFail = false});
++
++  final ResolvedJobAddress? result;
++  final bool shouldFail;
++
++  @override
++  Future<ResolvedJobAddress> resolve(JobCoordinate coordinate) async {
++    if (shouldFail) throw StateError('lookup failed');
++    return result!;
++  }
++}
++
++Widget _testMap(
++  BuildContext context,
++  JobCoordinate? position,
++  ValueChanged<JobCoordinate> onSelected,
++) => SizedBox(
++  height: 230,
++  child: TextButton(
++    key: const Key('select-map-pin'),
++    onPressed: () =>
++        onSelected(const JobCoordinate(latitude: 14.8441, longitude: 120.8119)),
++    child: Text(position == null ? 'Choose pin' : 'Pin selected'),
++  ),
++);
++
++Widget _harness({
++  required DeviceLocationService locationService,
++  required JobAddressResolver geocodingService,
++  ValueChanged<JobLocationSelection?>? onChanged,
++  String? errorText,
++}) => MaterialApp(
++  home: Scaffold(
++    body: SingleChildScrollView(
++      child: JobLocationPicker(
++        locationService: locationService,
++        geocodingService: geocodingService,
++        mapBuilder: _testMap,
++        errorText: errorText,
++        onChanged: onChanged ?? (_) {},
++      ),
++    ),
++  ),
++);
++
++void main() {
++  const coordinate = JobCoordinate(latitude: 14.8441, longitude: 120.8119);
++  const resolved = ResolvedJobAddress(
++    exactAddress: '123 Example Street, Malolos, Bulacan',
++    areaLabel: 'Malolos, Bulacan',
++  );
++
++  testWidgets('starts without a pin and exposes inline validation', (
++    tester,
++  ) async {
++    await tester.pumpWidget(
++      _harness(
++        locationService: _FakeLocationService(position: coordinate),
++        geocodingService: _FakeGeocodingService(result: resolved),
++        errorText: 'Choose the service location on the map.',
++      ),
++    );
++
++    expect(find.text('Choose pin'), findsOneWidget);
++    expect(tester.widget<TextField>(find.byType(TextField)).enabled, isFalse);
++    expect(
++      find.text('Choose the service location on the map.'),
++      findsOneWidget,
++    );
++  });
++
++  testWidgets('shows a recoverable permission-denied state', (tester) async {
++    await tester.pumpWidget(
++      _harness(
++        locationService: _FakeLocationService(
++          error: const DeviceLocationException(
++            DeviceLocationFailure.permissionDenied,
++          ),
++        ),
++        geocodingService: _FakeGeocodingService(result: resolved),
++      ),
++    );
++
++    await tester.tap(find.text('Use my current location'));
++    await tester.pumpAndSettle();
++
++    expect(
++      find.textContaining('Location permission was denied'),
++      findsOneWidget,
++    );
++    expect(find.text('Use my current location'), findsOneWidget);
++  });
++
++  testWidgets('offers settings recovery when location services are disabled', (
++    tester,
++  ) async {
++    final locationService = _FakeLocationService(
++      error: const DeviceLocationException(
++        DeviceLocationFailure.serviceDisabled,
++      ),
++    );
++    await tester.pumpWidget(
++      _harness(
++        locationService: locationService,
++        geocodingService: _FakeGeocodingService(result: resolved),
++      ),
++    );
++
++    await tester.tap(find.text('Use my current location'));
++    await tester.pumpAndSettle();
++    await tester.tap(find.text('Open location settings'));
++    await tester.pump();
++
++    expect(locationService.settingsOpenCount, 1);
++  });
++
++  testWidgets('GPS selection resolves an address and emits a safe area label', (
++    tester,
++  ) async {
++    JobLocationSelection? selection;
++    await tester.pumpWidget(
++      _harness(
++        locationService: _FakeLocationService(position: coordinate),
++        geocodingService: _FakeGeocodingService(result: resolved),
++        onChanged: (value) => selection = value,
++      ),
++    );
++
++    await tester.tap(find.text('Use my current location'));
++    await tester.pumpAndSettle();
++
++    expect(find.text(resolved.exactAddress), findsOneWidget);
++    expect(selection?.areaLabel, 'Malolos, Bulacan');
++    expect(selection?.position.latitude, 14.8441);
++    expect(
++      find.text('Exact address is shared only with the accepted worker.'),
++      findsOneWidget,
++    );
++  });
++
++  testWidgets('keeps the pin and accepts manual address after lookup failure', (
++    tester,
++  ) async {
++    JobLocationSelection? selection;
++    await tester.pumpWidget(
++      _harness(
++        locationService: _FakeLocationService(position: coordinate),
++        geocodingService: _FakeGeocodingService(shouldFail: true),
++        onChanged: (value) => selection = value,
++      ),
++    );
++
++    await tester.tap(find.byKey(const Key('select-map-pin')));
++    await tester.pumpAndSettle();
++
++    expect(find.textContaining('Address lookup failed'), findsOneWidget);
++    await tester.enterText(find.byType(TextField), 'Manual service address');
++    await tester.pump();
++
++    expect(selection?.exactAddress, 'Manual service address');
++    expect(selection?.areaLabel, 'Pinned service area');
++  });
++}
+diff --git a/mobile/my_app/test/job_location_utils_test.dart b/mobile/my_app/test/job_location_utils_test.dart
+new file mode 100644
+index 0000000..af5f909
+--- /dev/null
++++ b/mobile/my_app/test/job_location_utils_test.dart
+@@ -0,0 +1,51 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:my_app/shared/models/job_location.dart';
++import 'package:my_app/shared/models/service_request.dart';
++import 'package:my_app/shared/utils/job_location_utils.dart';
++
++void main() {
++  test('roundToPublicArea reduces a pin to neighborhood precision', () {
++    final rounded = roundToPublicArea(
++      const JobCoordinate(latitude: 14.8441, longitude: 120.8119),
++    );
++
++    expect(rounded.latitude, 14.84);
++    expect(rounded.longitude, 120.81);
++  });
++
++  test('distanceMetersBetween calculates Haversine distance', () {
++    final distance = distanceMetersBetween(
++      const JobCoordinate(latitude: 0, longitude: 0),
++      const JobCoordinate(latitude: 0, longitude: 1),
++    );
++
++    expect(distance, closeTo(111195, 100));
++  });
++
++  test('formatDistance uses meters, kilometers, and approximate prefix', () {
++    expect(formatDistance(246), '250 m away');
++    expect(formatDistance(2410, approximate: true), '~2.4 km away');
++  });
++
++  test('service request parses a public GeoPoint and supports legacy data', () {
++    final mapped = ServiceRequest.fromMap('mapped', {
++      'areaPosition': const GeoPoint(14.84, 120.81),
++    });
++    final legacy = ServiceRequest.fromMap('legacy', const {});
++
++    expect(mapped.areaLatitude, 14.84);
++    expect(mapped.areaLongitude, 120.81);
++    expect(legacy.areaPosition, isNull);
++  });
++
++  test('exact location parses its protected GeoPoint contract', () {
++    final location = ExactJobLocation.fromMap({
++      'position': const GeoPoint(14.8441, 120.8119),
++      'address': '123 Example Street',
++    });
++
++    expect(location.position.latitude, 14.8441);
++    expect(location.address, '123 Example Street');
++  });
++}
+diff --git a/mobile/my_app/test/job_modality_test.dart b/mobile/my_app/test/job_modality_test.dart
+new file mode 100644
+index 0000000..476f22e
+--- /dev/null
++++ b/mobile/my_app/test/job_modality_test.dart
+@@ -0,0 +1,82 @@
++import 'package:cloud_firestore/cloud_firestore.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:my_app/shared/models/service_request.dart';
++
++ServiceRequest _request(Map<String, dynamic> overrides) =>
++    ServiceRequest.fromMap('request-1', {
++      'clientId': 'client-1',
++      'title': 'Fix sink',
++      'location': 'Malolos, Bulacan',
++      'budget': 500,
++      'status': 'pending',
++      ...overrides,
++    });
++
++void main() {
++  test(
++    'modality parses from Firestore and defaults legacy jobs to on-site',
++    () {
++      expect(_request({'modality': 'online'}).modality, JobModality.online);
++      expect(_request({'modality': 'hybrid'}).modality, JobModality.hybrid);
++      expect(_request({}).modality, JobModality.onsite);
++      expect(_request({'modality': 'remote'}).modality, JobModality.onsite);
++    },
++  );
++
++  test('only online jobs skip the physical location', () {
++    expect(JobModality.onsite.needsLocation, isTrue);
++    expect(JobModality.hybrid.needsLocation, isTrue);
++    expect(JobModality.online.needsLocation, isFalse);
++  });
++
++  test('place label reflects the work type', () {
++    expect(_request({'modality': 'onsite'}).placeLabel, 'Malolos, Bulacan');
++    expect(
++      _request({'modality': 'hybrid'}).placeLabel,
++      'Hybrid · Malolos, Bulacan',
++    );
++    expect(
++      _request({'modality': 'online', 'location': 'Online'}).placeLabel,
++      'Online',
++    );
++  });
++
++  test('errands parse pickup, drop-off and stage', () {
++    final errand = _request({
++      'modality': 'errand',
++      'location': 'Malolos',
++      'areaPosition': const GeoPoint(14.84, 120.81),
++      'dropoffLocation': 'Bulakan',
++      'dropoffAreaPosition': const GeoPoint(14.79, 120.88),
++      'errandItems': '2 kg rice',
++      'distanceKm': 5.1,
++      'itemCostEstimate': 120,
++      'errandStage': 'pickedUp',
++    });
++    expect(errand.isErrand, isTrue);
++    expect(JobModality.errand.needsLocation, isTrue);
++    expect(errand.placeLabel, 'Malolos → Bulakan');
++    expect(errand.dropoffAreaPosition?.latitude, 14.79);
++    expect(errand.errandItems, '2 kg rice');
++    expect(errand.distanceKm, 5.1);
++    expect(errand.itemCostEstimate, 120);
++    expect(errand.errandStage, ErrandStage.pickedUp);
++    expect(_request({'errandStage': 'teleporting'}).errandStage, isNull);
++  });
++
++  test('errand stages advance in order and end before delivery', () {
++    expect(ErrandStage.headingToPickup.next, ErrandStage.pickedUp);
++    expect(ErrandStage.pickedUp.next, ErrandStage.delivering);
++    expect(ErrandStage.delivering.next, isNull);
++  });
++
++  test('online jobs have no map position', () {
++    final online = _request({'modality': 'online', 'location': 'Online'});
++    final onsite = _request({
++      'modality': 'onsite',
++      'areaPosition': const GeoPoint(14.84, 120.81),
++    });
++    expect(online.areaPosition, isNull);
++    expect(onsite.areaPosition, isNotNull);
++  });
++}
+diff --git a/mobile/my_app/test/job_offer_card_test.dart b/mobile/my_app/test/job_offer_card_test.dart
+new file mode 100644
+index 0000000..29cafd0
+--- /dev/null
++++ b/mobile/my_app/test/job_offer_card_test.dart
+@@ -0,0 +1,45 @@
++import 'package:flutter/material.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:my_app/features/worker/presentation/widgets/legacy/job_offer_card.dart';
++
++void main() {
++  testWidgets('shows location, price, and worker distance', (tester) async {
++    await tester.pumpWidget(
++      MaterialApp(
++        home: Scaffold(
++          body: JobOfferCard(
++            service: 'Need a carpenter',
++            client: 'Client One',
++            location: 'Malolos, Bulacan',
++            price: '₱800',
++            distanceLabel: '~2.4 km away',
++            onTap: () {},
++          ),
++        ),
++      ),
++    );
++
++    expect(find.text('Need a carpenter'), findsOneWidget);
++    expect(find.textContaining('Malolos, Bulacan • ₱800'), findsOneWidget);
++    expect(find.textContaining('~2.4 km away'), findsOneWidget);
++  });
++
++  testWidgets('shows the legacy distance fallback', (tester) async {
++    await tester.pumpWidget(
++      MaterialApp(
++        home: Scaffold(
++          body: JobOfferCard(
++            service: 'Older request',
++            client: 'Client Two',
++            location: 'Bulacan',
++            price: '₱500',
++            distanceLabel: 'Distance unavailable',
++            onTap: () {},
++          ),
++        ),
++      ),
++    );
++
++    expect(find.textContaining('Distance unavailable'), findsOneWidget);
++  });
++}
+diff --git a/swiftserve-backend/src/app.js b/swiftserve-backend/src/app.js
+index 324e63e..96a6e8f 100644
+--- a/swiftserve-backend/src/app.js
++++ b/swiftserve-backend/src/app.js
+@@ -20,6 +20,10 @@ app.get('/', (req, res) => {
+   });
+ });
+ 
++app.get('/api/health', (req, res) => {
++  res.json({ ok: true });
++});
++
+ app.use('/api/test', testRoutes);
+ app.use('/api/users', userRoutes);
+ app.use('/api/admin/verifications', adminVerificationRoutes);
+diff --git a/swiftserve-backend/test/health.test.js b/swiftserve-backend/test/health.test.js
+new file mode 100644
+index 0000000..e2b2aa9
+--- /dev/null
++++ b/swiftserve-backend/test/health.test.js
+@@ -0,0 +1,12 @@
++const { test } = require('node:test');
++const request = require('supertest');
++
++const configPath = require.resolve('../src/config/firebase');
++require.cache[configPath] = { id: configPath, filename: configPath, loaded: true, exports: {
++  db: {}, auth: {}, bucket: {},
++} };
++const app = require('../src/app');
++
++test('health endpoint responds without authentication', async () => {
++  await request(app).get('/api/health').expect(200, { ok: true });
++});

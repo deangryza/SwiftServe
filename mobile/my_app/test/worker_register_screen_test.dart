@@ -43,10 +43,12 @@ void main() {
     await tester.enterText(fields.at(1), 'Worker');
     await _tapNext(tester);
 
-    expect(find.byType(TextFormField), findsNWidgets(5));
+    expect(find.byType(TextFormField), findsNWidgets(8));
     expect(find.text('Email Address'), findsOneWidget);
     expect(find.text('Phone Number'), findsOneWidget);
-    expect(find.text('Address / Location'), findsOneWidget);
+    expect(find.text('Barangay'), findsOneWidget);
+    expect(find.text('City / Municipality'), findsOneWidget);
+    expect(find.text('Province'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Confirm Password'), findsOneWidget);
   });
@@ -70,12 +72,28 @@ void main() {
       fields = find.byType(TextFormField);
       await tester.enterText(fields.at(0), 'alex@example.com');
       await tester.enterText(fields.at(1), '09171234567');
-      await tester.enterText(fields.at(2), '123 Service Lane');
-      await tester.enterText(fields.at(3), 'password');
-      await tester.enterText(fields.at(4), 'password');
-      await tester.ensureVisible(find.byType(Checkbox));
-      await tester.tap(find.byType(Checkbox));
-      await tester.pump();
+      for (final entry in {
+        'Street / House No. (optional)': '123 Service Lane',
+        'Barangay': 'Bulihan',
+        'City / Municipality': 'Malolos',
+        'Province': 'Bulacan',
+        'worker-Password': 'password',
+        'worker-Confirm Password': 'password',
+      }.entries) {
+        final field = find.byKey(ValueKey(entry.key));
+        await tester.ensureVisible(field);
+        await tester.enterText(field, entry.value);
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(find.byType(CheckboxListTile));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(CheckboxListTile));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+        isTrue,
+      );
+      expect(tester.state<FormState>(find.byType(Form)).validate(), isTrue);
       await _tapNext(tester);
 
       expect(find.text('Service Categories'), findsOneWidget);
@@ -150,6 +168,7 @@ void main() {
 Future<void> _tapNext(WidgetTester tester) async {
   final button = find.byKey(const ValueKey('worker-registration-next'));
   await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
   await tester.tap(button);
   await tester.pumpAndSettle();
 }

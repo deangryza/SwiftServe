@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const assert = require('node:assert/strict');
 const path = require('node:path');
 const { after, before, beforeEach, test } = require('node:test');
 const {
@@ -8,6 +9,7 @@ const {
 } = require('@firebase/rules-unit-testing');
 const {
   doc,
+  getDoc,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -116,6 +118,45 @@ test('a client can save name and address from Edit Profile', async () => {
     }),
   );
 });
+
+for (const [uid, role, originalAddress] of [
+  ['client-1', 'client', 'Manila'],
+  ['worker-1', 'worker', undefined],
+]) {
+  test(`${role}: a public location write rejects the entire profile batch`, async () => {
+    if (role === 'worker') {
+      await environment.withSecurityRulesDisabled(async (context) => {
+        await setDoc(doc(context.firestore(), `public_profiles/${uid}`), {
+          uid, role, fullName: 'Worker One', photoBase64: '',
+          updatedAt: new Date('2026-10-01T00:00:00Z'),
+        });
+      });
+    }
+    const db = environment.authenticatedContext(uid).firestore();
+    const batch = writeBatch(db);
+    batch.update(doc(db, `users/${uid}`), {
+      address: 'Bulihan, Malolos, Bulacan', updatedAt: serverTimestamp(),
+    });
+    batch.set(doc(db, `public_profiles/${uid}`), {
+      location: 'Bulihan, Malolos, Bulacan', updatedAt: serverTimestamp(),
+    }, { merge: true });
+    await assertFails(batch.commit());
+    assert.equal((await getDoc(doc(db, `users/${uid}`))).data().address, originalAddress);
+  });
+
+  test(`${role}: structured address is saved privately without publishing it`, async () => {
+    const db = environment.authenticatedContext(uid).firestore();
+    const address = '123 Example Street, Bulihan, Malolos, Bulacan';
+    await assertSucceeds(saveProfile(db, uid, role, {
+      fullName: 'Updated Name', address,
+    }));
+    assert.equal((await getDoc(doc(db, `users/${uid}`))).data().address, address);
+    const publicProfile = (await getDoc(doc(db, `public_profiles/${uid}`))).data();
+    assert.equal(publicProfile.fullName, 'Updated Name');
+    assert.equal('address' in publicProfile, false);
+    assert.equal('location' in publicProfile, false);
+  });
+}
 
 test('an account without verificationStatus can still edit its profile', async () => {
   const db = environment.authenticatedContext('legacy-client').firestore();

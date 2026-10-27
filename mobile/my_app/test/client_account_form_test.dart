@@ -77,7 +77,9 @@ void main() {
       expect(controllers[0].text, 'Jane Doe');
       await fill('Email Address', 'jane@example.com');
       await fill('Phone Number', '09123456789');
-      await fill('Address / Location', 'Manila');
+      await fill('Barangay', 'Bulihan');
+      await fill('City / Municipality', 'Malolos');
+      await fill('Province', 'Bulacan');
       await fill('Password', 'password123');
       await fill('Confirm Password', 'password123');
       await tester.ensureVisible(find.byType(CheckboxListTile));

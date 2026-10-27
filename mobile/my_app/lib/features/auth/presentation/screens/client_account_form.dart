@@ -5,6 +5,7 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/phone_number_field.dart';
+import '../widgets/registration_address_fields.dart';
 import 'login_screen.dart';
 
 class ClientAccountForm extends StatefulWidget {
@@ -490,10 +491,14 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         borderColor: _border,
         focusColor: _yellow,
       ),
-      _inputField(
-        'Address / Location',
-        '123 Street, Tech City',
-        widget.address,
+      RegistrationAddressFields(
+        address: widget.address,
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted,
+        borderColor: _border,
+        focusColor: _yellow,
       ),
       if (!widget.federatedAccount) ...[
         _inputField(

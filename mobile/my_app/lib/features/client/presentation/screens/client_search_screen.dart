@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../widgets/nearby_workers_section.dart';
 
 class ClientSearchScreen extends StatefulWidget {
   const ClientSearchScreen({super.key});
@@ -235,6 +236,12 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
               },
             ),
           ),
+        NearbyWorkersSection(
+          key: ValueKey(
+            'worker-recommendations-${FirebaseAuth.instance.currentUser?.uid}',
+          ),
+          clientId: FirebaseAuth.instance.currentUser?.uid,
+        ),
       ],
     );
   }

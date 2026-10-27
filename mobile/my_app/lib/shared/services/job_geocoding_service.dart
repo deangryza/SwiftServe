@@ -6,10 +6,18 @@ class ResolvedJobAddress {
   const ResolvedJobAddress({
     required this.exactAddress,
     required this.areaLabel,
+    this.barangay = '',
+    this.cityMunicipality = '',
+    this.province = '',
+    this.street = '',
   });
 
   final String exactAddress;
   final String areaLabel;
+  final String barangay;
+  final String cityMunicipality;
+  final String province;
+  final String street;
 }
 
 abstract interface class JobAddressResolver {
@@ -81,6 +89,10 @@ class JobGeocodingService implements JobAddressResolver {
       placemark.administrativeArea,
     ];
     return ResolvedJobAddress(
+      barangay: placemark.subLocality?.trim() ?? '',
+      cityMunicipality: placemark.locality?.trim() ?? '',
+      province: placemark.subAdministrativeArea?.trim() ?? '',
+      street: placemark.street?.trim() ?? '',
       exactAddress: _uniqueParts(exactParts).join(', '),
       areaLabel: _uniqueParts(areaParts).take(2).join(', '),
     );

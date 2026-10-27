@@ -4,12 +4,17 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:my_app/shared/services/job_geocoding_service.dart';
+import 'package:my_app/shared/models/job_location.dart';
 
 class _Geocoder extends Fake implements Geocoding {
   final searches = <String>[];
   bool noResults = false;
   bool offline = false;
   bool reverseFails = false;
+  Placemark placemark = const Placemark(
+    street: 'Greenbelt',
+    locality: 'Makati',
+  );
 
   @override
   Future<List<Location>> locationFromAddress(
@@ -31,11 +36,37 @@ class _Geocoder extends Fake implements Geocoding {
     expect(latitude, 14.5532);
     expect(longitude, 121.0214);
     if (reverseFails) throw const SocketException('reverse offline');
-    return [const Placemark(street: 'Greenbelt', locality: 'Makati')];
+    return [placemark];
   }
 }
 
 void main() {
+  test(
+    'reverse lookup exposes address components without inventing missing values',
+    () async {
+      final geocoder = _Geocoder()
+        ..placemark = const Placemark(
+          street: '123 Example Street',
+          subLocality: 'Bulihan',
+          locality: 'Malolos',
+          subAdministrativeArea: 'Bulacan',
+          administrativeArea: 'Central Luzon',
+        );
+      final service = JobGeocodingService(geocoding: geocoder);
+      const coordinate = JobCoordinate(latitude: 14.5532, longitude: 121.0214);
+      final address = await service.resolve(coordinate);
+      expect(address.barangay, 'Bulihan');
+      expect(address.cityMunicipality, 'Malolos');
+      expect(address.province, 'Bulacan');
+      geocoder.placemark = const Placemark(
+        locality: 'Malolos',
+        administrativeArea: 'Central Luzon',
+      );
+      final incomplete = await service.resolve(coordinate);
+      expect(incomplete.barangay, isEmpty);
+      expect(incomplete.province, isEmpty);
+    },
+  );
   test(
     'forward lookup returns coordinates and a separate public area label',
     () async {

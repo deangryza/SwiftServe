@@ -1,0 +1,73 @@
+# branch.oid 761fe8a9b309d7fe88613ff5b64e7aa0d630b00b
+# branch.head main
+# branch.upstream origin/main
+# branch.ab +1 -10
+1 M. N... 100644 100644 100644 7c81f3a89cf059606ff11659cd96e99b7f95679f ec07412d0d5103065f7b5fbd0c0ee73a6bfc2be9 .vscode/launch.json
+1 D. N... 100644 000000 000000 23d2ff1e2a7707938ac8533f20cceeaf8ebcfb32 0000000000000000000000000000000000000000 .vscode/tasks.json
+1 M. N... 100644 100644 100644 54737a78f53660e00f28019e185884aad9e8b9c6 00b74bee3b0777f8c74eaa86650a413e49b22f8d mobile/my_app/.metadata
+1 M. N... 100644 100644 100644 0d13be2f0ef9f29ad4e4b8c72ef046ddd31af6fa 28ae982224f42e949836e33543f273751684aee8 mobile/my_app/README.md
+1 M. N... 100644 100644 100644 35d7e7b205371ae1abd6420497438551ff2abd9c 2b6e25f4134dbecb814ad027cad24017cb91d0a6 mobile/my_app/android/app/build.gradle.kts
+1 M. N... 100644 100644 100644 5df8b2f0b205c0c86bd2722254b7d9af3bc470a9 3234cda5dd57d7990c70b346c45a6b94d3d9f461 mobile/my_app/android/app/src/main/AndroidManifest.xml
+1 M. N... 100644 100644 100644 b82b29ad9a7a8a4ac973ca5f129a50f50fbe5ad1 851b2215b36da759a46fe66aa7bc05f5a7beafaf mobile/my_app/firestore.rules
+1 M. N... 100644 100644 100644 c267afbbb56b73eb713ddf32b118f2272cd8df95 ae8c0ed7fc318bea2d85c9d831691f37463d14fb mobile/my_app/ios/Podfile
+1 M. N... 100644 100644 100644 39e0c9a8cd3f2569acc0b2902bb99230849bf64a aa607517e58cf655b0856e74edb8eab2cb2eb893 mobile/my_app/ios/Runner/Info.plist
+1 M. N... 100644 100644 100644 3856882f0d6a1516615897a77c1913540a7ac212 69017bd8f1918b67aa0db1c417fc2f081814566a mobile/my_app/lib/features/auth/presentation/screens/client_register_screen.dart
+1 M. N... 100644 100644 100644 aafb06aef9c548ddfe04d5ff924a147675f9b44e 8b84460d1b63af48b6d378274175644753278d35 mobile/my_app/lib/features/client/presentation/screens/client_request_details_screen.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 44c320c151ac1e3bbc64f467a14fcc8dd0a46eca mobile/my_app/lib/features/client/presentation/widgets/errand_tracking_map.dart
+1 M. N... 100644 100644 100644 96c7b12f6e1fac84d24aaced5a17d3a30b888e34 fdfc95533392f588f8f471e6741f9bcb6135d799 mobile/my_app/lib/features/client/presentation/widgets/legacy/map_tracking_card.dart
+1 M. N... 100644 100644 100644 071173d868d5bed59d4990409a3c0347856d0eb3 6ff4487daa24242c026188dd792501e14c22ac5c mobile/my_app/lib/features/worker/presentation/widgets/legacy/job_offer_card.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 90ba8d9192233ade0df40c7734e389c6c9939d27 mobile/my_app/lib/shared/models/job_location.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 9a3ae258b4a21510b43ab01dc3702cae0440e34b mobile/my_app/lib/shared/models/rider_location.dart
+1 M. N... 100644 100644 100644 12fc4c8252e5638720caa57188bb052b05e4613d 22ca055995e28e9ba6352bb01976cd547235ad23 mobile/my_app/lib/shared/models/service_request.dart
+1 M. N... 100644 100644 100644 806f13849e3a7bc51d5c347378238adcf9cf6d75 36d14d42e7e086db46c121cf47816c844955e75e mobile/my_app/lib/shared/repositories/service_request_repository.dart
+1 M. N... 100644 100644 100644 d9ad4790ad49865cebeed86070474dcdd29f1af2 51edae90f2285cd8b80f46f5e02670e7a0f7a5db mobile/my_app/lib/shared/services/api_service.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 e6df174a662e3c7dda937d6f0e985bb1fa1e3361 mobile/my_app/lib/shared/services/device_location_service.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 dd0114e815a8214b15e4158a5407f46ab2b94576 mobile/my_app/lib/shared/services/job_geocoding_service.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 e01fc87538bdac73dda381b76dcc05761117e7b9 mobile/my_app/lib/shared/services/rider_location_service.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 52790f0dd4d949b779059180c84535428a58aec0 mobile/my_app/lib/shared/utils/errand_pricing.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 2409a50620e71790f9ddd651b9820b348d215480 mobile/my_app/lib/shared/utils/job_location_utils.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 9a6491f1f4f728f95e7a5de3cb10bdc0eb0d8487 mobile/my_app/lib/shared/widgets/errand_map_layers.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 af034a45cf9ce7380766d8c60b09373efc2d8307 mobile/my_app/lib/shared/widgets/job_location_picker.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 97c50483fdae206aa4cbe9f9f4501dcce48382cd mobile/my_app/lib/shared/widgets/open_street_map_layers.dart
+1 D. N... 120000 000000 000000 61466e794b307f1bb49de65d7e3a51854c3777f9 0000000000000000000000000000000000000000 mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_picker
+1 D. N... 120000 000000 000000 6953b24d0f2dbdc0d933b5a98203488760770d73 0000000000000000000000000000000000000000 mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux
+1 D. N... 120000 000000 000000 4e66fcf717aa61e5b67a88d8aa244a77d9ec5985 0000000000000000000000000000000000000000 mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
+1 D. N... 120000 000000 000000 a69ba4156ca43daffb1ecaade7020acf24c321cc 0000000000000000000000000000000000000000 mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux
+1 D. N... 120000 000000 000000 88edb216e5c3bb88e4014bf7c92afea4c4739d5a 0000000000000000000000000000000000000000 mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux
+1 MM N... 100644 100644 100644 2db3c22ae2281f57cb3ccd2ec6dfd408fbcaa8b2 a630fa93c7ddefff958267f85e977bcc94196db6 mobile/my_app/linux/flutter/generated_plugins.cmake
+1 MM N... 100644 100644 100644 a34422957eda5a7180aa7842052a000fc3d7fcee 602b53da5057a0f119328cf8784c93b71e44f627 mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
+1 MM N... 100644 100644 100644 3a1ad67a7145cb0b92737a847f756d0f828386fe d5ae6060540b8953ce8b583fca755929d746a9ec mobile/my_app/pubspec.lock
+1 M. N... 100644 100644 100644 ea0b4a58d35c80b1735c1ac09bcfca7ae5d27c62 443a567a5684c762f3ec7c639eaf0c1a3559c316 mobile/my_app/pubspec.yaml
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 90fe89434583dd852d7de24c745c314c9a41d684 mobile/my_app/rules-tests/errands.rules.test.js
+1 M. N... 100644 100644 100644 55da167a78a6b09e3fe17d56ba293e68ba4f55e4 41759239c5830577a5792aa58e56cfa7ce3b811d mobile/my_app/rules-tests/request-applications.rules.test.js
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 5f19790077beb0c48fc11cffa61b80fe93e283e5 mobile/my_app/test/errand_pricing_test.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 2c183fd0fa05eb6ca934bbd97a7cbed11ac3f1d2 mobile/my_app/test/job_location_picker_test.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 af5f909868c548461023f87873a6a1f98ce54895 mobile/my_app/test/job_location_utils_test.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 476f22e1a7b98aa57c34415611c1b365f7190164 mobile/my_app/test/job_modality_test.dart
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 29cafd06a90e27aad8ca86d6c863950431db2f94 mobile/my_app/test/job_offer_card_test.dart
+1 M. N... 100644 100644 100644 324e63ea7834b1cae437c6022479d5a92d503157 96a6e8f0acaadbebfde11813eb48536c828a9f10 swiftserve-backend/src/app.js
+1 A. N... 000000 100644 100644 0000000000000000000000000000000000000000 e2b2aa9eb74ae80037541ad9135ced709f4f60d2 swiftserve-backend/test/health.test.js
+u UU N... 100644 100644 100644 100644 8b0704edb4d2724ad8c752669bd0ec3e068d53ee 5a7f72c8871dd0b46b5b924d89147b2f781ac30e 8899f7f1f41cf94d693a267483183a75d2a148b6 mobile/my_app/lib/features/client/presentation/screens/client_booking_flow.dart
+u UU N... 100644 100644 100644 100644 ac8f7bc913f6f104d64427629a838b875fc684ab bca402ffee5de49958f5a9e7c73459a7abd8af3d 58e7de30740cfeea353169ba33f35bab336da075 mobile/my_app/lib/features/client/presentation/screens/post_request_screen.dart
+u UU N... 100644 100644 100644 100644 3d07e9d247f112fbcef44fcea34c78db97e0f4fd ccb01f079849823a90c6da8bb9bcfbb433e5c7b0 589651d9ec35cd7c0c7f27ccc5baa2da6bc013b6 mobile/my_app/lib/features/worker/presentation/screens/worker_home_screen.dart
+u UU N... 100644 100644 100644 100644 29f1fbe92ee07f4fbe93cf32e114e100afe97187 c77e4aeb7cefbc998a59f0ead7b4ecfd486b5b0b aaeb7b2f8fa43b2951b1bee3235cad23a47b60b2 mobile/my_app/lib/features/worker/presentation/screens/worker_job_details_screen.dart
+? .repository-backups/sync-safety-20261023-221834/README.txt
+? .repository-backups/sync-safety-20261023-221834/divergent-commits.txt
+? .repository-backups/sync-safety-20261023-221834/git-metadata.zip
+? .repository-backups/sync-safety-20261023-221834/local-commit-files.txt
+? .repository-backups/sync-safety-20261023-221834/manifest.json
+? .repository-backups/sync-safety-20261023-221834/refs.txt
+? .repository-backups/sync-safety-20261023-221834/remote-commit-files.txt
+? .repository-backups/sync-safety-20261023-221834/staged.patch
+? .repository-backups/sync-safety-20261023-221834/status-before.txt
+? .repository-backups/sync-safety-20261023-221834/unmerged-index.txt
+? .repository-backups/sync-safety-20261023-221834/unstaged.patch
+? .repository-backups/sync-safety-20261023-221834/working-files.zip
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_picker
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/geolocator_linux
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/jni
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/package_info_plus
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux
+? mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux

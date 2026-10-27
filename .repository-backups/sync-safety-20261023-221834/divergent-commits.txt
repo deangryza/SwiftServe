@@ -1,0 +1,11 @@
+< 761fe8a Integrate latest functionality and UI redesign
+> eb34b61 Merge pull request #7 from deangryza/claude/errands-work-type-cad200
+> 7eb284c feat: errands work type with live rider tracking
+> 5794416 Merge pull request #6 from deangryza/claude/firestore-permission-denied-3ddedb
+> e7944fc fix: sign-up creates account without saving profile
+> 2c45a40 Merge pull request #5 from deangryza/feature/maps
+> 4db3351 added maps and mode of work
+> 2c2931d Merge main into maps branch, keeping maps and work type in the new UI
+> 0bfcfe3 Add job work type (on-site, online, hybrid) to job posting
+> 9267a6d chore(linux): remove ephemeral plugin symlinks
+> f465552 maps

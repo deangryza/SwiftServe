@@ -13,6 +13,7 @@ import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
 import '../../../../shared/services/device_location_service.dart';
+import '../../../../shared/services/job_geocoding_service.dart';
 import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/worker_rating_summary.dart';
@@ -196,12 +197,15 @@ class _WorkerTabSwipeRegionState extends State<_WorkerTabSwipeRegion> {
   );
 }
 
-enum WorkerDashboardRequestFilter { recent, available }
+enum WorkerDashboardRequestFilter { recent, nearby, available }
+
+const workerNearbyRadiusMeters = 10000.0;
 
 List<ServiceRequest> filterWorkerDashboardRequests({
   required Iterable<ServiceRequest> requests,
   required Iterable<ServiceApplication> applications,
   required WorkerDashboardRequestFilter filter,
+  JobCoordinate? workerAddressPosition,
 }) {
   final appliedRequestIds = applications
       .map((application) => application.requestId)
@@ -222,6 +226,33 @@ List<ServiceRequest> filterWorkerDashboardRequests({
           if (rightTime == null) return -1;
           return rightTime.compareTo(leftTime);
         });
+  if (filter == WorkerDashboardRequestFilter.nearby) {
+    if (workerAddressPosition == null) return [];
+    final nearby = eligible.where((request) {
+      final position = request.areaPosition;
+      return request.modality.needsLocation &&
+          position != null &&
+          distanceMetersBetween(workerAddressPosition, position) <=
+              workerNearbyRadiusMeters;
+    }).toList();
+    // List.sort is not stable; preserve newest-first order for equal distances.
+    final recentOrder = {
+      for (var i = 0; i < eligible.length; i++) eligible[i].id: i,
+    };
+    nearby.sort((left, right) {
+      final comparison =
+          distanceMetersBetween(
+            workerAddressPosition,
+            left.areaPosition!,
+          ).compareTo(
+            distanceMetersBetween(workerAddressPosition, right.areaPosition!),
+          );
+      return comparison == 0
+          ? recentOrder[left.id]!.compareTo(recentOrder[right.id]!)
+          : comparison;
+    });
+    return nearby;
+  }
   return filter == WorkerDashboardRequestFilter.recent
       ? eligible.take(5).toList(growable: false)
       : eligible;
@@ -259,11 +290,53 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
   JobCoordinate? _workerPosition;
   DeviceLocationException? _locationError;
   bool _loadingLocation = true;
+  JobCoordinate? _addressPosition;
+  bool _loadingAddress = false;
+  String? _addressError;
+  int _addressRequest = 0;
 
   @override
   void initState() {
     super.initState();
     _loadLocation();
+    _loadAddress();
+  }
+
+  @override
+  void didUpdateWidget(covariant _WorkerDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.worker.address != widget.worker.address) _loadAddress();
+  }
+
+  Future<void> _loadAddress() async {
+    final request = ++_addressRequest;
+    final address = widget.worker.address.trim();
+    setState(() {
+      _addressPosition = null;
+      _addressError = null;
+      _loadingAddress = address.isNotEmpty;
+      if (address.isEmpty) {
+        _addressError = 'Add your address to your profile to find nearby jobs.';
+      }
+    });
+    if (address.isEmpty) return;
+    try {
+      final location = await JobGeocodingService()
+          .search(address)
+          .timeout(const Duration(seconds: 20));
+      if (!mounted || request != _addressRequest) return;
+      setState(() => _addressPosition = location.position);
+    } catch (_) {
+      if (!mounted || request != _addressRequest) return;
+      setState(
+        () => _addressError =
+            'Could not locate your saved address. Check your address and connection, then retry.',
+      );
+    } finally {
+      if (mounted && request == _addressRequest) {
+        setState(() => _loadingAddress = false);
+      }
+    }
   }
 
   Future<void> _loadLocation() async {
@@ -294,8 +367,9 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
     if (!request.modality.needsLocation) return null;
     final jobPosition = request.areaPosition;
     if (jobPosition == null) return 'Distance unavailable';
-    if (_loadingLocation) return 'Finding distance…';
-    final workerPosition = _workerPosition;
+    final nearby = _filter == WorkerDashboardRequestFilter.nearby;
+    if (nearby ? _loadingAddress : _loadingLocation) return 'Finding distance…';
+    final workerPosition = nearby ? _addressPosition : _workerPosition;
     if (workerPosition == null) return 'Distance unavailable';
     final toJob = formatDistance(
       distanceMetersBetween(workerPosition, jobPosition),
@@ -339,6 +413,7 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
               requests: requestSnapshot.data!,
               applications: applicationSnapshot.data!,
               filter: _filter,
+              workerAddressPosition: _addressPosition,
             );
             return ColoredBox(
               color: palette.background,
@@ -371,7 +446,8 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
                                 _openVerification(context, widget.worker),
                           ),
                         ],
-                        if (_locationError != null &&
+                        if (_filter != WorkerDashboardRequestFilter.nearby &&
+                            _locationError != null &&
                             requests.any(
                               (request) => request.areaPosition != null,
                             )) ...[
@@ -422,7 +498,35 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
                               setState(() => _filter = filter),
                         ),
                         const SizedBox(height: 14),
-                        if (requests.isEmpty)
+                        if (_filter == WorkerDashboardRequestFilter.nearby) ...[
+                          Text(
+                            _loadingAddress
+                                ? 'Finding jobs near your saved address…'
+                                : _addressError ??
+                                      'Within 10 km of your saved address · Approximate distances',
+                            style: TextStyle(
+                              color: palette.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                          if (_loadingAddress) const LinearProgressIndicator(),
+                          if (_addressError != null &&
+                              widget.worker.address.trim().isNotEmpty)
+                            TextButton(
+                              onPressed: _loadAddress,
+                              child: const Text('Retry address lookup'),
+                            ),
+                          const SizedBox(height: 12),
+                        ],
+                        if (_filter == WorkerDashboardRequestFilter.nearby &&
+                            (_loadingAddress || _addressError != null))
+                          const SizedBox.shrink()
+                        else if (requests.isEmpty &&
+                            _filter == WorkerDashboardRequestFilter.nearby)
+                          const Text(
+                            'No open jobs within 10 km of your saved address. Check Recent for more jobs.',
+                          )
+                        else if (requests.isEmpty)
                           const _EmptyWorkerRequests()
                         else
                           for (final request in requests) ...[
@@ -657,34 +761,38 @@ class _WorkerRequestFilter extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
-        children: WorkerDashboardRequestFilter.values.map((filter) {
-          final active = filter == selected;
-          return Expanded(
-            child: InkWell(
-              key: ValueKey('worker-filter-${filter.name}'),
-              onTap: () => onChanged(filter),
-              borderRadius: BorderRadius.circular(17),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 180),
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: active ? AppTheme.ink : Colors.transparent,
+        children:
+            const [
+              WorkerDashboardRequestFilter.recent,
+              WorkerDashboardRequestFilter.nearby,
+            ].map((filter) {
+              final active = filter == selected;
+              return Expanded(
+                child: InkWell(
+                  key: ValueKey('worker-filter-${filter.name}'),
+                  onTap: () => onChanged(filter),
                   borderRadius: BorderRadius.circular(17),
-                ),
-                child: Text(
-                  filter == WorkerDashboardRequestFilter.recent
-                      ? 'Recent'
-                      : 'Nearby',
-                  style: TextStyle(
-                    color: active ? Colors.white : palette.text,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 180),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active ? AppTheme.ink : Colors.transparent,
+                      borderRadius: BorderRadius.circular(17),
+                    ),
+                    child: Text(
+                      filter == WorkerDashboardRequestFilter.recent
+                          ? 'Recent'
+                          : 'Nearby',
+                      style: TextStyle(
+                        color: active ? Colors.white : palette.text,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(),
+              );
+            }).toList(),
       ),
     );
   }
@@ -2024,6 +2132,29 @@ class _VerificationBanner extends StatelessWidget {
   );
 }
 
+/// Handles verification updates, which are not associated with a job request.
+Future<bool> openWorkerVerificationNotification({
+  required BuildContext context,
+  required Map<String, dynamic> notification,
+  required AppUser worker,
+  required Future<void> Function() markAsRead,
+}) async {
+  final title = notification['title']?.toString().trim().toLowerCase();
+  if (title != 'verification updated' && title != 'verification update') {
+    return false;
+  }
+  await markAsRead();
+  if (context.mounted) {
+    Navigator.push<void>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => WorkerVerificationScreen(profile: worker),
+      ),
+    );
+  }
+  return true;
+}
+
 class _WorkerNotifications extends StatelessWidget {
   const _WorkerNotifications({required this.worker});
 
@@ -2064,6 +2195,14 @@ class _WorkerNotifications extends StatelessWidget {
     final requestId = data['requestId']?.toString();
     final type = data['type']?.toString();
     try {
+      if (await openWorkerVerificationNotification(
+        context: context,
+        notification: data,
+        worker: worker,
+        markAsRead: () => notification.reference.update({'read': true}),
+      )) {
+        return;
+      }
       if (type == 'reviewReceived' ||
           (type == null && data['title'] == 'New review received')) {
         await notification.reference.update({'read': true});

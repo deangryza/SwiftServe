@@ -1,0 +1,1838 @@
+diff --cc mobile/my_app/lib/features/client/presentation/screens/client_booking_flow.dart
+index 5a7f72c,8899f7f..0000000
+--- a/mobile/my_app/lib/features/client/presentation/screens/client_booking_flow.dart
++++ b/mobile/my_app/lib/features/client/presentation/screens/client_booking_flow.dart
+@@@ -13,11 -10,12 +13,12 @@@ import '../../../../shared/widgets/acti
+  import '../../../../shared/widgets/live_profile_avatar.dart';
+  import '../../../../shared/widgets/worker_rating_summary.dart';
+  import '../widgets/conversation_ui.dart';
++ import '../widgets/errand_tracking_map.dart';
+  import 'client_sections.dart';
+  
+ -const _bookingYellow = Color(0xFFFFC72C);
+ -const _bookingCream = Color(0xFFFFF9E9);
+ -const _bookingInk = Color(0xFF242424);
+ +const _bookingYellow = AppTheme.yellow;
+ +const _bookingCream = Color(0xFFFFFFFF);
+ +const _bookingInk = AppTheme.ink;
+  
+  enum _BookingFilter { recent, past }
+  
+@@@ -1202,125 -1214,105 +1203,206 @@@ class _BookingDetailsBody extends State
+                      ),
+                    ],
+                  ),
+ -              ),
+ -            ),
+ -            Expanded(
+ -              child: Container(
+ -                width: double.infinity,
+ -                decoration: BoxDecoration(
+ -                  color: palette.background,
+ -                  borderRadius: const BorderRadius.vertical(
+ -                    top: Radius.circular(48),
+ +                const SizedBox(height: 18),
+ +                LiveProfileAvatar(
+ +                  userId: request.workerId ?? '',
+ +                  fallbackName: name,
+ +                  radius: 32,
+ +                  backgroundColor: AppTheme.softYellow,
+ +                  foregroundColor: AppTheme.ink,
+ +                  textStyle: const TextStyle(
+ +                    fontSize: 28,
+ +                    fontWeight: FontWeight.w800,
+                    ),
+                  ),
+++<<<<<<< HEAD
+ +              ],
+++=======
++                 child: ListView(
++                   padding: const EdgeInsets.fromLTRB(20, 48, 20, 190),
++                   children: [
++                     _AcceptedWorkerCard(
++                       name: name,
++                       request: request,
++                       worker: worker,
++                       palette: palette,
++                     ),
++                     const SizedBox(height: 18),
++                     _RequestSummaryCard(request: request, palette: palette),
++                     if (request.isErrand &&
++                         (request.status == ServiceRequestStatus.accepted ||
++                             request.status ==
++                                 ServiceRequestStatus.ongoing)) ...[
++                       const SizedBox(height: 18),
++                       ErrandTrackingMap(
++                         key: ValueKey('errand-tracking-${request.id}'),
++                         request: request,
++                       ),
++                     ],
++                     const SizedBox(height: 22),
++                     if (request.status == ServiceRequestStatus.completed) ...[
++                       FilledButton(
++                         key: const ValueKey('rate-completed-worker'),
++                         onPressed: savingReview ? null : onRateWorker,
++                         style: FilledButton.styleFrom(
++                           backgroundColor: palette.surface,
++                           foregroundColor: palette.text,
++                           minimumSize: const Size.fromHeight(52),
++                           elevation: 2,
++                           shape: RoundedRectangleBorder(
++                             borderRadius: BorderRadius.circular(14),
++                           ),
++                         ),
++                         child: Text(
++                           savingReview
++                               ? 'Submitting Review...'
++                               : 'Rate your worker',
++                         ),
++                       ),
++                       const SizedBox(height: 12),
++                     ],
++                     FilledButton(
++                       key: const ValueKey('message-accepted-worker'),
++                       onPressed: onMessage,
++                       style: FilledButton.styleFrom(
++                         backgroundColor: palette.surface,
++                         foregroundColor: palette.text,
++                         minimumSize: const Size.fromHeight(52),
++                         elevation: 2,
++                         shape: RoundedRectangleBorder(
++                           borderRadius: BorderRadius.circular(14),
++                         ),
++                       ),
++                       child: const Text('Message Worker'),
++                     ),
++                     if (canCancel) ...[
++                       const SizedBox(height: 12),
++                       FilledButton(
++                         onPressed: saving ? null : onCancel,
++                         style: FilledButton.styleFrom(
++                           backgroundColor: const Color(0xFFFFDDDD),
++                           foregroundColor: const Color(0xFFE74632),
++                           minimumSize: const Size.fromHeight(52),
++                           elevation: 2,
++                           shape: RoundedRectangleBorder(
++                             borderRadius: BorderRadius.circular(14),
++                           ),
++                         ),
++                         child: Text(
++                           saving ? 'Cancelling...' : 'Cancel Request',
++                         ),
++                       ),
++                     ],
++                   ],
++                 ),
++               ),
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+              ),
+ -          ],
+ +          ),
+          ),
+ -        _WorkerProfileSheet(
+ -          worker: worker,
+ -          workerId: request.workerId ?? '',
+ -          name: name,
+ -          palette: palette,
+ -          savingReport: savingReport,
+ -          onReport: onReportWorker,
+ +        Expanded(
+ +          child: Container(
+ +            width: double.infinity,
+ +            decoration: BoxDecoration(
+ +              color: palette.background,
+ +              borderRadius: BorderRadius.zero,
+ +            ),
+ +            child: ListView(
+ +              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+ +              children: [
+ +                _AcceptedWorkerCard(
+ +                  name: name,
+ +                  request: request,
+ +                  worker: worker,
+ +                  palette: palette,
+ +                ),
+ +                const SizedBox(height: 18),
+ +                _RequestSummaryCard(request: request, palette: palette),
+ +                const SizedBox(height: 22),
+ +                FilledButton.icon(
+ +                  key: const ValueKey('view-worker-profile'),
+ +                  onPressed: request.workerId == null
+ +                      ? null
+ +                      : () => Navigator.push(
+ +                          context,
+ +                          clientPageRoute(
+ +                            PublicProfileScreen(
+ +                              userId: request.workerId!,
+ +                              role: PublicProfileRole.worker,
+ +                              initialData: worker,
+ +                              onReport: onReportWorker,
+ +                              reporting: savingReport,
+ +                              reportLabel: 'Report worker',
+ +                            ),
+ +                          ),
+ +                        ),
+ +                  style: FilledButton.styleFrom(
+ +                    backgroundColor: AppTheme.yellow,
+ +                    foregroundColor: AppTheme.ink,
+ +                    minimumSize: const Size.fromHeight(52),
+ +                    elevation: 0,
+ +                    shape: RoundedRectangleBorder(
+ +                      borderRadius: BorderRadius.circular(14),
+ +                    ),
+ +                  ),
+ +                  icon: const Icon(Icons.person_outline_rounded),
+ +                  label: const Text('View Profile'),
+ +                ),
+ +                const SizedBox(height: 12),
+ +                if (request.status == ServiceRequestStatus.completed) ...[
+ +                  FilledButton(
+ +                    key: const ValueKey('rate-completed-worker'),
+ +                    onPressed: savingReview ? null : onRateWorker,
+ +                    style: FilledButton.styleFrom(
+ +                      backgroundColor: palette.surface,
+ +                      foregroundColor: palette.text,
+ +                      minimumSize: const Size.fromHeight(52),
+ +                      elevation: 0,
+ +                      shape: RoundedRectangleBorder(
+ +                        borderRadius: BorderRadius.circular(14),
+ +                      ),
+ +                    ),
+ +                    child: Text(
+ +                      savingReview
+ +                          ? 'Submitting Review...'
+ +                          : 'Rate your worker',
+ +                    ),
+ +                  ),
+ +                  const SizedBox(height: 12),
+ +                ],
+ +                FilledButton(
+ +                  key: const ValueKey('message-accepted-worker'),
+ +                  onPressed: onMessage,
+ +                  style: FilledButton.styleFrom(
+ +                    backgroundColor: palette.surface,
+ +                    foregroundColor: palette.text,
+ +                    minimumSize: const Size.fromHeight(52),
+ +                    elevation: 0,
+ +                    shape: RoundedRectangleBorder(
+ +                      borderRadius: BorderRadius.circular(14),
+ +                    ),
+ +                  ),
+ +                  child: const Text('Message Worker'),
+ +                ),
+ +                if (canCancel) ...[
+ +                  const SizedBox(height: 12),
+ +                  FilledButton(
+ +                    onPressed: saving ? null : onCancel,
+ +                    style: FilledButton.styleFrom(
+ +                      backgroundColor: AppTheme.softYellow,
+ +                      foregroundColor: AppTheme.ink,
+ +                      minimumSize: const Size.fromHeight(52),
+ +                      elevation: 0,
+ +                      shape: RoundedRectangleBorder(
+ +                        borderRadius: BorderRadius.circular(14),
+ +                      ),
+ +                    ),
+ +                    child: Text(saving ? 'Cancelling...' : 'Cancel Request'),
+ +                  ),
+ +                ],
+ +              ],
+ +            ),
+ +          ),
+          ),
+        ],
+      );
+diff --cc mobile/my_app/lib/features/client/presentation/screens/post_request_screen.dart
+index bca402f,58e7de3..0000000
+--- a/mobile/my_app/lib/features/client/presentation/screens/post_request_screen.dart
++++ b/mobile/my_app/lib/features/client/presentation/screens/post_request_screen.dart
+@@@ -1,9 -1,14 +1,15 @@@
+  import 'package:cloud_firestore/cloud_firestore.dart';
+  import 'package:firebase_auth/firebase_auth.dart';
+  import 'package:flutter/material.dart';
+ +import '../../../../shared/theme/app_theme.dart';
+  import 'package:flutter/services.dart';
+  
++ import '../../../../shared/models/job_location.dart';
++ import '../../../../shared/models/service_request.dart';
++ import '../../../../shared/repositories/service_request_repository.dart';
++ import '../../../../shared/utils/errand_pricing.dart';
++ import '../../../../shared/widgets/job_location_picker.dart';
++ 
+  String? resolvePostCategory(
+    List<String> categories,
+    String? requestedCategory,
+@@@ -51,12 -63,24 +64,31 @@@ class _PostRequestScreenState extends S
+    String? _selectedCategory;
+    DateTime? _fromDate;
+    DateTime? _toDate;
++   JobModality _modality = JobModality.onsite;
++   JobLocationSelection? _selectedLocation;
++   JobLocationSelection? _dropoffLocation;
+    bool _isPosting = false;
+  
+++<<<<<<< HEAD
+ +  static const _yellow = AppTheme.yellow;
+ +  static const _ink = AppTheme.ink;
+ +  static const _cream = Color(0xFFFFFFFF);
+ +  static const _pink = AppTheme.yellow;
+++=======
++   bool get _isErrand => _modality == JobModality.errand;
++ 
++   /// Estimated km between pickup and drop-off, once both are pinned.
++   double? get _errandDistanceKm {
++     final pickup = _selectedLocation;
++     final dropoff = _dropoffLocation;
++     if (pickup == null || dropoff == null) return null;
++     return errandDistanceKm(pickup.position, dropoff.position);
++   }
++ 
++   static const _yellow = Color(0xFFFFC72C);
++   static const _ink = Color(0xFF242424);
++   static const _cream = Color(0xFFFFF9E9);
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+  
+    @override
+    void initState() {
+@@@ -554,109 -382,513 +600,567 @@@
+                        ),
+                      ],
+                    ),
+++<<<<<<< HEAD
+ +                  const SizedBox(height: 12),
+ +                  _sectionCard(
+ +                    surface: surface,
+ +                    dark: dark,
+ +                    child: Column(
+ +                      crossAxisAlignment: CrossAxisAlignment.start,
+ +                      children: [
+ +                        _label('Location', text),
+ +                        TextFormField(
+ +                          key: const ValueKey('post-job-location'),
+ +                          controller: _locationController,
+ +                          style: TextStyle(color: text),
+ +                          decoration: _inputDecoration(
+ +                            hint: 'Enter city and area',
+ +                            field: field,
+ +                            border: border,
+ +                            text: text,
+ +                            muted: muted,
+ +                            prefixIcon: Container(
+ +                              margin: const EdgeInsets.all(7),
+ +                              decoration: BoxDecoration(
+ +                                color: _pink.withValues(alpha: 0.10),
+ +                                borderRadius: BorderRadius.circular(9),
+++=======
++                 ),
++                 Expanded(
++                   child: Container(
++                     clipBehavior: Clip.antiAlias,
++                     decoration: BoxDecoration(
++                       color: background,
++                       borderRadius: const BorderRadius.vertical(
++                         top: Radius.circular(46),
++                       ),
++                     ),
++                     child: Form(
++                       key: _formKey,
++                       child: ListView(
++                         padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
++                         children: [
++                           _sectionCard(
++                             surface: surface,
++                             dark: dark,
++                             child: Column(
++                               crossAxisAlignment: CrossAxisAlignment.start,
++                               children: [
++                                 _label('Job title', text),
++                                 TextFormField(
++                                   key: const ValueKey('post-job-title'),
++                                   controller: _titleController,
++                                   maxLength: 80,
++                                   style: TextStyle(color: text),
++                                   decoration: _inputDecoration(
++                                     hint: 'e.g. Need math tutor for 2 hours',
++                                     field: field,
++                                     border: border,
++                                     text: text,
++                                     muted: muted,
++                                   ).copyWith(counterText: ''),
++                                   validator: (value) =>
++                                       value == null || value.trim().isEmpty
++                                       ? 'Enter a job title'
++                                       : null,
++                                 ),
++                               ],
++                             ),
++                           ),
++                           const SizedBox(height: 12),
++                           _sectionCard(
++                             surface: surface,
++                             dark: dark,
++                             child: Column(
++                               crossAxisAlignment: CrossAxisAlignment.start,
++                               children: [
++                                 _label('Category', text),
++                                 StreamBuilder<
++                                   QuerySnapshot<Map<String, dynamic>>
++                                 >(
++                                   stream: FirebaseFirestore.instance
++                                       .collection('service_categories')
++                                       .where('status', isEqualTo: 'active')
++                                       .snapshots(),
++                                   builder: (context, snapshot) {
++                                     if (snapshot.hasError) {
++                                       return InputDecorator(
++                                         decoration:
++                                             _inputDecoration(
++                                               hint: 'Could not load categories',
++                                               field: field,
++                                               border: border,
++                                               text: text,
++                                               muted: muted,
++                                             ).copyWith(
++                                               errorText:
++                                                   'Could not load categories',
++                                             ),
++                                         child: Text(
++                                           'Try again shortly.',
++                                           style: TextStyle(color: text),
++                                         ),
++                                       );
++                                     }
++                                     if (!snapshot.hasData) {
++                                       return InputDecorator(
++                                         decoration: _inputDecoration(
++                                           hint: 'Loading categories...',
++                                           field: field,
++                                           border: border,
++                                           text: text,
++                                           muted: muted,
++                                         ),
++                                         child: const LinearProgressIndicator(),
++                                       );
++                                     }
++ 
++                                     final categories =
++                                         snapshot.data!.docs
++                                             .map(
++                                               (document) => document
++                                                   .data()['name']
++                                                   ?.toString()
++                                                   .trim(),
++                                             )
++                                             .whereType<String>()
++                                             .where((name) => name.isNotEmpty)
++                                             .toSet()
++                                             .toList()
++                                           ..sort(
++                                             (left, right) => left
++                                                 .toLowerCase()
++                                                 .compareTo(right.toLowerCase()),
++                                           );
++                                     final selectedCategory =
++                                         resolvePostCategory(
++                                           categories,
++                                           _selectedCategory,
++                                         );
++                                     if (selectedCategory != null) {
++                                       _selectedCategory = selectedCategory;
++                                     }
++ 
++                                     return DropdownButtonFormField<String>(
++                                       key: ValueKey(selectedCategory),
++                                       initialValue: selectedCategory,
++                                       dropdownColor: surface,
++                                       style: TextStyle(
++                                         color: text,
++                                         fontSize: 14,
++                                       ),
++                                       decoration: _inputDecoration(
++                                         hint: categories.isEmpty
++                                             ? 'No active categories'
++                                             : 'Select category',
++                                         field: field,
++                                         border: border,
++                                         text: text,
++                                         muted: muted,
++                                       ),
++                                       icon: Icon(
++                                         Icons.keyboard_arrow_down,
++                                         color: muted,
++                                       ),
++                                       items: categories
++                                           .map(
++                                             (category) => DropdownMenuItem(
++                                               value: category,
++                                               child: Text(category),
++                                             ),
++                                           )
++                                           .toList(),
++                                       onChanged: categories.isEmpty
++                                           ? null
++                                           : (value) => setState(() {
++                                               _selectedCategory = value;
++                                               if (isErrandCategory(value)) {
++                                                 _modality = JobModality.errand;
++                                               }
++                                             }),
++                                       validator: (value) => value == null
++                                           ? 'Select a category'
++                                           : null,
++                                     );
++                                   },
++                                 ),
++                               ],
++                             ),
++                           ),
++                           const SizedBox(height: 12),
++                           Row(
++                             crossAxisAlignment: CrossAxisAlignment.start,
++                             children: [
++                               Expanded(
++                                 flex: 9,
++                                 child: _sectionCard(
++                                   surface: surface,
++                                   dark: dark,
++                                   padding: const EdgeInsets.all(14),
++                                   child: Column(
++                                     crossAxisAlignment:
++                                         CrossAxisAlignment.start,
++                                     children: [
++                                       _label(
++                                         _isErrand
++                                             ? 'Delivery fee'
++                                             : 'Budget (₱)',
++                                         text,
++                                       ),
++                                       if (_isErrand)
++                                         _ErrandFeePreview(
++                                           distanceKm: _errandDistanceKm,
++                                           text: text,
++                                           muted: muted,
++                                         )
++                                       else
++                                         TextFormField(
++                                           key: const ValueKey(
++                                             'post-job-budget',
++                                           ),
++                                           controller: _budgetController,
++                                           style: TextStyle(color: text),
++                                           keyboardType:
++                                               const TextInputType.numberWithOptions(
++                                                 decimal: true,
++                                               ),
++                                           inputFormatters: [
++                                             FilteringTextInputFormatter.allow(
++                                               RegExp(r'^\d*\.?\d{0,2}'),
++                                             ),
++                                           ],
++                                           decoration: _inputDecoration(
++                                             hint: 'e.g. 200',
++                                             field: field,
++                                             border: border,
++                                             text: text,
++                                             muted: muted,
++                                           ),
++                                           validator: (value) {
++                                             final amount = double.tryParse(
++                                               value?.trim() ?? '',
++                                             );
++                                             return amount == null || amount <= 0
++                                                 ? 'Invalid budget'
++                                                 : null;
++                                           },
++                                         ),
++                                     ],
++                                   ),
++                                 ),
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+                                ),
+ -                              const SizedBox(width: 10),
+ -                              Expanded(
+ -                                flex: 10,
+ -                                child: _sectionCard(
+ -                                  surface: surface,
+ -                                  dark: dark,
+ -                                  padding: const EdgeInsets.all(14),
+ -                                  child: Column(
+ -                                    crossAxisAlignment:
+ -                                        CrossAxisAlignment.start,
+ -                                    children: [
+ -                                      _label('Schedule', text),
+ -                                      Row(
+ -                                        key: const ValueKey(
+ -                                          'post-job-schedule',
+ -                                        ),
+ -                                        children: [
+ -                                          Expanded(
+ -                                            child: _dateField(
+ -                                              label: 'FROM',
+ -                                              value: _fromDate,
+ -                                              onTap: () => _pickSchedule(
+ -                                                pickingFrom: true,
+ -                                              ),
+ -                                              field: field,
+ -                                              border: border,
+ -                                              text: text,
+ -                                              muted: muted,
+ -                                            ),
+ -                                          ),
+ -                                          const SizedBox(width: 6),
+ -                                          Expanded(
+ -                                            child: _dateField(
+ -                                              label: 'TO',
+ -                                              value: _toDate,
+ -                                              onTap: () => _pickSchedule(
+ -                                                pickingFrom: false,
+ -                                              ),
+ -                                              field: field,
+ -                                              border: border,
+ -                                              text: text,
+ -                                              muted: muted,
+ -                                            ),
+ -                                          ),
+ -                                        ],
+ -                                      ),
+ -                                    ],
+ -                                  ),
+ -                                ),
+ +                              child: const Icon(
+ +                                Icons.location_on_outlined,
+ +                                color: _pink,
+ +                                size: 21,
+                                ),
+++<<<<<<< HEAD
+ +                            ),
+ +                          ),
+ +                          validator: (value) =>
+ +                              value == null || value.trim().isEmpty
+ +                              ? 'Enter a location'
+ +                              : null,
+ +                        ),
+ +                      ],
+++=======
++                             ],
++                           ),
++                           const SizedBox(height: 12),
++                           _sectionCard(
++                             surface: surface,
++                             dark: dark,
++                             child: Column(
++                               crossAxisAlignment: CrossAxisAlignment.start,
++                               children: [
++                                 _label('Work type', text),
++                                 _ModalitySelector(
++                                   value: _modality,
++                                   field: field,
++                                   border: border,
++                                   text: text,
++                                   muted: muted,
++                                   onChanged: (modality) => setState(() {
++                                     _modality = modality;
++                                     // The picker is rebuilt empty when it
++                                     // reappears.
++                                     if (!modality.needsLocation) {
++                                       _selectedLocation = null;
++                                     }
++                                     if (modality != JobModality.errand) {
++                                       _dropoffLocation = null;
++                                     }
++                                   }),
++                                 ),
++                               ],
++                             ),
++                           ),
++                           if (_modality.needsLocation) ...[
++                             const SizedBox(height: 12),
++                             _sectionCard(
++                               surface: surface,
++                               dark: dark,
++                               child: Column(
++                                 crossAxisAlignment: CrossAxisAlignment.start,
++                                 children: [
++                                   _label(
++                                     _isErrand ? 'Pickup' : 'Location',
++                                     text,
++                                   ),
++                                   FormField<JobLocationSelection>(
++                                     key: const ValueKey('post-job-location'),
++                                     validator: (value) {
++                                       if (value == null) {
++                                         return _isErrand
++                                             ? 'Choose the pickup point on the map.'
++                                             : 'Choose the service location on the map.';
++                                       }
++                                       if (value.exactAddress.trim().isEmpty) {
++                                         return _isErrand
++                                             ? 'Enter the pickup address.'
++                                             : 'Enter the exact service address.';
++                                       }
++                                       return null;
++                                     },
++                                     builder: (field) => JobLocationPicker(
++                                       errorText: field.errorText,
++                                       onChanged: (value) {
++                                         setState(
++                                           () => _selectedLocation = value,
++                                         );
++                                         field.didChange(value);
++                                       },
++                                     ),
++                                   ),
++                                 ],
++                               ),
++                             ),
++                           ],
++                           if (_isErrand) ...[
++                             const SizedBox(height: 12),
++                             _sectionCard(
++                               surface: surface,
++                               dark: dark,
++                               child: Column(
++                                 crossAxisAlignment: CrossAxisAlignment.start,
++                                 children: [
++                                   _label('Drop-off', text),
++                                   FormField<JobLocationSelection>(
++                                     key: const ValueKey('post-job-dropoff'),
++                                     validator: (value) {
++                                       if (value == null) {
++                                         return 'Choose the drop-off point on the map.';
++                                       }
++                                       if (value.exactAddress.trim().isEmpty) {
++                                         return 'Enter the drop-off address.';
++                                       }
++                                       return null;
++                                     },
++                                     builder: (field) => JobLocationPicker(
++                                       errorText: field.errorText,
++                                       onChanged: (value) {
++                                         setState(
++                                           () => _dropoffLocation = value,
++                                         );
++                                         field.didChange(value);
++                                       },
++                                     ),
++                                   ),
++                                 ],
++                               ),
++                             ),
++                             const SizedBox(height: 12),
++                             _sectionCard(
++                               surface: surface,
++                               dark: dark,
++                               child: Column(
++                                 crossAxisAlignment: CrossAxisAlignment.start,
++                                 children: [
++                                   _label('What to buy or pick up', text),
++                                   TextFormField(
++                                     key: const ValueKey(
++                                       'post-job-errand-items',
++                                     ),
++                                     controller: _errandItemsController,
++                                     style: TextStyle(color: text),
++                                     minLines: 2,
++                                     maxLines: 4,
++                                     maxLength: 500,
++                                     decoration: _inputDecoration(
++                                       hint: 'e.g. 2 kg rice and 1 dozen eggs',
++                                       field: field,
++                                       border: border,
++                                       text: text,
++                                       muted: muted,
++                                     ).copyWith(counterText: ''),
++                                     validator: (value) =>
++                                         value == null || value.trim().isEmpty
++                                         ? 'List the items or package'
++                                         : null,
++                                   ),
++                                   const SizedBox(height: 10),
++                                   _label(
++                                     'Item cost estimate (₱, optional)',
++                                     text,
++                                   ),
++                                   TextFormField(
++                                     key: const ValueKey('post-job-item-cost'),
++                                     controller: _itemCostController,
++                                     style: TextStyle(color: text),
++                                     keyboardType:
++                                         const TextInputType.numberWithOptions(
++                                           decimal: true,
++                                         ),
++                                     inputFormatters: [
++                                       FilteringTextInputFormatter.allow(
++                                         RegExp(r'^\d*\.?\d{0,2}'),
++                                       ),
++                                     ],
++                                     decoration: _inputDecoration(
++                                       hint:
++                                           'Paid back to the rider on delivery',
++                                       field: field,
++                                       border: border,
++                                       text: text,
++                                       muted: muted,
++                                     ),
++                                   ),
++                                 ],
++                               ),
++                             ),
++                           ],
++                           const SizedBox(height: 12),
++                           _sectionCard(
++                             surface: surface,
++                             dark: dark,
++                             child: Column(
++                               crossAxisAlignment: CrossAxisAlignment.start,
++                               children: [
++                                 _label('Description', text),
++                                 TextFormField(
++                                   key: const ValueKey('post-job-description'),
++                                   controller: _descriptionController,
++                                   style: TextStyle(color: text),
++                                   minLines: 3,
++                                   maxLines: 5,
++                                   decoration: _inputDecoration(
++                                     hint: 'Describe what you need...',
++                                     field: field,
++                                     border: border,
++                                     text: text,
++                                     muted: muted,
++                                   ),
++                                   validator: (value) =>
++                                       value == null || value.trim().isEmpty
++                                       ? 'Describe the job'
++                                       : null,
++                                 ),
++                               ],
++                             ),
++                           ),
++                           const SizedBox(height: 14),
++                           SizedBox(
++                             height: 54,
++                             child: FilledButton(
++                               key: const ValueKey('post-job-submit'),
++                               onPressed: _isPosting ? null : _postJob,
++                               style: FilledButton.styleFrom(
++                                 backgroundColor: _yellow,
++                                 foregroundColor: _ink,
++                                 disabledBackgroundColor: _yellow.withValues(
++                                   alpha: 0.55,
++                                 ),
++                                 shape: RoundedRectangleBorder(
++                                   borderRadius: BorderRadius.circular(16),
++                                 ),
++                                 elevation: 3,
++                                 textStyle: const TextStyle(
++                                   fontSize: 15,
++                                   fontWeight: FontWeight.w700,
++                                 ),
++                               ),
++                               child: _isPosting
++                                   ? const SizedBox.square(
++                                       dimension: 20,
++                                       child: CircularProgressIndicator(
++                                         strokeWidth: 2.2,
++                                         color: _ink,
++                                       ),
++                                     )
++                                   : const Text('Post job'),
++                             ),
++                           ),
++                           const SizedBox(height: 8),
++                         ],
++                       ),
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+                      ),
+                    ),
+ -                ),
+ -              ],
+ +                  const SizedBox(height: 12),
+ +                  _sectionCard(
+ +                    surface: surface,
+ +                    dark: dark,
+ +                    child: Column(
+ +                      crossAxisAlignment: CrossAxisAlignment.start,
+ +                      children: [
+ +                        _label('Description', text),
+ +                        TextFormField(
+ +                          key: const ValueKey('post-job-description'),
+ +                          controller: _descriptionController,
+ +                          style: TextStyle(color: text),
+ +                          minLines: 3,
+ +                          maxLines: 5,
+ +                          decoration: _inputDecoration(
+ +                            hint: 'Describe what you need...',
+ +                            field: field,
+ +                            border: border,
+ +                            text: text,
+ +                            muted: muted,
+ +                          ),
+ +                          validator: (value) =>
+ +                              value == null || value.trim().isEmpty
+ +                              ? 'Describe the job'
+ +                              : null,
+ +                        ),
+ +                      ],
+ +                    ),
+ +                  ),
+ +                  const SizedBox(height: 14),
+ +                  SizedBox(
+ +                    height: 54,
+ +                    child: FilledButton(
+ +                      key: const ValueKey('post-job-submit'),
+ +                      onPressed: _isPosting ? null : _postJob,
+ +                      style: FilledButton.styleFrom(
+ +                        backgroundColor: _yellow,
+ +                        foregroundColor: _ink,
+ +                        disabledBackgroundColor: _yellow.withValues(
+ +                          alpha: 0.55,
+ +                        ),
+ +                        shape: RoundedRectangleBorder(
+ +                          borderRadius: BorderRadius.circular(16),
+ +                        ),
+ +                        elevation: 0,
+ +                        textStyle: const TextStyle(
+ +                          fontSize: 15,
+ +                          fontWeight: FontWeight.w700,
+ +                        ),
+ +                      ),
+ +                      child: _isPosting
+ +                          ? const SizedBox.square(
+ +                              dimension: 20,
+ +                              child: CircularProgressIndicator(
+ +                                strokeWidth: 2.2,
+ +                                color: _ink,
+ +                              ),
+ +                            )
+ +                          : const Text('Post job'),
+ +                    ),
+ +                  ),
+ +                  const SizedBox(height: 8),
+ +                ],
+ +              ),
+              ),
+            ),
+          ),
+diff --cc mobile/my_app/lib/features/worker/presentation/screens/worker_home_screen.dart
+index ccb01f0,589651d..0000000
+--- a/mobile/my_app/lib/features/worker/presentation/screens/worker_home_screen.dart
++++ b/mobile/my_app/lib/features/worker/presentation/screens/worker_home_screen.dart
+@@@ -11,10 -9,13 +12,11 @@@ import '../../../../shared/models/servi
+  import '../../../../shared/models/service_request.dart';
+  import '../../../../shared/repositories/service_request_repository.dart';
+  import '../../../../shared/repositories/verification_repository.dart';
++ import '../../../../shared/services/client_theme_controller.dart';
+ -import '../../../../shared/services/device_location_service.dart';
+ -import '../../../../shared/utils/job_location_utils.dart';
+  import '../../../../shared/widgets/live_profile_avatar.dart';
+ -import '../../../../shared/widgets/client_rating_summary.dart';
+  import '../../../../shared/widgets/worker_rating_summary.dart';
+  import '../../../../shared/screens/reviews_screen.dart';
+ +import '../../../../shared/screens/swiftserve_settings_screen.dart';
+  import '../../../client/presentation/screens/client_sections.dart';
+  import '../../../client/presentation/widgets/conversation_ui.dart';
+  import '../models/worker_verification_ui_state.dart';
+@@@ -224,6 -224,19 +226,18 @@@ List<ServiceRequest> filterWorkerDashbo
+        : eligible;
+  }
+  
++ bool matchesWorkerDashboardSearch(ServiceRequest request, String query) {
++   final normalized = query.trim().toLowerCase();
++   if (normalized.isEmpty) return true;
++   return [
++     request.title,
++     request.category,
++     request.clientName,
++     request.description,
++     request.location,
+ -    request.modality.label,
++   ].any((value) => value.toLowerCase().contains(normalized));
++ }
++ 
+  class _WorkerDashboard extends StatefulWidget {
+    const _WorkerDashboard({
+      required this.worker,
+@@@ -238,8 -251,67 +252,17 @@@
+  }
+  
+  class _WorkerDashboardState extends State<_WorkerDashboard> {
++   static const _locationService = DeviceLocationService();
+    var _filter = WorkerDashboardRequestFilter.recent;
++   final _searchController = TextEditingController();
++   var _searchQuery = '';
+ -  JobCoordinate? _workerPosition;
+ -  DeviceLocationException? _locationError;
+ -  bool _loadingLocation = true;
+ -
+ -  @override
+ -  void initState() {
+ -    super.initState();
+ -    _loadLocation();
+ -  }
++ 
++   @override
++   void dispose() {
++     _searchController.dispose();
++     super.dispose();
++   }
+  
+ -  Future<void> _loadLocation() async {
+ -    setState(() {
+ -      _loadingLocation = true;
+ -      _locationError = null;
+ -    });
+ -    try {
+ -      final position = await _locationService.currentPosition();
+ -      if (!mounted) return;
+ -      setState(() => _workerPosition = position);
+ -    } on DeviceLocationException catch (error) {
+ -      if (!mounted) return;
+ -      setState(() => _locationError = error);
+ -    } finally {
+ -      if (mounted) setState(() => _loadingLocation = false);
+ -    }
+ -  }
+ -
+ -  Future<void> _openLocationSettings() async {
+ -    final error = _locationError;
+ -    if (error == null) return;
+ -    await _locationService.openRecoverySettings(error.failure);
+ -  }
+ -
+ -  String? _distanceLabel(ServiceRequest request) {
+ -    // Online jobs have no place to measure distance to.
+ -    if (!request.modality.needsLocation) return null;
+ -    final jobPosition = request.areaPosition;
+ -    if (jobPosition == null) return 'Distance unavailable';
+ -    if (_loadingLocation) return 'Finding distance…';
+ -    final workerPosition = _workerPosition;
+ -    if (workerPosition == null) return 'Distance unavailable';
+ -    final toJob = formatDistance(
+ -      distanceMetersBetween(workerPosition, jobPosition),
+ -      approximate: true,
+ -    );
+ -    // For errands, the job position is the pickup.
+ -    final tripKm = request.distanceKm;
+ -    if (!request.isErrand || tripKm == null) return toJob;
+ -    return '$toJob to pickup · ${tripKm.toStringAsFixed(1)} km trip';
+ -  }
+ -
+    @override
+    Widget build(BuildContext context) {
+      final palette = _WorkerPalette.of(context);
+diff --cc mobile/my_app/lib/features/worker/presentation/screens/worker_job_details_screen.dart
+index c77e4ae,aaeb7b2..0000000
+--- a/mobile/my_app/lib/features/worker/presentation/screens/worker_job_details_screen.dart
++++ b/mobile/my_app/lib/features/worker/presentation/screens/worker_job_details_screen.dart
+@@@ -1,17 -1,22 +1,33 @@@
+  import 'package:cloud_firestore/cloud_firestore.dart';
+  import 'package:firebase_auth/firebase_auth.dart';
+ +import 'package:firebase_core/firebase_core.dart';
+  import 'package:flutter/material.dart';
+++<<<<<<< HEAD
+ +import '../../../../shared/widgets/simple_back_button.dart';
+ +import '../../../../shared/theme/app_theme.dart';
+++=======
++ import 'package:flutter_map/flutter_map.dart';
++ import 'package:latlong2/latlong.dart';
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+  
+  import '../../../../shared/models/app_user.dart';
++ import '../../../../shared/models/job_location.dart';
+  import '../../../../shared/models/service_application.dart';
+  import '../../../../shared/models/service_request.dart';
+  import '../../../../shared/repositories/service_request_repository.dart';
+++<<<<<<< HEAD
+ +import '../../../../shared/screens/public_profile_screen.dart';
+ +import '../../../../shared/widgets/action_confirmation_dialog.dart';
+++=======
++ import '../../../../shared/screens/reviews_screen.dart';
++ import '../../../../shared/services/device_location_service.dart';
++ import '../../../../shared/services/rider_location_service.dart';
++ import '../../../../shared/utils/job_location_utils.dart';
++ import '../../../../shared/widgets/client_rating_summary.dart';
++ import '../../../../shared/widgets/errand_map_layers.dart';
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+  import '../../../../shared/widgets/live_profile_avatar.dart';
++ import '../../../../shared/widgets/open_street_map_layers.dart';
+  import '../../../client/presentation/screens/client_sections.dart';
+  import 'worker_verification_screen.dart';
+  
+@@@ -300,33 -294,82 +398,112 @@@ class _WorkerJobDetailsScreenState exte
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 430),
+++<<<<<<< HEAD
+ +            child: Firebase.apps.isEmpty
+ +                ? _buildDetailsBody(widget.request, palette)
+ +                : StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+ +                    stream: FirebaseFirestore.instance
+ +                        .collection('service_requests')
+ +                        .doc(widget.request.id)
+ +                        .snapshots(),
+ +                    builder: (context, snapshot) {
+ +                      if (snapshot.hasError) {
+ +                        return _DetailsMessage(
+ +                          message: 'Could not load booking: ${snapshot.error}',
+ +                        );
+ +                      }
+ +                      if (!snapshot.hasData) {
+ +                        return const Center(child: CircularProgressIndicator());
+ +                      }
+ +                      if (!snapshot.data!.exists) {
+ +                        return const _DetailsMessage(
+ +                          message: 'This booking no longer exists.',
+ +                        );
+ +                      }
+ +                      final request = ServiceRequest.fromDocument(
+ +                        snapshot.data!,
+ +                      );
+ +                      return _buildDetailsBody(request, palette);
+ +                    },
+ +                  ),
+++=======
++             child: StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
++               stream: FirebaseFirestore.instance
++                   .collection('service_requests')
++                   .doc(widget.request.id)
++                   .snapshots(),
++               builder: (context, snapshot) {
++                 if (snapshot.hasError) {
++                   return _DetailsMessage(
++                     message: 'Could not load booking: ${snapshot.error}',
++                   );
++                 }
++                 if (!snapshot.hasData) {
++                   return const Center(child: CircularProgressIndicator());
++                 }
++                 if (!snapshot.data!.exists) {
++                   return const _DetailsMessage(
++                     message: 'This booking no longer exists.',
++                   );
++                 }
++                 final request = ServiceRequest.fromDocument(snapshot.data!);
++                 return _WorkerBookingDetailsBody(
++                   request: request,
++                   worker: widget.worker,
++                   palette: palette,
++                   locationCard: _locationCard(request, palette),
++                   savingAction: _savingAction,
++                   savingReview: _savingReview,
++                   savingReport: _savingReport,
++                   onMessage: () => _openClientChat(request),
++                   onRateClient: () => _rateClient(request),
++                   onReport: () => _reportClient(request),
++                   onVerify: () => Navigator.push(
++                     context,
++                     MaterialPageRoute(
++                       builder: (_) =>
++                           WorkerVerificationScreen(profile: widget.worker),
++                     ),
++                   ),
++                   onApply: () => _runAction(
++                     () => ServiceRequestRepository().apply(
++                       request: request,
++                       worker: widget.worker,
++                     ),
++                     'Application sent.',
++                   ),
++                   onStart: () => _runAction(
++                     () => ServiceRequestRepository().transition(
++                       requestId: request.id,
++                       from: ServiceRequestStatus.accepted,
++                       to: ServiceRequestStatus.ongoing,
++                       workerId: widget.worker.id,
++                     ),
++                     request.isErrand ? 'Errand started.' : 'Work started.',
++                   ),
++                   onAdvanceStage: (stage) => _runAction(
++                     () => ServiceRequestRepository().advanceErrandStage(
++                       requestId: request.id,
++                       from: stage,
++                       workerId: widget.worker.id,
++                     ),
++                     'Customer updated: ${stage.next?.label ?? ''}.',
++                   ),
++                   onComplete: () => _runAction(
++                     () => ServiceRequestRepository().transition(
++                       requestId: request.id,
++                       from: ServiceRequestStatus.ongoing,
++                       to: ServiceRequestStatus.completed,
++                       workerId: widget.worker.id,
++                     ),
++                     request.isErrand
++                         ? 'Errand delivered.'
++                         : 'Booking marked completed.',
++                   ),
++                 );
++               },
++             ),
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+            ),
+          ),
+        ),
+@@@ -368,109 -415,123 +549,157 @@@ class _WorkerBookingDetailsBody extend
+    @override
+    Widget build(BuildContext context) {
+      final isAssignedWorker = request.workerId == worker.id;
+++<<<<<<< HEAD
+ +    return Column(
+++=======
++     final sharesLocation =
++         request.isErrand &&
++         isAssignedWorker &&
++         request.status == ServiceRequestStatus.ongoing;
++     return Stack(
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+        children: [
+ -        Column(
+ -          children: [
+ -            SizedBox(
+ -              height: 180,
+ -              child: Padding(
+ -                padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
+ -                child: Column(
+ +        SizedBox(
+ +          height: 168,
+ +          child: Padding(
+ +            padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
+ +            child: Column(
+ +              children: [
+ +                Row(
+                    children: [
+ -                    Row(
+ -                      children: [
+ -                        Material(
+ -                          color: const Color(0xFFFFF7D9),
+ -                          shape: const CircleBorder(),
+ -                          child: IconButton(
+ -                            key: const ValueKey('worker-booking-back'),
+ -                            onPressed: () => Navigator.pop(context),
+ -                            constraints: const BoxConstraints.tightFor(
+ -                              width: 38,
+ -                              height: 38,
+ -                            ),
+ -                            padding: EdgeInsets.zero,
+ -                            icon: const Icon(
+ -                              Icons.arrow_back,
+ -                              color: _detailsInk,
+ -                              size: 19,
+ -                            ),
+ -                          ),
+ -                        ),
+ -                        const SizedBox(width: 12),
+ -                        const Text(
+ -                          'Booking Details',
+ -                          style: TextStyle(
+ -                            color: _detailsInk,
+ -                            fontSize: 21,
+ -                            fontWeight: FontWeight.w700,
+ -                          ),
+ -                        ),
+ -                      ],
+ +                    SimpleBackButton(
+ +                      key: const ValueKey('worker-booking-back'),
+ +                      onPressed: () => Navigator.pop(context),
+                      ),
+ -                    const SizedBox(height: 18),
+ -                    LiveProfileAvatar(
+ -                      userId: request.clientId,
+ -                      fallbackName: request.clientName,
+ -                      radius: 38,
+ -                      backgroundColor: const Color(0xFFDCE5FF),
+ -                      foregroundColor: const Color(0xFF24458E),
+ -                      textStyle: const TextStyle(
+ -                        fontSize: 28,
+ -                        fontWeight: FontWeight.w800,
+ +                    const SizedBox(width: 12),
+ +                    Text(
+ +                      'Booking Details',
+ +                      style: TextStyle(
+ +                        color: palette.text,
+ +                        fontSize: 21,
+ +                        fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+ -              ),
+ -            ),
+ -            Expanded(
+ -              child: Container(
+ -                width: double.infinity,
+ -                decoration: BoxDecoration(
+ -                  color: palette.background,
+ -                  borderRadius: const BorderRadius.vertical(
+ -                    top: Radius.circular(48),
+ +                const SizedBox(height: 18),
+ +                LiveProfileAvatar(
+ +                  userId: request.clientId,
+ +                  fallbackName: request.clientName,
+ +                  radius: 32,
+ +                  backgroundColor: AppTheme.softYellow,
+ +                  foregroundColor: AppTheme.ink,
+ +                  textStyle: const TextStyle(
+ +                    fontSize: 28,
+ +                    fontWeight: FontWeight.w800,
+                    ),
+                  ),
+++<<<<<<< HEAD
+ +              ],
+++=======
++                 child: ListView(
++                   padding: const EdgeInsets.fromLTRB(20, 48, 20, 190),
++                   children: [
++                     _ClientSummaryCard(request: request, palette: palette),
++                     const SizedBox(height: 18),
++                     _JobSummaryCard(request: request, palette: palette),
++                     if (locationCard != null) ...[
++                       const SizedBox(height: 18),
++                       locationCard!,
++                     ],
++                     if (sharesLocation) ...[
++                       const SizedBox(height: 18),
++                       _RiderSharingBanner(
++                         key: ValueKey('rider-sharing-${request.id}'),
++                         requestId: request.id,
++                         palette: palette,
++                       ),
++                     ],
++                     const SizedBox(height: 22),
++                     _WorkerBookingActions(
++                       request: request,
++                       worker: worker,
++                       palette: palette,
++                       isAssignedWorker: isAssignedWorker,
++                       saving: savingAction,
++                       savingReview: savingReview,
++                       onMessage: onMessage,
++                       onRateClient: onRateClient,
++                       onVerify: onVerify,
++                       onApply: onApply,
++                       onStart: onStart,
++                       onAdvanceStage: onAdvanceStage,
++                       onComplete: onComplete,
++                     ),
++                   ],
++                 ),
++               ),
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+              ),
+ -          ],
+ +          ),
+          ),
+ -        _ClientProfileSheet(
+ -          request: request,
+ -          palette: palette,
+ -          canContact: isAssignedWorker,
+ -          savingReport: savingReport,
+ -          onMessage: onMessage,
+ -          onReport: onReport,
+ +        Expanded(
+ +          child: Container(
+ +            width: double.infinity,
+ +            decoration: BoxDecoration(
+ +              color: palette.background,
+ +              borderRadius: BorderRadius.zero,
+ +            ),
+ +            child: ListView(
+ +              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
+ +              children: [
+ +                _ClientSummaryCard(request: request, palette: palette),
+ +                const SizedBox(height: 18),
+ +                _JobSummaryCard(request: request, palette: palette),
+ +                const SizedBox(height: 22),
+ +                FilledButton.icon(
+ +                  key: const ValueKey('view-client-profile'),
+ +                  onPressed: () => Navigator.push(
+ +                    context,
+ +                    MaterialPageRoute(
+ +                      builder: (_) => PublicProfileScreen(
+ +                        userId: request.clientId,
+ +                        role: PublicProfileRole.client,
+ +                        initialData: <String, dynamic>{
+ +                          'fullName': request.clientName,
+ +                          'location': request.location,
+ +                        },
+ +                        onReport: isAssignedWorker ? onReport : null,
+ +                        reporting: savingReport,
+ +                        reportLabel: 'Report client',
+ +                      ),
+ +                    ),
+ +                  ),
+ +                  style: FilledButton.styleFrom(
+ +                    backgroundColor: AppTheme.yellow,
+ +                    foregroundColor: AppTheme.ink,
+ +                    minimumSize: const Size.fromHeight(52),
+ +                    elevation: 0,
+ +                    shape: RoundedRectangleBorder(
+ +                      borderRadius: BorderRadius.circular(14),
+ +                    ),
+ +                  ),
+ +                  icon: const Icon(Icons.person_outline_rounded),
+ +                  label: const Text('View Profile'),
+ +                ),
+ +                const SizedBox(height: 12),
+ +                _WorkerBookingActions(
+ +                  request: request,
+ +                  worker: worker,
+ +                  palette: palette,
+ +                  isAssignedWorker: isAssignedWorker,
+ +                  saving: savingAction,
+ +                  savingReview: savingReview,
+ +                  onMessage: onMessage,
+ +                  onRateClient: onRateClient,
+ +                  onVerify: onVerify,
+ +                  onApply: onApply,
+ +                  onStart: onStart,
+ +                  onComplete: onComplete,
+ +                ),
+ +              ],
+ +            ),
+ +          ),
+          ),
+        ],
+      );
+@@@ -761,6 -874,303 +1036,306 @@@ class _WorkerBookingActions extends Sta
+    }
+  }
+  
+++<<<<<<< HEAD
+++=======
++ extension on _WorkerBookingActions {
++   Widget _ongoingButton() {
++     if (!request.isErrand) {
++       return _DetailsButton(
++         label: saving ? 'Completing...' : 'Mark completed',
++         onPressed: saving ? null : onComplete,
++         palette: palette,
++         yellow: true,
++       );
++     }
++     final stage = request.errandStage;
++     final next = stage?.next;
++     // Errands started before stages existed go straight to delivered.
++     if (stage == null || next == null) {
++       return _DetailsButton(
++         key: const ValueKey('errand-next-stage'),
++         label: saving ? 'Updating...' : 'Mark delivered',
++         onPressed: saving ? null : onComplete,
++         palette: palette,
++         yellow: true,
++       );
++     }
++     return _DetailsButton(
++       key: const ValueKey('errand-next-stage'),
++       label: saving
++           ? 'Updating...'
++           : switch (next) {
++               ErrandStage.pickedUp => 'Picked up items',
++               _ => 'On the way to drop-off',
++             },
++       onPressed: saving ? null : () => onAdvanceStage(stage),
++       palette: palette,
++       yellow: true,
++     );
++   }
++ }
++ 
++ class _RiderSharingBanner extends StatefulWidget {
++   const _RiderSharingBanner({
++     super.key,
++     required this.requestId,
++     required this.palette,
++   });
++ 
++   final String requestId;
++   final _WorkerDetailsPalette palette;
++ 
++   @override
++   State<_RiderSharingBanner> createState() => _RiderSharingBannerState();
++ }
++ 
++ class _RiderSharingBannerState extends State<_RiderSharingBanner>
++     with WidgetsBindingObserver {
++   late final _publisher = RiderLocationPublisher(requestId: widget.requestId);
++   DeviceLocationException? _error;
++ 
++   @override
++   void initState() {
++     super.initState();
++     WidgetsBinding.instance.addObserver(this);
++     _start();
++   }
++ 
++   @override
++   void dispose() {
++     WidgetsBinding.instance.removeObserver(this);
++     _publisher.stop();
++     super.dispose();
++   }
++ 
++   // Sharing only runs while the app is in the foreground.
++   @override
++   void didChangeAppLifecycleState(AppLifecycleState state) {
++     if (state == AppLifecycleState.resumed) {
++       _start();
++     } else if (state == AppLifecycleState.paused ||
++         state == AppLifecycleState.hidden) {
++       _publisher.stop();
++       if (mounted) setState(() {});
++     }
++   }
++ 
++   Future<void> _start() async {
++     try {
++       await _publisher.start();
++       if (mounted) setState(() => _error = null);
++     } on DeviceLocationException catch (error) {
++       if (mounted) setState(() => _error = error);
++     }
++   }
++ 
++   @override
++   Widget build(BuildContext context) {
++     final error = _error;
++     return Container(
++       key: const ValueKey('rider-sharing-banner'),
++       padding: const EdgeInsets.all(14),
++       decoration: BoxDecoration(
++         color: error == null
++             ? _detailsYellow.withValues(alpha: 0.18)
++             : Theme.of(context).colorScheme.errorContainer,
++         borderRadius: BorderRadius.circular(14),
++       ),
++       child: Row(
++         children: [
++           Icon(
++             error == null ? Icons.my_location : Icons.location_disabled,
++             color: widget.palette.text,
++           ),
++           const SizedBox(width: 10),
++           Expanded(
++             child: Text(
++               error?.userMessage ??
++                   (_publisher.isRunning
++                       ? 'Sharing your location with the customer. Keep the app open.'
++                       : 'Starting location sharing…'),
++               style: TextStyle(color: widget.palette.text, fontSize: 13),
++             ),
++           ),
++           if (error != null)
++             TextButton(onPressed: _start, child: const Text('Retry')),
++         ],
++       ),
++     );
++   }
++ }
++ 
++ class _ClientProfileSheet extends StatelessWidget {
++   const _ClientProfileSheet({
++     required this.request,
++     required this.palette,
++     required this.canContact,
++     required this.savingReport,
++     required this.onMessage,
++     required this.onReport,
++   });
++ 
++   final ServiceRequest request;
++   final _WorkerDetailsPalette palette;
++   final bool canContact;
++   final bool savingReport;
++   final VoidCallback onMessage;
++   final VoidCallback onReport;
++ 
++   @override
++   Widget build(BuildContext context) => DraggableScrollableSheet(
++     initialChildSize: 0.18,
++     minChildSize: 0.18,
++     maxChildSize: 0.72,
++     snap: true,
++     builder: (context, scrollController) => Container(
++       decoration: BoxDecoration(
++         color: palette.surface,
++         borderRadius: const BorderRadius.vertical(top: Radius.circular(42)),
++         boxShadow: const [
++           BoxShadow(
++             color: Color(0x33000000),
++             blurRadius: 12,
++             offset: Offset(0, -4),
++           ),
++         ],
++       ),
++       child: ListView(
++         controller: scrollController,
++         padding: const EdgeInsets.fromLTRB(24, 10, 24, 30),
++         children: [
++           Center(
++             child: Container(
++               width: 52,
++               height: 5,
++               decoration: BoxDecoration(
++                 color: palette.muted,
++                 borderRadius: BorderRadius.circular(3),
++               ),
++             ),
++           ),
++           const SizedBox(height: 8),
++           Icon(Icons.keyboard_arrow_up, color: palette.text, size: 30),
++           Text(
++             'Swipe to view client’s profile',
++             textAlign: TextAlign.center,
++             style: TextStyle(color: palette.text, fontWeight: FontWeight.w600),
++           ),
++           const SizedBox(height: 28),
++           LiveProfileAvatar(
++             userId: request.clientId,
++             fallbackName: request.clientName,
++             radius: 42,
++             backgroundColor: const Color(0xFFFFF1C8),
++             foregroundColor: _detailsInk,
++             textStyle: const TextStyle(
++               fontSize: 25,
++               fontWeight: FontWeight.w800,
++             ),
++           ),
++           const SizedBox(height: 12),
++           Text(
++             request.clientName,
++             textAlign: TextAlign.center,
++             style: TextStyle(
++               color: palette.text,
++               fontSize: 21,
++               fontWeight: FontWeight.w800,
++             ),
++           ),
++           Text(
++             'Client',
++             textAlign: TextAlign.center,
++             style: TextStyle(color: palette.muted),
++           ),
++           const SizedBox(height: 22),
++           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
++             stream: FirebaseFirestore.instance
++                 .collection('service_requests')
++                 .where('clientId', isEqualTo: request.clientId)
++                 .snapshots(),
++             builder: (context, snapshot) {
++               final requests = snapshot.data?.docs ?? const [];
++               return Row(
++                 children: [
++                   Expanded(
++                     child: _ProfileStat(
++                       value: snapshot.hasData ? '${requests.length}' : '—',
++                       label: 'Jobs posted',
++                       palette: palette,
++                     ),
++                   ),
++                   Expanded(
++                     child: ClientRatingBuilder(
++                       clientId: request.clientId,
++                       builder: (context, summary) => _ProfileStat(
++                         value: summary.displayAverage,
++                         label: summary.reviewCount == 1
++                             ? '1 rating'
++                             : '${summary.reviewCount} ratings',
++                         palette: palette,
++                         onTap: () => Navigator.push(
++                           context,
++                           MaterialPageRoute(
++                             builder: (_) => ReviewsScreen(
++                               userId: request.clientId,
++                               reviewsFor: ReviewsFor.client,
++                             ),
++                           ),
++                         ),
++                       ),
++                     ),
++                   ),
++                 ],
++               );
++             },
++           ),
++           const SizedBox(height: 20),
++           _DetailLine(
++             icon: Icons.location_on_outlined,
++             label: request.placeLabel,
++             palette: palette,
++           ),
++           _DetailLine(
++             icon: Icons.handshake_outlined,
++             label: canContact
++                 ? 'Confirmed booking client'
++                 : 'Client application pending',
++             palette: palette,
++           ),
++           const SizedBox(height: 14),
++           if (canContact) ...[
++             _DetailsButton(
++               key: const ValueKey('message-client-profile'),
++               label: 'Message Client',
++               onPressed: onMessage,
++               palette: palette,
++             ),
++             const SizedBox(height: 10),
++             OutlinedButton.icon(
++               key: const ValueKey('report-client'),
++               onPressed: savingReport ? null : onReport,
++               style: OutlinedButton.styleFrom(
++                 foregroundColor: const Color(0xFFE74632),
++                 side: const BorderSide(color: Color(0xFFE74632)),
++                 minimumSize: const Size.fromHeight(48),
++                 shape: RoundedRectangleBorder(
++                   borderRadius: BorderRadius.circular(14),
++                 ),
++               ),
++               icon: const Icon(Icons.report_outlined),
++               label: Text(
++                 savingReport ? 'Submitting report...' : 'Report client',
++               ),
++             ),
++           ],
++         ],
++       ),
++     ),
++   );
++ }
++ 
+++>>>>>>> eb34b61bda990d6ed54f596cf391181b33b69bbf
+  class _ClientReview {
+    const _ClientReview({required this.rating, required this.comment});
+  
+diff --git a/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift b/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
+index 602b53d..a626164 100644
+--- a/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
++++ b/mobile/my_app/macos/Flutter/GeneratedPluginRegistrant.swift
+@@ -15,6 +15,7 @@ import geocoding_darwin
+ import geolocator_apple
+ import google_sign_in_ios
+ import package_info_plus
++import path_provider_foundation
+ import shared_preferences_foundation
+ 
+ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+@@ -28,5 +29,6 @@ func RegisterGeneratedPlugins(registry: FlutterPluginRegistry) {
+   GeolocatorPlugin.register(with: registry.registrar(forPlugin: "GeolocatorPlugin"))
+   GoogleSignInPlugin.register(with: registry.registrar(forPlugin: "GoogleSignInPlugin"))
+   FPPPackageInfoPlusPlugin.register(with: registry.registrar(forPlugin: "FPPPackageInfoPlusPlugin"))
++  PathProviderPlugin.register(with: registry.registrar(forPlugin: "PathProviderPlugin"))
+   SharedPreferencesPlugin.register(with: registry.registrar(forPlugin: "SharedPreferencesPlugin"))
+ }
+diff --git a/mobile/my_app/pubspec.lock b/mobile/my_app/pubspec.lock
+index d5ae606..8b98889 100644
+--- a/mobile/my_app/pubspec.lock
++++ b/mobile/my_app/pubspec.lock
+@@ -121,14 +121,6 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "5.7.3"
+-  code_assets:
+-    dependency: transitive
+-    description:
+-      name: code_assets
+-      sha256: bf394f466ba9205f1812a0433b392d6af280f155f56651eda7c18cc32ed493b8
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "1.2.1"
+   collection:
+     dependency: transitive
+     description:
+@@ -552,14 +544,6 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "0.2.8"
+-  hooks:
+-    dependency: transitive
+-    description:
+-      name: hooks
+-      sha256: "9a62a50b50b769a737bc0a8ff381f333529df3ab746b2f6b02e83760231455ba"
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "2.0.2"
+   http:
+     dependency: "direct main"
+     description:
+@@ -720,14 +704,6 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "6.1.0"
+-  logging:
+-    dependency: transitive
+-    description:
+-      name: logging
+-      sha256: c8245ada5f1717ed44271ed1c26b8ce85ca3228fd2ffdb75468ab01979309d61
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "1.3.0"
+   matcher:
+     dependency: transitive
+     description:
+@@ -768,14 +744,6 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "2.1.0"
+-  objective_c:
+-    dependency: transitive
+-    description:
+-      name: objective_c
+-      sha256: b7fb95a6d9a4f009edd63dc5ac69f07420b23a16161c6dd8660290b59c602e8e
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "9.5.0"
+   package_config:
+     dependency: transitive
+     description:
+@@ -836,10 +804,10 @@ packages:
+     dependency: transitive
+     description:
+       name: path_provider_foundation
+-      sha256: "2a376b7d6392d80cd3705782d2caa734ca4727776db0b6ec36ef3f1855197699"
++      sha256: "6d13aece7b3f5c5a9731eaf553ff9dcbc2eff41087fd2df587fd0fed9a3eb0c4"
+       url: "https://pub.dev"
+     source: hosted
+-    version: "2.6.0"
++    version: "2.5.1"
+   path_provider_linux:
+     dependency: transitive
+     description:
+@@ -904,22 +872,6 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "3.0.0"
+-  pub_semver:
+-    dependency: transitive
+-    description:
+-      name: pub_semver
+-      sha256: "261236774e8b1d69cfc6b9eabbc96c40f25e7a2d6b171f3385d4f65d5734fb24"
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "2.2.1"
+-  record_use:
+-    dependency: transitive
+-    description:
+-      name: record_use
+-      sha256: "2551bd8eecfe95d14ae75f6021ad0248be5c27f138c2ec12fcb52b500b3ba1ed"
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "0.6.0"
+   shared_preferences:
+     dependency: "direct main"
+     description:
+@@ -1149,14 +1101,6 @@ packages:
+       url: "https://pub.dev"
+     source: hosted
+     version: "6.6.1"
+-  yaml:
+-    dependency: transitive
+-    description:
+-      name: yaml
+-      sha256: f67cdd8e07d3c6329146aaef1ba043542b3134c12489f553ca9a7435d1068aea
+-      url: "https://pub.dev"
+-    source: hosted
+-    version: "3.1.4"
+ sdks:
+-  dart: ">=3.10.3 <4.0.0"
+-  flutter: ">=3.38.4"
++  dart: ">=3.10.1 <4.0.0"
++  flutter: ">=3.38.0"

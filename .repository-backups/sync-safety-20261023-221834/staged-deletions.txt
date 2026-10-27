@@ -1,0 +1,6 @@
+D	.vscode/tasks.json
+D	mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_picker
+D	mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/file_selector_linux
+D	mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/image_picker_linux
+D	mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/path_provider_linux
+D	mobile/my_app/linux/flutter/ephemeral/.plugin_symlinks/shared_preferences_linux

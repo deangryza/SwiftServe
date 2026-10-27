@@ -1,0 +1,25 @@
+Inspection and backup completed. No source files, index entries, commits, merge resolutions, or remote branches were changed by this inspection. Fetch completed successfully.
+
+main: 761fe8a (one unique local commit)
+origin/main and current MERGE_HEAD: eb34b61 (ten unique remote commits)
+An unfinished merge already existed before this session. Fast-forward is impossible.
+
+Four unmerged index paths:
+- mobile/my_app/lib/features/client/presentation/screens/client_booking_flow.dart
+- mobile/my_app/lib/features/client/presentation/screens/post_request_screen.dart
+- mobile/my_app/lib/features/worker/presentation/screens/worker_home_screen.dart
+- mobile/my_app/lib/features/worker/presentation/screens/worker_job_details_screen.dart
+
+worker_home_screen.dart has no textual conflict markers but is still unmerged in Git; its current edits require review for missing location functionality and imports. The other three paths contain conflict markers.
+
+Local commit 761fe8a contains important UI, functionality, rules and test changes. It also deletes 386 archive files and adds .codex-theme helper files/backups. These changes are already committed locally and would travel with a merge push unless explicitly addressed in subsequent commits. Do not rewrite history or assume archive deletions are intentional.
+
+Remote changes cover maps, work modality, signup persistence, errand pricing/live rider tracking, platform configuration, models/services, security rules and tests. Full file inventories are included in the adjacent text reports.
+
+No stashes exist in the active repository. Existing backend.git, mobile.git and web.git backups date from September and do not protect this October work; they were inspected and left untouched.
+
+The verified safety snapshot contains all tracked and nonignored untracked files, all Git metadata and object storage (including the unresolved index), separate diffs, refs and deletion inventories. Ignored build caches and secrets are excluded. Missing archive files remain recoverable through the Git history inside git-metadata.zip. Extract only to a separate recovery directory, never directly over the live repository.
+
+Proposed next step, requiring user approval: carefully resolve the four existing conflicts locally, comparing base/local/remote/current edits and retaining remote behavior plus local design. Do not start another pull or merge, abort the existing merge, stage an entire side wholesale, commit or push. Review archive deletions separately. Then inspect the final diff and run Flutter analysis and relevant tests. Commit/push commands can be prepared after verification.
+
+Backup files are currently untracked: do not use git add . or git add -A to stage them accidentally.
