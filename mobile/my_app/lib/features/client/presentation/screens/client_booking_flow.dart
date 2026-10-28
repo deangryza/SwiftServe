@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/services/sos_service.dart';
+import '../../../../shared/widgets/sos_button.dart';
 import '../../../../shared/widgets/simple_back_button.dart';
 import '../../../../shared/theme/app_theme.dart';
 
@@ -1296,6 +1298,8 @@ class _BookingDetailsBody extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const Spacer(),
+                    SosButton(request: request, compact: true),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -1391,6 +1395,10 @@ class _BookingDetailsBody extends StatelessWidget {
                           : 'Rate your worker',
                     ),
                   ),
+                  const SizedBox(height: 12),
+                ],
+                if (sosAvailableFor(request)) ...[
+                  SosButton(request: request),
                   const SizedBox(height: 12),
                 ],
                 FilledButton(

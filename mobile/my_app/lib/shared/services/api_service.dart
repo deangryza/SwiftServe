@@ -117,7 +117,7 @@ class ApiService {
     required String role,
     String category = '',
     String description = '',
-  }) => _postRole('/api/users/roles', idToken, {
+  }) => _postJson('/api/users/roles', idToken, {
     'role': role,
     if (category.isNotEmpty) 'category': category,
     if (description.isNotEmpty) 'description': description,
@@ -125,13 +125,38 @@ class ApiService {
 
   /// Makes [role] the active role; AuthGate then shows that role's home.
   Future<void> switchRole({required String idToken, required String role}) =>
-      _postRole('/api/users/role', idToken, {'role': role});
+      _postJson('/api/users/role', idToken, {'role': role});
 
-  Future<void> _postRole(
+  /// Alerts SwiftServe admins about an emergency on [requestId]. Pressing
+  /// again refreshes the same alert, so this returns its id.
+  Future<String> raiseSos({
+    required String idToken,
+    required String requestId,
+    double? latitude,
+    double? longitude,
+    double? accuracy,
+  }) async {
+    final body = await _postJson('/api/sos', idToken, {
+      'requestId': requestId,
+      if (latitude != null && longitude != null)
+        'position': {'lat': latitude, 'lng': longitude, 'accuracy': ?accuracy},
+    }, timeout: _sosTimeout);
+    return body['id'].toString();
+  }
+
+  Future<void> markSosSafe({
+    required String idToken,
+    required String alertId,
+  }) => _postJson('/api/sos/$alertId/safe', idToken, const {});
+
+  static const _sosTimeout = Duration(seconds: 15);
+
+  Future<Map<String, dynamic>> _postJson(
     String path,
     String idToken,
-    Map<String, String> body,
-  ) async {
+    Map<String, Object> body, {
+    Duration timeout = _requestTimeout,
+  }) async {
     late final http.Response response;
     try {
       response = await _client
@@ -143,7 +168,7 @@ class ApiService {
             },
             body: jsonEncode(body),
           )
-          .timeout(_requestTimeout);
+          .timeout(timeout);
     } on TimeoutException {
       throw const ApiConnectionException(
         'The server did not respond. Try again.',
@@ -153,8 +178,14 @@ class ApiService {
         'The server could not be reached. Try again.',
       );
     }
-    if (response.statusCode != 200) {
+    if (response.statusCode != 200 && response.statusCode != 201) {
       throw ApiException(response.statusCode, response.body);
+    }
+    try {
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : const {};
+    } catch (_) {
+      return const {};
     }
   }
 }

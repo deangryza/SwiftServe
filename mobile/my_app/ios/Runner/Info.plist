@@ -6,6 +6,10 @@
 	<string>SwiftServe uses the camera to capture an ID and complete a live selfie check for worker verification.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SwiftServe uses your location while the app is open to pin service jobs and show workers their approximate distance.</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>tel</string>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

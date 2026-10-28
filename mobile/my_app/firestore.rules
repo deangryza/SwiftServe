@@ -691,6 +691,13 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // SOS alerts carry both parties' contact details, so only the person who
+    // raised one may read it. The backend creates and updates them.
+    match /sos_alerts/{alertId} {
+      allow get: if signedIn() && resource.data.raisedByUid == request.auth.uid;
+      allow list, create, update, delete: if false;
+    }
+
     match /reviews/{requestId} {
       allow read: if signedIn();
       allow create: if signedIn()

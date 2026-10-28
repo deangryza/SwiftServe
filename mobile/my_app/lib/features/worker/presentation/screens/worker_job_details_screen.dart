@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/services/sos_service.dart';
+import '../../../../shared/widgets/sos_button.dart';
 import '../../../../shared/widgets/simple_back_button.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -556,6 +558,10 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    if (isAssignedWorker) ...[
+                      const Spacer(),
+                      SosButton(request: request, compact: true),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -955,6 +961,10 @@ class _WorkerBookingActions extends StatelessWidget {
             onPressed: savingReview ? null : onRateClient,
             palette: palette,
           ),
+          const SizedBox(height: 12),
+        ],
+        if (sosAvailableFor(request)) ...[
+          SosButton(request: request),
           const SizedBox(height: 12),
         ],
         _DetailsButton(

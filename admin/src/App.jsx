@@ -11,6 +11,7 @@ import ReportsManagement from "./page/reports/ReportsManagement";
 import ServiceCategories from "./page/categories/ServiceCategories";
 import WorkerVerification from "./page/verification/WorkerVerification";
 import ProtectedRoute from "./components/ProtectedRoute";
+import SosAlerts from "./page/sos/SosAlerts";
 
 
 export default function App() {
@@ -43,6 +44,9 @@ export default function App() {
         <Route path="categories" element={<ServiceCategories />} />
 
         <Route path="verification" element={<WorkerVerification />} />
+
+        {/* SOS emergency alerts */}
+        <Route path="sos" element={<SosAlerts />} />
 
 
         </Route>

@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LayoutGrid,
   ShieldCheck,
+  Siren,
   UserCircle,
   Users,
 } from 'lucide-react'
@@ -28,6 +29,7 @@ import {
 
 const NAV_ITEMS = [
   { to: '/dashboard', label: 'Overview', icon: LayoutDashboard, end: true },
+  { to: '/dashboard/sos', label: 'SOS alerts', icon: Siren },
   { to: '/dashboard/users', label: 'User management', icon: Users },
   { to: '/dashboard/verification', label: 'Worker verification', icon: ShieldCheck },
   { to: '/dashboard/bookings', label: 'Booking management', icon: CalendarCheck },
