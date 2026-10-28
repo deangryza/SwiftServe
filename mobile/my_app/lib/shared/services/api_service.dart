@@ -110,6 +110,53 @@ class ApiService {
       throw ApiException(response.statusCode, response.body);
     }
   }
+
+  /// Adds the client or worker role to an existing account, keeping its data.
+  Future<void> addRole({
+    required String idToken,
+    required String role,
+    String category = '',
+    String description = '',
+  }) => _postRole('/api/users/roles', idToken, {
+    'role': role,
+    if (category.isNotEmpty) 'category': category,
+    if (description.isNotEmpty) 'description': description,
+  });
+
+  /// Makes [role] the active role; AuthGate then shows that role's home.
+  Future<void> switchRole({required String idToken, required String role}) =>
+      _postRole('/api/users/role', idToken, {'role': role});
+
+  Future<void> _postRole(
+    String path,
+    String idToken,
+    Map<String, String> body,
+  ) async {
+    late final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse('${ApiConfig.baseUrl}$path'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(_requestTimeout);
+    } on TimeoutException {
+      throw const ApiConnectionException(
+        'The server did not respond. Try again.',
+      );
+    } on http.ClientException {
+      throw const ApiConnectionException(
+        'The server could not be reached. Try again.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, response.body);
+    }
+  }
 }
 
 class ApiConnectionException implements Exception {

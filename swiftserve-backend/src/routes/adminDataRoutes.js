@@ -2,6 +2,7 @@ const express = require('express');
 const { FieldValue, Timestamp } = require('firebase-admin/firestore');
 const { db, auth } = require('../config/firebase');
 const requireAdmin = require('../middleware/adminMiddleware');
+const { rolesOf } = require('../controllers/userController');
 
 const router = express.Router();
 router.use(requireAdmin);
@@ -12,8 +13,8 @@ function normalize(kind, document) {
   const data = document.data();
   const base = { ...data, id: document.id, createdAt: iso(data.createdAt), updatedAt: iso(data.updatedAt) };
   if (kind === 'users') return { ...base, name: data.fullName || data.name || data.email || document.id,
-    role: title(data.role), location: data.address || '', phone: data.phoneNumber || '',
-    status: data.accountStatus === 'suspended' ? 'Suspended' : data.role === 'worker' ? title(data.verificationStatus || 'pending') : 'Active',
+    role: title(data.role), roles: rolesOf(data).map(title), location: data.address || '', phone: data.phoneNumber || '',
+    status: data.accountStatus === 'suspended' ? 'Suspended' : rolesOf(data).includes('worker') ? title(data.verificationStatus || 'pending') : 'Active',
     dateJoined: iso(data.createdAt).slice(0, 10), joinDate: iso(data.createdAt).slice(0, 10) };
   if (kind === 'bookings') { const schedule = iso(data.schedule); return { ...base,
     serviceTitle: data.title || '', providerName: data.workerName || 'Unassigned', clientName: data.clientName || '',

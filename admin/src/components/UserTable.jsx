@@ -63,7 +63,11 @@ export default function UserTable({
 
                 {/* ROLE */}
                 <td className="whitespace-nowrap px-4 py-3 text-gray-600">
-                  {isWorker ? "Worker" : "Client"}
+                  {user.roles?.length > 1
+                    ? user.roles.join(" + ")
+                    : isWorker
+                      ? "Worker"
+                      : "Client"}
                 </td>
 
                 {/* CATEGORY */}

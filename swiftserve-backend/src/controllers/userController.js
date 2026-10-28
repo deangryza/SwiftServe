@@ -15,6 +15,15 @@ const phoneClaimId = (phoneNumber) => crypto
 
 class PhoneNumberConflictError extends Error {}
 
+const ROLES = ['client', 'worker'];
+
+// Accounts created before dual roles only have `role`.
+const rolesOf = (user) => {
+  const roles = Array.isArray(user.roles) ? user.roles.filter((role) => ROLES.includes(role)) : [];
+  if (roles.length) return roles;
+  return [user.role === 'worker' ? 'worker' : 'client'];
+};
+
 const createUserProfile = async (req, res) => {
   try {
     const uid = req.user.uid;
@@ -74,6 +83,7 @@ const createUserProfile = async (req, res) => {
       phoneNumber: normalizedPhoneNumber,
       address: address || '',
       role,
+      roles: [role],
       category: category || '',
       skills: Array.isArray(skills) ? skills : [],
       description: description || '',
@@ -103,6 +113,7 @@ const createUserProfile = async (req, res) => {
           uid,
           fullName,
           role,
+          roles: [role],
           photoBase64: photo || '',
           location: address || '',
           description: description || '',
@@ -183,7 +194,131 @@ const updateProfilePhoto = async (req, res) => {
   }
 };
 
+class RoleRequestError extends Error {
+  constructor(status, code, message) {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+const addRole = async (req, res) => {
+  const uid = req.user.uid;
+  const { role, category, description } = req.body;
+  if (!ROLES.includes(role)) {
+    return res.status(400).json({ message: 'A valid role is required.' });
+  }
+  const trimmedCategory = String(category || '').trim();
+  if (role === 'worker' && !trimmedCategory) {
+    return res.status(400).json({ message: 'Choose a service category to work in.' });
+  }
+
+  const userRef = db.collection('users').doc(uid);
+  const publicProfileRef = db.collection('public_profiles').doc(uid);
+  const workerProfileRef = db.collection('worker_profiles').doc(uid);
+  try {
+    const roles = await db.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(userRef);
+      if (!snapshot.exists) {
+        throw new RoleRequestError(404, 'PROFILE_NOT_FOUND', 'Profile not found.');
+      }
+      const user = snapshot.data();
+      const currentRoles = rolesOf(user);
+      if (currentRoles.includes(role)) {
+        throw new RoleRequestError(409, 'ROLE_ALREADY_ADDED', `This account is already a ${role}.`);
+      }
+      const nextRoles = [...currentRoles, role];
+      const updatedAt = new Date();
+
+      if (role === 'client') {
+        transaction.set(userRef, { roles: nextRoles, updatedAt }, { merge: true });
+        transaction.set(publicProfileRef, { roles: nextRoles, updatedAt }, { merge: true });
+        return nextRoles;
+      }
+
+      const skills = [trimmedCategory];
+      const workerDescription = description || user.description || '';
+      const verificationStatus = !user.verificationStatus || user.verificationStatus === 'not_required'
+        ? 'pending'
+        : user.verificationStatus;
+      transaction.set(userRef, {
+        roles: nextRoles,
+        category: trimmedCategory,
+        skills,
+        description: workerDescription,
+        verificationStatus,
+        updatedAt,
+      }, { merge: true });
+      transaction.set(publicProfileRef, {
+        roles: nextRoles,
+        category: trimmedCategory,
+        skills,
+        description: workerDescription,
+        updatedAt,
+      }, { merge: true });
+      transaction.set(workerProfileRef, {
+        workerId: uid,
+        fullName: user.fullName || 'SwiftServe user',
+        category: trimmedCategory,
+        skills,
+        location: user.address || '',
+        description: workerDescription,
+        verificationStatus,
+        rating: 0,
+        completedJobs: 0,
+        createdAt: updatedAt,
+        updatedAt,
+      });
+      return nextRoles;
+    });
+    return res.status(200).json({ message: `${role} role added.`, roles });
+  } catch (error) {
+    if (error instanceof RoleRequestError) {
+      return res.status(error.status).json({ code: error.code, message: error.message });
+    }
+    console.error('Add role error:', error);
+    return res.status(500).json({ message: 'Failed to add role.' });
+  }
+};
+
+const switchRole = async (req, res) => {
+  const { role } = req.body;
+  if (!ROLES.includes(role)) {
+    return res.status(400).json({ message: 'A valid role is required.' });
+  }
+  try {
+    const userRef = db.collection('users').doc(req.user.uid);
+    const snapshot = await userRef.get();
+    if (!snapshot.exists) {
+      return res.status(404).json({ message: 'Profile not found.' });
+    }
+    const roles = rolesOf(snapshot.data());
+    if (!roles.includes(role)) {
+      return res.status(403).json({
+        code: 'ROLE_NOT_ADDED',
+        message: `Add the ${role} role to this account first.`,
+      });
+    }
+    const updatedAt = new Date();
+    const batch = db.batch();
+    batch.update(userRef, { role, roles, updatedAt });
+    batch.set(db.collection('public_profiles').doc(req.user.uid), {
+      role,
+      roles,
+      updatedAt,
+    }, { merge: true });
+    await batch.commit();
+    return res.status(200).json({ message: `Switched to ${role}.`, role, roles });
+  } catch (error) {
+    console.error('Switch role error:', error);
+    return res.status(500).json({ message: 'Failed to switch role.' });
+  }
+};
+
 module.exports = {
+  addRole,
   createUserProfile,
+  rolesOf,
+  switchRole,
   updateProfilePhoto,
 };

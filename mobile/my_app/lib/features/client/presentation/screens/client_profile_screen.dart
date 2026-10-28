@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
+import '../../../../shared/models/app_user.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
@@ -297,7 +299,11 @@ class _ProfileView extends StatelessWidget {
                         trailing: Icon(Icons.chevron_right, color: muted),
                         onTap: () => Navigator.push(
                           context,
-                          clientPageRoute(const ClientSettingsScreen()),
+                          clientPageRoute(
+                            ClientSettingsScreen(
+                              profile: AppUser.fromMap(user.uid, data),
+                            ),
+                          ),
                         ),
                       ),
                     ),

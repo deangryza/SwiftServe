@@ -387,7 +387,7 @@ class _WorkerSearchScreenState extends State<WorkerSearchScreen> {
                           onOpen: () async {
                             await _saveSearch(_searchController.text);
                             if (!context.mounted) return;
-                            final role = user.data()['role'] == 'worker'
+                            final role = profileHasRole(user.data(), 'worker')
                                 ? PublicProfileRole.worker
                                 : PublicProfileRole.client;
                             Navigator.push(
@@ -466,7 +466,7 @@ class _UserResult extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = (data['fullName'] ?? 'SwiftServe user').toString();
     final location = (data['location'] ?? 'Location not provided').toString();
-    final worker = data['role'] == 'worker';
+    final worker = profileHasRole(data, 'worker');
     return Card(
       child: ListTile(
         onTap: onOpen,

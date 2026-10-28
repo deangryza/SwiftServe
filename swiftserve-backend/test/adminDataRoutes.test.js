@@ -52,3 +52,13 @@ test('rejects worker approval through user management and malformed categories',
   await request(app).patch('/api/admin/users/worker').set('Authorization', 'Bearer admin').send({ status: 'Rejected' }).expect(400);
   await request(app).post('/api/admin/categories').set('Authorization', 'Bearer admin').send({ name: '', status: 'Active' }).expect(400);
 });
+
+test('dual-role users list both roles and show worker verification', async () => {
+  records.users.dual = { fullName: 'Dual', role: 'client', roles: ['client', 'worker'], verificationStatus: 'pending' };
+  const users = await request(app).get('/api/admin/users').set('Authorization', 'Bearer admin').expect(200);
+  const dual = users.body.items.find(item => item.id === 'dual');
+  assert.equal(dual.role, 'Client');
+  assert.deepEqual(dual.roles, ['Client', 'Worker']);
+  assert.equal(dual.status, 'Pending');
+  delete records.users.dual;
+});
