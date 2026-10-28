@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from './api';
 
-export default function useAdminData(resource, initialValue = []) {
+export default function useAdminData(resource, initialValue = [], pollMs = 30000) {
   const [data, setData] = useState(initialValue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -15,8 +15,8 @@ export default function useAdminData(resource, initialValue = []) {
       finally { if (active) setLoading(false); }
     }
     load();
-    const interval = setInterval(load, 30000);
+    const interval = setInterval(load, pollMs);
     return () => { active = false; clearInterval(interval); };
-  }, [resource]);
+  }, [resource, pollMs]);
   return { data, setData, loading, error };
 }

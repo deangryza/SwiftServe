@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import Navbar from '../components/Navbar'
+import SosBanner from '../components/SosBanner'
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 
 export default function DashboardLayout() {
@@ -9,6 +10,7 @@ export default function DashboardLayout() {
       <Sidebar />
       <SidebarInset className="h-svh overflow-hidden bg-slate-50">
         <Navbar breadcrumb={['SwiftServe', 'Dashboard']} />
+        <SosBanner />
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
             <Outlet />

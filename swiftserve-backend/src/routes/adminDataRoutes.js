@@ -6,7 +6,7 @@ const { rolesOf } = require('../controllers/userController');
 
 const router = express.Router();
 router.use(requireAdmin);
-const collections = { users: 'users', bookings: 'service_requests', categories: 'service_categories', reports: 'reports' };
+const collections = { users: 'users', bookings: 'service_requests', categories: 'service_categories', reports: 'reports', sos: 'sos_alerts' };
 const title = value => String(value || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 const iso = value => value?.toDate ? value.toDate().toISOString() : value || '';
 function normalize(kind, document) {
@@ -20,6 +20,9 @@ function normalize(kind, document) {
     serviceTitle: data.title || '', providerName: data.workerName || 'Unassigned', clientName: data.clientName || '',
     date: schedule.slice(0, 10), time: schedule.slice(11, 16), amount: data.budget || 0,
     status: title(data.status), schedule }; }
+  if (kind === 'sos') return { ...base, statusKey: data.status || 'active', status: title(data.status || 'active'),
+    positionUpdatedAt: iso(data.positionUpdatedAt), safeAt: iso(data.safeAt), handledAt: iso(data.handledAt),
+    workerIdentity: data.workerIdentity ? { ...data.workerIdentity, reviewedAt: iso(data.workerIdentity.reviewedAt) } : null };
   if (kind === 'categories') return { ...base, status: title(data.status || 'active'), dateCreated: iso(data.createdAt).slice(0, 10) };
   return { ...base, status: title(data.status || 'pending'), date: iso(data.createdAt).slice(0, 10),
     reporter: data.reporterName || data.reporter || '', reportedUser: data.reportedUserName || data.reportedUser || '' };
@@ -49,7 +52,10 @@ async function list(kind) {
         providerName: worker.fullName || booking.providerName, providerEmail: worker.email || '', providerPhone: worker.phoneNumber || '' };
     });
   }
-  return items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  items.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  // Alerts still needing attention come first.
+  if (kind === 'sos') items.sort((a, b) => Number(['resolved'].includes(a.statusKey)) - Number(['resolved'].includes(b.statusKey)));
+  return items;
 }
 async function categories() {
   const [items, users, bookings] = await Promise.all([list('categories'), list('users'), list('bookings')]);
@@ -141,6 +147,9 @@ router.patch('/:kind/:id', async (req, res, next) => {
         if (current.data().status !== 'pending' && req.body.override !== true) { const error = new Error('Accepted or ongoing bookings require an admin override.'); error.status = 409; throw error; }
         transaction.update(reference, { status: 'cancelled', cancelledBy: req.user.uid, updatedAt: FieldValue.serverTimestamp() });
       });
+    } else if (kind === 'sos') {
+      if (!['acknowledged', 'resolved'].includes(req.body.status) || (req.body.adminNotes !== undefined && (typeof req.body.adminNotes !== 'string' || req.body.adminNotes.length > 5000))) return res.status(400).json({ message: 'Invalid SOS alert fields.' });
+      update = { status: req.body.status, ...(req.body.adminNotes !== undefined ? { adminNotes: req.body.adminNotes } : {}), handledBy: req.user.email || req.user.uid, handledAt: FieldValue.serverTimestamp() };
     } else if (kind === 'reports') {
       if (!['Pending', 'Under Review', 'Resolved', 'Dismissed'].includes(req.body.status) || !['adminNotes', 'resolution'].every(field => typeof req.body[field] === 'string' && req.body[field].length <= 5000)) return res.status(400).json({ message: 'Invalid report fields.' });
       if (req.body.adminAction && req.body.adminAction !== 'No Action') return res.status(400).json({ message: 'Manage account restrictions through User Management.' });
