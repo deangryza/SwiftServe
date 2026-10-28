@@ -23,9 +23,11 @@ const addStatusWrites = (batch, db, workerId, status, { senderId, now }) => {
   }, { merge: true });
   batch.set(db.collection('notifications').doc(), {
     recipientId: workerId,
+    recipientRole: 'account',
+    type: 'verificationUpdated',
     senderId,
     title: 'Verification updated',
-    body: `Your worker verification is now ${status.replaceAll('_', ' ')}.`,
+    body: `Your identity verification is now ${status.replaceAll('_', ' ')}.`,
     read: false,
     createdAt: now,
   });

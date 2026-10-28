@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:my_app/shared/config/emergency_config.dart';
 import 'package:my_app/shared/models/job_location.dart';
 import 'package:my_app/shared/models/service_request.dart';
 import 'package:my_app/shared/services/api_service.dart';
@@ -107,8 +106,8 @@ void main() {
   });
 
   test('without a demo number SOS dials nothing', () async {
-    expect(emergencyNumber, isEmpty);
     final sos = SosService(
+      dialNumber: '',
       api: _FakeApi(),
       launch: (uri) async {
         launched.add(uri);

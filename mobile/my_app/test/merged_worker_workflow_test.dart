@@ -45,13 +45,26 @@ ServiceRequest request(
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  var locationChecks = 0;
+  var settingsOpened = 0;
 
   setUp(() {
+    locationChecks = 0;
+    settingsOpened = 0;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('flutter.baseflow.com/geolocator'),
-          (call) async =>
-              call.method == 'isLocationServiceEnabled' ? false : null,
+          (call) async {
+            if (call.method == 'isLocationServiceEnabled') {
+              locationChecks++;
+              return false;
+            }
+            if (call.method == 'openLocationSettings') {
+              settingsOpened++;
+              return true;
+            }
+            return null;
+          },
         );
   });
 
@@ -91,16 +104,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Delivery fee'), findsOneWidget);
-    expect(find.text('Pickup: Malolos'), findsOneWidget);
-    expect(find.text('Drop-off: Bulakan'), findsOneWidget);
-    expect(find.text('2 kg rice'), findsOneWidget);
-
+    expect(find.text('Pickup area'), findsOneWidget);
+    expect(find.text('Malolos'), findsOneWidget);
+    expect(find.text('Drop-off area'), findsOneWidget);
+    expect(find.text('Bulakan'), findsOneWidget);
     final profile = find.byKey(const ValueKey('view-client-profile'));
     await tester.scrollUntilVisible(profile, 150);
     await tester.pumpAndSettle();
-    final button = tester.widget<FilledButton>(profile);
-    expect(button.style!.backgroundColor!.resolve({}), AppTheme.yellow);
+    final button = tester.widget<IconButton>(profile);
+    expect(button.tooltip, 'View Client profile');
     expect(button.onPressed, isNotNull);
+
+    await tester.scrollUntilVisible(find.text('2 kg rice'), 150);
+    await tester.pumpAndSettle();
+    expect(find.text('2 kg rice'), findsOneWidget);
 
     await tester.scrollUntilVisible(find.text('Start errand'), 150);
     await tester.pumpAndSettle();
@@ -152,12 +169,25 @@ void main() {
       await (FontLoader(
         'MapTestFont',
       )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
+      await (FontLoader(
+        'Roboto',
+      )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
     });
+    tester.view.physicalSize = const Size(320, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final theme = AppTheme.light;
     await tester.pumpWidget(
       MaterialApp(
         theme: theme.copyWith(
           textTheme: theme.textTheme.apply(fontFamily: 'MapTestFont'),
+        ),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.3)),
+          child: child!,
         ),
         home: WorkerJobDetailsScreen(
           request: request(
@@ -169,9 +199,14 @@ void main() {
         ),
       ),
     );
+    await tester.scrollUntilVisible(find.text('Open settings'), 150);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open settings'));
+    await tester.pumpAndSettle();
+    expect(settingsOpened, 1);
+    expect(locationChecks, 1);
     await tester.scrollUntilVisible(find.byType(FlutterMap), 150);
     await tester.pump();
-    expect(tester.takeException(), isNull);
     expect(find.text('Approximate pickup area'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();

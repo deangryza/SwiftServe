@@ -52,6 +52,7 @@ bool matchesWorkerSearchRequest(ServiceRequest request, String query) {
 }
 
 List<ServiceRequest> availableWorkerSearchRequests({
+  required String workerId,
   required Iterable<ServiceRequest> requests,
   required Iterable<ServiceApplication> applications,
   required String query,
@@ -63,7 +64,7 @@ List<ServiceRequest> availableWorkerSearchRequests({
       requests
           .where(
             (request) =>
-                request.status == ServiceRequestStatus.pending &&
+                request.isAvailableToWorker(workerId) &&
                 !appliedRequestIds.contains(request.id) &&
                 matchesWorkerSearchRequest(request, query),
           )
@@ -365,6 +366,7 @@ class _WorkerSearchScreenState extends State<WorkerSearchScreen> {
                     )
                     .toList(growable: false);
                 final services = availableWorkerSearchRequests(
+                  workerId: widget.worker.id,
                   requests: requestSnapshot.data!,
                   applications: applicationSnapshot.data!,
                   query: query,

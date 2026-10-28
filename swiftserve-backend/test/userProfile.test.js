@@ -80,6 +80,22 @@ app.use(express.json());
 app.use('/api/users', require('../src/routes/userRoutes'));
 const photo = createCanvas(8, 8).toBuffer('image/png').toString('base64');
 
+test('identity status survives adding worker access and repeated role changes', async () => {
+  for (const status of ['verified', 'pending', 'rejected', 'expired', 'revoked']) {
+    const uid = `shared-identity-${status}`;
+    records[uid] = { fullName: 'Dual Identity', role: 'client', roles: ['client'], verificationStatus: status };
+    await request(app).post('/api/users/roles').set('Authorization', `Bearer ${uid}`)
+      .send({ role: 'worker', category: 'Plumbing' }).expect(200);
+    assert.equal(records[uid].verificationStatus, status);
+    assert.equal(workerProfiles[uid].verificationStatus, status);
+    for (const role of ['worker', 'client', 'worker']) {
+      await request(app).post('/api/users/role').set('Authorization', `Bearer ${uid}`)
+        .send({ role }).expect(200);
+      assert.equal(records[uid].verificationStatus, status);
+    }
+  }
+});
+
 test('registration persists a usable thumbnail with the actual name', async () => {
   await request(app).post('/api/users/profile').set('Authorization', 'Bearer alice')
     .send({ fullName: 'Alice Santos', email: 'alice@example.com', phoneNumber: '+639171111111', role: 'client', photoBase64: photo }).expect(201);

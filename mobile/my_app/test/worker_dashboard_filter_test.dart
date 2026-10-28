@@ -12,6 +12,7 @@ void main() {
     JobCoordinate? origin = home,
     Iterable<ServiceApplication> applications = const [],
   }) => filterWorkerDashboardRequests(
+    workerId: 'worker',
     requests: jobs,
     applications: applications,
     filter: WorkerDashboardRequestFilter.nearby,
@@ -124,11 +125,13 @@ void main() {
     ];
 
     final recent = filterWorkerDashboardRequests(
+      workerId: 'worker',
       requests: requests,
       applications: applications,
       filter: WorkerDashboardRequestFilter.recent,
     );
     final available = filterWorkerDashboardRequests(
+      workerId: 'worker',
       requests: requests,
       applications: applications,
       filter: WorkerDashboardRequestFilter.available,
@@ -153,6 +156,7 @@ void main() {
     );
 
     final visible = filterWorkerDashboardRequests(
+      workerId: 'worker',
       requests: [accepted],
       applications: const [],
       filter: WorkerDashboardRequestFilter.available,
@@ -182,12 +186,14 @@ void main() {
       ),
     );
     final eligible = filterWorkerDashboardRequests(
+      workerId: 'worker',
       requests: requests,
       applications: const [],
       filter: WorkerDashboardRequestFilter.available,
     );
 
     final matches = availableWorkerSearchRequests(
+      workerId: 'worker',
       requests: eligible,
       applications: const [],
       query: 'piano',

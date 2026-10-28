@@ -13,6 +13,9 @@ rules_version = '2';
 //   Required and immutable: blockerId, blockedId, conversationId, createdAt.
 // All message and block timestamps are server timestamps. Conversation identity
 // and participant fields are immutable after creation.
+// service_requests/{requestId}: clientId is the immutable creator's Auth UID,
+// independent of active role. applications/{workerId}: workerId is the applicant
+// Auth UID; clientId must match the parent creator and differ from the applicant.
 // ===============================================================
 
 service cloud.firestore {
@@ -426,6 +429,7 @@ service cloud.firestore {
           && resource.data.status == 'pending'
           && request.resource.data.status == 'accepted'
           && request.resource.data.workerId is string
+          && request.resource.data.workerId != resource.data.clientId
           && request.resource.data.workerName is string
           && request.resource.data.acceptedAt == request.time
           && request.resource.data.diff(resource.data).affectedKeys()
@@ -496,6 +500,8 @@ service cloud.firestore {
         allow create: if verifiedWorker()
           && request.auth.uid == workerId
           && validApplication(request.resource.data)
+          && request.resource.data.clientId.matches('.*\\S.*')
+          && request.resource.data.clientId != request.auth.uid
           && request.resource.data.workerId == workerId
           && request.resource.data.requestId == requestId
           && request.resource.data.status == 'pending'
@@ -652,7 +658,7 @@ service cloud.firestore {
         ])
         && request.resource.data.keys().hasOnly([
           'recipientId', 'senderId', 'requestId', 'title', 'body', 'read',
-          'createdAt', 'type'
+          'createdAt', 'type', 'recipientRole'
         ])
         && request.resource.data.senderId == request.auth.uid
         && request.resource.data.recipientId is string
@@ -662,6 +668,17 @@ service cloud.firestore {
         && request.resource.data.body is string
         && request.resource.data.body.size() <= 1000
         && request.resource.data.read == false
+        // Optional for legacy events. Audience describes the saved interaction;
+        // clients cannot forge account-wide (Admin SDK) verification updates.
+        && (
+          !('recipientRole' in request.resource.data)
+          || (request.resource.data.recipientRole == 'client'
+            && request.resource.data.recipientId
+              == get(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId)
+          || (request.resource.data.recipientRole == 'worker'
+            && request.resource.data.recipientId
+              == getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId)
+        )
         && (
           !('type' in request.resource.data)
           || request.resource.data.type in [

@@ -7,6 +7,8 @@ import '../../../../shared/widgets/notification_swipe_actions.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/utils/role_context.dart';
+import '../../../../shared/widgets/role_notification_feed.dart';
 import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
@@ -202,6 +204,7 @@ enum WorkerDashboardRequestFilter { recent, nearby, available }
 const workerNearbyRadiusMeters = 10000.0;
 
 List<ServiceRequest> filterWorkerDashboardRequests({
+  required String workerId,
   required Iterable<ServiceRequest> requests,
   required Iterable<ServiceApplication> applications,
   required WorkerDashboardRequestFilter filter,
@@ -214,7 +217,7 @@ List<ServiceRequest> filterWorkerDashboardRequests({
       requests
           .where(
             (request) =>
-                request.status == ServiceRequestStatus.pending &&
+                request.isAvailableToWorker(workerId) &&
                 !appliedRequestIds.contains(request.id),
           )
           .toList()
@@ -405,11 +408,13 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
               return const Center(child: CircularProgressIndicator());
             }
             final allEligible = filterWorkerDashboardRequests(
+              workerId: widget.worker.id,
               requests: requestSnapshot.data!,
               applications: applicationSnapshot.data!,
               filter: WorkerDashboardRequestFilter.available,
             );
             final requests = filterWorkerDashboardRequests(
+              workerId: widget.worker.id,
               requests: requestSnapshot.data!,
               applications: applicationSnapshot.data!,
               filter: _filter,
@@ -731,6 +736,7 @@ class _WorkerDashboardHeader extends StatelessWidget {
               ),
             ),
             icon: NotificationUnreadBadge(
+              role: UserRole.worker,
               userId: worker.id,
               child: Icon(
                 Icons.notifications_none_rounded,
@@ -1530,6 +1536,7 @@ class _WorkerMessages extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ConversationInboxScreen(
     userId: worker.id,
+    role: UserRole.worker,
     counterpartIdField: 'clientId',
     counterpartNameField: 'clientName',
     onBack: onBack,
@@ -2096,6 +2103,7 @@ class _WorkerNavItem extends StatelessWidget {
               child: badgeUserId == null
                   ? Icon(icon, color: palette.text, size: 20)
                   : ConversationUnreadBadge(
+                      role: UserRole.worker,
                       userId: badgeUserId,
                       child: Icon(icon, color: palette.text, size: 20),
                     ),
@@ -2142,8 +2150,7 @@ Future<bool> openWorkerVerificationNotification({
   required AppUser worker,
   required Future<void> Function() markAsRead,
 }) async {
-  final title = notification['title']?.toString().trim().toLowerCase();
-  if (title != 'verification updated' && title != 'verification update') {
+  if (!isVerificationNotification(notification)) {
     return false;
   }
   await markAsRead();
@@ -2273,11 +2280,9 @@ class _WorkerNotifications extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('notifications')
-                  .where('recipientId', isEqualTo: worker.id)
-                  .snapshots(),
+            child: RoleNotificationFeed(
+              uid: FirebaseAuth.instance.currentUser?.uid ?? '',
+              role: UserRole.worker,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return Center(
@@ -2295,14 +2300,7 @@ class _WorkerNotifications extends StatelessWidget {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final notifications = snapshot.data!.docs.toList()
-                  ..sort((left, right) {
-                    final leftTime = left.data()['createdAt'] as Timestamp?;
-                    final rightTime = right.data()['createdAt'] as Timestamp?;
-                    return (rightTime?.millisecondsSinceEpoch ?? 0).compareTo(
-                      leftTime?.millisecondsSinceEpoch ?? 0,
-                    );
-                  });
+                final notifications = snapshot.data!;
                 if (notifications.isEmpty) {
                   return Center(
                     child: Text(

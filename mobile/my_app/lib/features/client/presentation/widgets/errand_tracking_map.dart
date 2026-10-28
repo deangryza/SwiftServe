@@ -12,6 +12,7 @@ import '../../../../shared/services/road_route_service.dart';
 import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/utils/reroute_throttle.dart';
 import '../../../../shared/widgets/errand_map_layers.dart';
+import '../../../../shared/widgets/booking_details_cards.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 
 /// After this long without an update the rider's position is shown as stale.
@@ -20,10 +21,16 @@ const riderLocationStaleAfter = Duration(seconds: 60);
 /// Live map of an errand for the client: pickup, drop-off, the rider's
 /// position and which stage the errand is in.
 class ErrandTrackingMap extends StatefulWidget {
-  const ErrandTrackingMap({super.key, required this.request, this.repository});
+  const ErrandTrackingMap({
+    super.key,
+    required this.request,
+    this.repository,
+    this.showTimeline = true,
+  });
 
   final ServiceRequest request;
   final ServiceRequestRepository? repository;
+  final bool showTimeline;
 
   @override
   State<ErrandTrackingMap> createState() => _ErrandTrackingMapState();
@@ -127,7 +134,9 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
     final dropoff = _exact?.dropoffPosition ?? request.dropoffAreaPosition;
     final theme = Theme.of(context);
     if (pickup == null || dropoff == null) {
-      return const SizedBox.shrink();
+      return const BookingSectionCard(
+        child: Text('Map unavailable for this booking.'),
+      );
     }
     final riderPosition = rider?.position;
     final toDropoff =
@@ -154,15 +163,16 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
     return Material(
       key: const ValueKey('errand-tracking-map'),
       color: theme.colorScheme.surface,
-      borderRadius: BorderRadius.circular(18),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(bookingMapPreviewRadius),
+        side: BorderSide(color: theme.dividerColor),
+      ),
       clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      shadowColor: const Color(0x33000000),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            height: 240,
+            height: bookingMapPreviewHeight,
             child: Stack(
               children: [
                 FlutterMap(
@@ -196,7 +206,16 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
                       riderToDropoff: toDropoff,
                       onRiderLeg: _setRiderLeg,
                     ),
-                    const SwiftServeMapAttribution(),
+                    Theme(
+                      data: theme.copyWith(
+                        textTheme: theme.textTheme.copyWith(
+                          bodySmall: theme.textTheme.bodySmall?.copyWith(
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      child: const SwiftServeMapAttribution(),
+                    ),
                   ],
                 ),
                 Positioned(
@@ -229,8 +248,10 @@ class _ErrandTrackingMapState extends State<ErrandTrackingMap> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ErrandStageTimeline(request: request),
-                const SizedBox(height: 10),
+                if (widget.showTimeline) ...[
+                  ErrandStageTimeline(request: request),
+                  const SizedBox(height: 10),
+                ],
                 Text(
                   riderStatusText(request, rider, DateTime.now()),
                   key: const ValueKey('errand-rider-status'),

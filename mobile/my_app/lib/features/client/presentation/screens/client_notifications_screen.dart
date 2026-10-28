@@ -4,6 +4,11 @@ import 'package:flutter/material.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/models/app_user.dart';
+import '../../../../shared/utils/role_context.dart';
+import '../../../../shared/widgets/role_notification_feed.dart';
+import '../../../../shared/repositories/profile_repository.dart';
+import '../../../worker/presentation/screens/worker_verification_screen.dart';
 import '../../../../shared/screens/reviews_screen.dart';
 import '../../../../shared/widgets/notification_swipe_actions.dart';
 
@@ -49,6 +54,19 @@ Future<void> _openClientNotification(
   final requestId = data['requestId']?.toString();
   final type = data['type']?.toString();
   try {
+    if (isVerificationNotification(data)) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) throw StateError('Please sign in again.');
+      final profile = await ProfileRepository().watch(uid).first;
+      if (profile == null) throw StateError('Your profile is unavailable.');
+      await notification.reference.update({'read': true});
+      if (!context.mounted) return;
+      Navigator.push(
+        context,
+        clientPageRoute(WorkerVerificationScreen(profile: profile)),
+      );
+      return;
+    }
     if (type == 'reviewReceived' ||
         (type == null && data['title'] == 'New review received')) {
       final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -131,11 +149,9 @@ class ClientNotificationsScreen extends StatelessWidget {
                       style: TextStyle(color: text),
                     ),
                   )
-                : StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                    stream: FirebaseFirestore.instance
-                        .collection('notifications')
-                        .where('recipientId', isEqualTo: uid)
-                        .snapshots(),
+                : RoleNotificationFeed(
+                    uid: uid,
+                    role: UserRole.client,
                     builder: (context, snapshot) {
                       if (snapshot.hasError) {
                         return Center(
@@ -153,15 +169,7 @@ class ClientNotificationsScreen extends StatelessWidget {
                       if (!snapshot.hasData) {
                         return const Center(child: CircularProgressIndicator());
                       }
-                      final notifications = snapshot.data!.docs.toList()
-                        ..sort((left, right) {
-                          final leftTime =
-                              left.data()['createdAt'] as Timestamp?;
-                          final rightTime =
-                              right.data()['createdAt'] as Timestamp?;
-                          return (rightTime?.millisecondsSinceEpoch ?? 0)
-                              .compareTo(leftTime?.millisecondsSinceEpoch ?? 0);
-                        });
+                      final notifications = snapshot.data!;
                       if (notifications.isEmpty) {
                         return Center(
                           child: Text(

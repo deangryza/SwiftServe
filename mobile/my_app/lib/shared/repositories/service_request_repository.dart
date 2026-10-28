@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../models/app_user.dart';
 import '../models/job_location.dart';
@@ -106,10 +107,13 @@ class _PostDetails {
 }
 
 class ServiceRequestRepository {
-  ServiceRequestRepository({FirebaseFirestore? firestore})
-    : _firestore = firestore ?? FirebaseFirestore.instance;
+  ServiceRequestRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _authOverride = auth;
 
   final FirebaseFirestore _firestore;
+  final FirebaseAuth? _authOverride;
+  FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
 
   Future<void> createRequest({
     required String clientId,
@@ -236,15 +240,22 @@ class ServiceRequestRepository {
         return data == null ? null : ExactJobLocation.fromMap(data);
       });
 
-  Stream<List<ServiceRequest>> watchAvailable() => _firestore
-      .collection('service_requests')
-      .where('status', isEqualTo: ServiceRequestStatus.pending.name)
-      .snapshots()
-      .map(
-        (snapshot) => snapshot.docs
-            .map(ServiceRequest.fromDocument)
-            .toList(growable: false),
-      );
+  Stream<List<ServiceRequest>> watchAvailable() {
+    if (_auth.currentUser == null) return Stream.value(const []);
+    return _firestore
+        .collection('service_requests')
+        .where('status', isEqualTo: ServiceRequestStatus.pending.name)
+        .snapshots()
+        .map(
+          (snapshot) => snapshot.docs
+              .map(ServiceRequest.fromDocument)
+              .where(
+                (request) =>
+                    request.isAvailableToWorker(_auth.currentUser?.uid),
+              )
+              .toList(growable: false),
+        );
+  }
 
   Stream<List<ServiceRequest>> watchWorkerJobs(String workerId) => _firestore
       .collection('service_requests')
@@ -323,40 +334,61 @@ class ServiceRequestRepository {
     required ServiceRequest request,
     required AppUser worker,
   }) async {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) throw StateError('Please sign in to apply for a job.');
+    if (worker.id != uid) {
+      throw StateError(
+        'Your worker profile does not match your signed-in account.',
+      );
+    }
     final requestRef = _firestore
         .collection('service_requests')
         .doc(request.id);
-    final applicationRef = requestRef.collection('applications').doc(worker.id);
+    final applicationRef = requestRef.collection('applications').doc(uid);
     final notificationRef = _firestore.collection('notifications').doc();
 
     await _firestore.runTransaction((transaction) async {
       final latestRequest = await transaction.get(requestRef);
-      final existingApplication = await transaction.get(applicationRef);
-      if (worker.verificationStatus != VerificationStatus.verified) {
+      if (_auth.currentUser?.uid != uid) {
+        throw StateError('Your session has changed. Please try again.');
+      }
+      if (!latestRequest.exists) throw StateError('This job no longer exists.');
+      final latest = ServiceRequest.fromMap(request.id, latestRequest.data()!);
+      if (!latest.hasKnownCreator) {
+        throw StateError(
+          'This job has no valid creator and cannot accept applications.',
+        );
+      }
+      if (latest.clientId == uid) {
+        throw StateError('You cannot apply to your own job.');
+      }
+      if (worker.role != UserRole.worker ||
+          worker.verificationStatus != VerificationStatus.verified) {
         throw StateError('Worker verification is required.');
       }
       if (latestRequest.data()?['status'] != 'pending') {
         throw StateError('This request is no longer accepting applications.');
       }
+      final existingApplication = await transaction.get(applicationRef);
       if (existingApplication.exists) {
         throw StateError('You already applied for this request.');
       }
 
       transaction.set(applicationRef, {
         'requestId': request.id,
-        'clientId': request.clientId,
-        'workerId': worker.id,
+        'clientId': latest.clientId,
+        'workerId': uid,
         'workerName': worker.fullName,
         'status': ServiceApplicationStatus.pending.name,
         'appliedAt': FieldValue.serverTimestamp(),
       });
       transaction.set(notificationRef, {
-        'recipientId': request.clientId,
-        'senderId': worker.id,
+        'recipientId': latest.clientId,
+        'senderId': uid,
         'requestId': request.id,
         'type': 'workerApplication',
         'title': 'New worker application',
-        'body': '${worker.fullName} applied for ${request.title}.',
+        'body': '${worker.fullName} applied for ${latest.title}.',
         'read': false,
         'createdAt': FieldValue.serverTimestamp(),
       });

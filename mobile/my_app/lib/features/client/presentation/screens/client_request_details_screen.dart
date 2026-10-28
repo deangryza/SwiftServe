@@ -8,6 +8,8 @@ import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../../../../shared/widgets/booking_details_cards.dart';
+import '../../../../shared/screens/public_profile_screen.dart';
 import '../widgets/errand_tracking_map.dart';
 import '../widgets/post_location_map.dart';
 import 'client_sections.dart';
@@ -160,10 +162,9 @@ class _ClientRequestDetailsScreenState
         .collection('users')
         .doc(user.uid)
         .get();
-    final reviewerName =
-        (profile.data()?['fullName'] ?? _request.clientName)
-            .toString()
-            .trim();
+    final reviewerName = (profile.data()?['fullName'] ?? _request.clientName)
+        .toString()
+        .trim();
     await FirebaseFirestore.instance
         .collection('reviews')
         .doc(_request.id)
@@ -217,192 +218,229 @@ class _ClientRequestDetailsScreenState
   );
 
   Widget _buildDetails(BuildContext context, ServiceRequest request) {
+    return ClientRequestDetailsContent(
+      request: request,
+      dateLabel: _dateRange(request),
+      saving: _saving,
+      onEdit: () => _edit(request),
+      onCancel: _cancel,
+      onMessage: _openWorkerChat,
+      onRate: _rate,
+      onViewProfile: () => Navigator.push(
+        context,
+        clientPageRoute(
+          PublicProfileScreen(
+            userId: request.workerId!,
+            role: PublicProfileRole.worker,
+            initialData: {'fullName': request.workerName ?? 'Worker'},
+          ),
+        ),
+      ),
+      applications: request.status == ServiceRequestStatus.pending
+          ? _buildApplications(request)
+          : null,
+    );
+  }
+
+  Widget _buildApplications(ServiceRequest request) =>
+      StreamBuilder<List<ServiceApplication>>(
+        stream: ServiceRequestRepository().watchApplications(request.id),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text('Could not load applications: ${snapshot.error}'),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Padding(
+              padding: EdgeInsets.all(20),
+              child: Center(child: CircularProgressIndicator()),
+            );
+          }
+          final applications = snapshot.data!;
+          if (applications.isEmpty) {
+            return const Card(
+              margin: EdgeInsets.symmetric(horizontal: 8),
+              child: Padding(
+                padding: EdgeInsets.all(18),
+                child: Text(
+                  'No workers have applied yet. Applications will '
+                  'appear here.',
+                ),
+              ),
+            );
+          }
+          return Column(
+            children: applications.map((application) {
+              return Card(
+                margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                child: ListTile(
+                  leading: LiveProfileAvatar(
+                    userId: application.workerId,
+                    fallbackName: application.workerName,
+                  ),
+                  title: Text(application.workerName),
+                  subtitle: Text(
+                    application.appliedAt == null
+                        ? 'Application received'
+                        : 'Applied ${_formatDate(application.appliedAt!)}',
+                  ),
+                  trailing: FilledButton(
+                    onPressed: _saving
+                        ? null
+                        : () => _acceptApplicant(application),
+                    child: const Text('Accept'),
+                  ),
+                ),
+              );
+            }).toList(),
+          );
+        },
+      );
+
+  String _formatDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
+}
+
+/// Presentation shared by the post-details entry point, with workflow callbacks
+/// kept in the live screen above.
+class ClientRequestDetailsContent extends StatelessWidget {
+  const ClientRequestDetailsContent({
+    super.key,
+    required this.request,
+    required this.dateLabel,
+    required this.saving,
+    required this.onEdit,
+    required this.onCancel,
+    required this.onMessage,
+    required this.onRate,
+    required this.onViewProfile,
+    this.applications,
+    this.map,
+  });
+  final ServiceRequest request;
+  final String dateLabel;
+  final bool saving;
+  final VoidCallback onEdit, onCancel, onMessage, onRate, onViewProfile;
+  final Widget? applications;
+  final Widget? map;
+
+  @override
+  Widget build(BuildContext context) {
     final canEdit = request.status == ServiceRequestStatus.pending;
     final canCancel =
-        request.status == ServiceRequestStatus.pending ||
-        request.status == ServiceRequestStatus.accepted;
+        canEdit || request.status == ServiceRequestStatus.accepted;
     final canMessage =
         request.workerId != null &&
         request.status != ServiceRequestStatus.cancelled;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Request details'),
-        actions: [
-          if (canEdit)
-            IconButton(
-              key: const ValueKey('request-details-edit'),
-              tooltip: 'Edit post',
-              onPressed: _saving ? null : () => _edit(request),
-              icon: const Icon(Icons.edit_outlined),
-            ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
-        children: [
-          Text(request.title, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Chip(label: Text(request.status.name.toUpperCase())),
-          ListTile(
-            leading: const Icon(Icons.category_outlined),
-            title: Text(request.category),
-          ),
-          ListTile(
-            leading: const Icon(Icons.date_range_outlined),
-            title: Text(_dateRange(request)),
-            subtitle: const Text('Requested date range'),
-          ),
-          ListTile(
-            leading: Icon(
-              request.modality.needsLocation
-                  ? Icons.work_outline
-                  : Icons.laptop_mac_outlined,
-            ),
-            title: Text(request.modality.label),
-            subtitle: const Text('Work type'),
-          ),
-          if (request.isErrand) ...[
-            ListTile(
-              leading: const Icon(Icons.storefront_outlined),
-              title: Text(request.location),
-              subtitle: const Text('Pickup'),
-            ),
-            ListTile(
-              leading: const Icon(Icons.flag_outlined),
-              title: Text(request.dropoffLocation ?? 'Not set'),
-              subtitle: const Text('Drop-off'),
-            ),
-            if (request.errandItems?.isNotEmpty ?? false)
-              ListTile(
-                leading: const Icon(Icons.shopping_bag_outlined),
-                title: Text(request.errandItems!),
-                subtitle: request.itemCostEstimate == null
-                    ? null
-                    : Text(
-                        'Items ~₱${request.itemCostEstimate!.toStringAsFixed(0)}, '
-                        'paid back to the rider',
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(
+              children: [
+                BookingDetailsHeader(
+                  request: request,
+                  showSos: false,
+                  backButton: IconButton.outlined(
+                    tooltip: 'Back',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.arrow_back),
+                  ),
+                  actions: [
+                    if (canEdit)
+                      IconButton(
+                        key: const ValueKey('request-details-edit'),
+                        tooltip: 'Edit post',
+                        onPressed: saving ? null : onEdit,
+                        icon: const Icon(Icons.edit_outlined),
                       ),
-              ),
-          ] else if (request.modality.needsLocation)
-            ListTile(
-              leading: const Icon(Icons.location_on_outlined),
-              title: Text(request.location),
-            ),
-          ListTile(
-            leading: const Icon(Icons.payments_outlined),
-            title: Text('₱${request.budget.toStringAsFixed(0)}'),
-            subtitle: request.isErrand
-                ? Text(
-                    'Delivery fee'
-                    '${request.distanceKm == null ? '' : ' · ~${request.distanceKm!.toStringAsFixed(1)} km'}',
-                  )
-                : null,
-          ),
-          if (request.isErrand &&
-              (request.status == ServiceRequestStatus.accepted ||
-                  request.status == ServiceRequestStatus.ongoing))
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: ErrandTrackingMap(request: request),
-            )
-          else if (request.modality.needsLocation)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: PostLocationMap(request: request),
-            ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(request.description),
-          ),
-          if (request.status == ServiceRequestStatus.pending) ...[
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text(
-                'Worker applications',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              ),
-            ),
-            StreamBuilder<List<ServiceApplication>>(
-              stream: ServiceRequestRepository().watchApplications(request.id),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text(
-                      'Could not load applications: ${snapshot.error}',
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Padding(
-                    padding: EdgeInsets.all(20),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final applications = snapshot.data!;
-                if (applications.isEmpty) {
-                  return const Card(
-                    margin: EdgeInsets.symmetric(horizontal: 8),
-                    child: Padding(
-                      padding: EdgeInsets.all(18),
-                      child: Text(
-                        'No workers have applied yet. Applications will '
-                        'appear here.',
+                  ],
+                ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+                    children: [
+                      if (request.workerId != null)
+                        BookingPartyCard(
+                          userId: request.workerId!,
+                          name: request.workerName ?? 'Worker',
+                          role: 'Worker',
+                          profileKey: const ValueKey('view-worker-profile'),
+                          messageKey: const ValueKey('message-accepted-worker'),
+                          onViewProfile: onViewProfile,
+                          onMessage: canMessage ? onMessage : null,
+                        )
+                      else
+                        const BookingSectionCard(
+                          child: Text('No worker assigned yet.'),
+                        ),
+                      const SizedBox(height: 16),
+                      BookingFeeProgressCard(request: request),
+                      if (request.modality.needsLocation) ...[
+                        const SizedBox(height: 16),
+                        BookingRouteCard(request: request),
+                        const SizedBox(height: 16),
+                        map ??
+                            (request.isErrand &&
+                                    (request.status ==
+                                            ServiceRequestStatus.accepted ||
+                                        request.status ==
+                                            ServiceRequestStatus.ongoing)
+                                ? ErrandTrackingMap(
+                                    request: request,
+                                    showTimeline: false,
+                                  )
+                                : PostLocationMap(request: request)),
+                      ],
+                      const SizedBox(height: 16),
+                      BookingInformationCard(
+                        request: request,
+                        dateLabel: dateLabel,
                       ),
-                    ),
-                  );
-                }
-                return Column(
-                  children: applications.map((application) {
-                    return Card(
-                      margin: const EdgeInsets.fromLTRB(8, 4, 8, 8),
-                      child: ListTile(
-                        leading: LiveProfileAvatar(
-                          userId: application.workerId,
-                          fallbackName: application.workerName,
+                      if (applications != null) ...[
+                        const SizedBox(height: 16),
+                        BookingSectionCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const Text(
+                                'Worker applications',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              applications!,
+                            ],
+                          ),
                         ),
-                        title: Text(application.workerName),
-                        subtitle: Text(
-                          application.appliedAt == null
-                              ? 'Application received'
-                              : 'Applied ${_formatDate(application.appliedAt!)}',
+                      ],
+                      if (canCancel) ...[
+                        const SizedBox(height: 16),
+                        OutlinedButton(
+                          onPressed: saving ? null : onCancel,
+                          child: const Text('Cancel request'),
                         ),
-                        trailing: FilledButton(
-                          onPressed: _saving
-                              ? null
-                              : () => _acceptApplicant(application),
-                          child: const Text('Accept'),
+                      ],
+                      if (request.status == ServiceRequestStatus.completed) ...[
+                        const SizedBox(height: 16),
+                        OutlinedButton.icon(
+                          onPressed: onRate,
+                          icon: const Icon(Icons.star_outline),
+                          label: const Text('Rate worker'),
                         ),
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
-          ],
-          if (canMessage)
-            FilledButton.icon(
-              onPressed: _openWorkerChat,
-              icon: const Icon(Icons.chat_bubble_outline),
-              label: const Text('Message worker'),
-            ),
-          if (canCancel)
-            OutlinedButton(
-              onPressed: _saving ? null : _cancel,
-              child: const Text('Cancel request'),
-            ),
-          if (request.status == ServiceRequestStatus.completed)
-            OutlinedButton.icon(
-              onPressed: _rate,
-              icon: const Icon(Icons.star_outline),
-              label: const Text('Rate worker'),
-            ),
-        ],
+          ),
+        ),
       ),
     );
   }
-
-  String _formatDate(DateTime date) => '${date.month}/${date.day}/${date.year}';
 }

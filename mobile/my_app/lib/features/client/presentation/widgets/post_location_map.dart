@@ -6,6 +6,7 @@ import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/widgets/errand_map_layers.dart';
+import '../../../../shared/widgets/booking_details_cards.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 
 /// Read-only map of where a client's post takes place: the job pin, or the
@@ -51,7 +52,7 @@ class _PostLocationMapState extends State<PostLocationMap> {
       }
       if (snapshot.connectionState == ConnectionState.waiting) {
         return const SizedBox(
-          height: 210,
+          height: bookingMapPreviewHeight,
           child: Center(child: CircularProgressIndicator()),
         );
       }
@@ -67,10 +68,14 @@ class _PostLocationMapState extends State<PostLocationMap> {
     final pickup = exact.position;
     final dropoff = widget.request.isErrand ? exact.dropoffPosition : null;
     final target = LatLng(pickup.latitude, pickup.longitude);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+    return Material(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(bookingMapPreviewRadius),
+        side: BorderSide(color: Theme.of(context).dividerColor),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        height: 210,
+        height: bookingMapPreviewHeight,
         child: Stack(
           children: [
             Semantics(
@@ -118,7 +123,16 @@ class _PostLocationMapState extends State<PostLocationMap> {
                         ),
                       ],
                     ),
-                  const SwiftServeMapAttribution(),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      textTheme: Theme.of(context).textTheme.copyWith(
+                        bodySmall: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(fontSize: 10),
+                      ),
+                    ),
+                    child: const SwiftServeMapAttribution(),
+                  ),
                 ],
               ),
             ),

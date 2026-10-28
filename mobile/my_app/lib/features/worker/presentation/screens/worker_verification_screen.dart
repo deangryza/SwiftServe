@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/repositories/verification_repository.dart';
+import '../../../../shared/repositories/profile_repository.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../models/worker_verification_ui_state.dart';
 import 'face_capture_screens.dart';
@@ -27,6 +29,7 @@ class WorkerVerificationScreen extends StatefulWidget {
     super.key,
     required this.profile,
     this.statusStream,
+    this.profileStream,
     this.submitter,
     this.documentCaptureLauncher,
     this.selfieCaptureLauncher,
@@ -39,6 +42,7 @@ class WorkerVerificationScreen extends StatefulWidget {
   /// Optional seams keep the production repository and cameras unchanged while
   /// allowing the onboarding coordinator to be exercised in widget tests.
   final Stream<VerificationStatus?>? statusStream;
+  final Stream<AppUser?>? profileStream;
   final VerificationSubmitter? submitter;
   final VerificationCaptureLauncher? documentCaptureLauncher;
   final VerificationCaptureLauncher? selfieCaptureLauncher;
@@ -67,6 +71,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   VerificationRepository? _repository;
   late final Stream<VerificationStatus?> _statusStream;
   late final VerificationSubmitter _submitter;
+  StreamSubscription<AppUser?>? _profileUpdates;
+  AppUser? _liveProfile;
 
   bool _submitting = false;
   bool _submissionComplete = false;
@@ -84,10 +90,28 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     _statusStream =
         widget.statusStream ?? _repository!.watchStatus(widget.profile.id);
     _submitter = widget.submitter ?? _repository!.submit;
+    final profiles =
+        widget.profileStream ??
+        (Firebase.apps.isNotEmpty &&
+                FirebaseAuth.instance.currentUser?.uid == widget.profile.id
+            ? ProfileRepository().watch(widget.profile.id)
+            : null);
+    _profileUpdates = profiles?.listen((profile) {
+      if (mounted && profile != null && profile.id == widget.profile.id) {
+        setState(() {
+          _liveProfile = profile;
+          if (profile.verificationStatus != VerificationStatus.verified) {
+            _submittedVerified = false;
+            _submissionComplete = false;
+          }
+        });
+      }
+    }, onError: (Object _) {});
   }
 
   @override
   void dispose() {
+    _profileUpdates?.cancel();
     final files = <File?>[_draft.document, _draft.selfie];
     _draft.document = null;
     _draft.selfie = null;
@@ -136,7 +160,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
               }
 
               final state = WorkerVerificationUiState.resolve(
-                profileStatus: widget.profile.verificationStatus,
+                profileStatus:
+                    (_liveProfile ?? widget.profile).verificationStatus,
                 submissionStatus: snapshot.data,
               );
               return _buildContent(state);
@@ -148,6 +173,16 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Widget _buildContent(WorkerVerificationUiState state) {
+    if (state.isVerified) {
+      return const _VerificationStatusView(
+        key: ValueKey('verification_verified_status'),
+        icon: Icons.verified_outlined,
+        title: 'Verification complete',
+        description: 'Your identity is verified. You can now accept jobs.',
+        accentColor: AppTheme.ink,
+      );
+    }
+
     if (_submissionComplete) {
       final similarity = _formatPercent(_submittedConfidence);
       if (_submittedVerified) {
@@ -170,16 +205,6 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             'Under review — an admin will check your photos. You can return '
             'here to check the review status.',
         accentColor: Colors.blue,
-      );
-    }
-
-    if (state.isVerified) {
-      return const _VerificationStatusView(
-        key: ValueKey('verification_verified_status'),
-        icon: Icons.verified_outlined,
-        title: 'Verification complete',
-        description: 'Your identity is verified. You can now accept jobs.',
-        accentColor: AppTheme.ink,
       );
     }
 

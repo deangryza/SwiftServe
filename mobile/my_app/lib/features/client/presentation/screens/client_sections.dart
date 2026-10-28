@@ -1,3 +1,4 @@
+import '../../../../shared/models/app_user.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -5,7 +6,6 @@ import '../../../../shared/widgets/simple_back_button.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../../../shared/utils/message_time.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
-
 
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/services/client_theme_controller.dart';
@@ -165,6 +165,7 @@ class ClientMessagesScreen extends StatelessWidget {
       },
       child: ConversationInboxScreen(
         userId: uid,
+        role: UserRole.client,
         counterpartIdField: 'workerId',
         counterpartNameField: 'workerName',
         bottomNavigationBar: _ClientMessagesBottomNav(userId: uid),

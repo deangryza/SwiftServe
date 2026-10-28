@@ -9,6 +9,10 @@ const {
 const {
   doc,
   getDoc,
+  getDocs,
+  collection,
+  query,
+  where,
   serverTimestamp,
   setDoc,
   updateDoc,
@@ -71,6 +75,82 @@ beforeEach(async () => {
 
 after(async () => {
   await environment.cleanup();
+});
+
+test('creator cannot apply after repeated role switches, including atomic notification writes', async () => {
+  const owner = environment.authenticatedContext('client-1').firestore();
+  for (const role of ['client', 'worker', 'client', 'worker']) {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await updateDoc(doc(context.firestore(), 'users/client-1'), {
+        role, roles: ['client', 'worker'], verificationStatus: 'verified',
+      });
+    });
+    await assertFails(applyWithNotification(owner, 'client-1'));
+    const job = await assertSucceeds(getDoc(doc(owner, 'service_requests/request-1')));
+    if (job.data().clientId !== 'client-1') throw new Error('Role switching changed ownership.');
+    const history = await assertSucceeds(getDocs(query(
+      collection(owner, 'service_requests'), where('clientId', '==', 'client-1'),
+    )));
+    if (history.size !== 1) throw new Error('Client history must retain the original job.');
+  }
+  await environment.withSecurityRulesDisabled(async (context) => {
+    for (const path of ['service_requests/request-1/applications/client-1', 'notifications/application-notification']) {
+      if ((await getDoc(doc(context.firestore(), path))).exists()) {
+        throw new Error('Self-application must not leave an application or notification.');
+      }
+    }
+  });
+});
+
+test('creator cannot bypass self-application restriction with a standalone or forged application', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await updateDoc(doc(context.firestore(), 'users/client-1'), {
+      role: 'worker', verificationStatus: 'verified',
+    });
+  });
+  const owner = environment.authenticatedContext('client-1').firestore();
+  for (const clientId of ['client-1', 'client-2']) {
+    await assertFails(setDoc(doc(owner, 'service_requests/request-1/applications/client-1'), {
+      requestId: 'request-1', clientId, workerId: 'client-1', workerName: 'Owner',
+      status: 'pending', appliedAt: serverTimestamp(),
+    }));
+  }
+});
+
+test('applications fail closed for missing or malformed legacy creator UIDs', async () => {
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  for (const clientId of [undefined, '', '   ', 42, false, {}, 'x'.repeat(129)]) {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      const data = { ...requestData, clientId };
+      if (clientId === undefined) delete data.clientId;
+      await setDoc(doc(context.firestore(), 'service_requests/request-1'), data);
+    });
+    await assertFails(setDoc(doc(worker, 'service_requests/request-1/applications/worker-1'), {
+      requestId: 'request-1', clientId: clientId ?? 'forged-client', workerId: 'worker-1',
+      workerName: 'Verified Worker', status: 'pending', appliedAt: serverTimestamp(),
+    }));
+  }
+});
+
+test('creator cannot accept a legacy self-application or transfer job ownership', async () => {
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'service_requests/request-1/applications/client-1'), {
+      requestId: 'request-1', clientId: 'client-1', workerId: 'client-1',
+      workerName: 'Owner', status: 'pending', appliedAt: Timestamp.now(),
+    });
+  });
+  const owner = environment.authenticatedContext('client-1').firestore();
+  const batch = writeBatch(owner);
+  batch.update(doc(owner, 'service_requests/request-1'), {
+    status: 'accepted', workerId: 'client-1', workerName: 'Owner', acceptedAt: serverTimestamp(),
+  });
+  batch.update(doc(owner, 'service_requests/request-1/applications/client-1'), {
+    status: 'accepted', reviewedAt: serverTimestamp(),
+  });
+  await assertFails(batch.commit());
+  await assertFails(updateDoc(doc(owner, 'service_requests/request-1'), {
+    clientId: 'client-2', updatedAt: serverTimestamp(),
+  }));
 });
 
 test('only a verified worker can create their own pending application', async () => {

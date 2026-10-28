@@ -122,6 +122,17 @@ class ServiceRequest {
 
   bool get isErrand => modality == JobModality.errand;
 
+  /// Unknown ownership must never become an application opportunity.
+  bool get hasKnownCreator =>
+      clientId.trim().isNotEmpty && clientId.length <= 128;
+
+  bool isAvailableToWorker(String? uid) =>
+      uid != null &&
+      uid.isNotEmpty &&
+      hasKnownCreator &&
+      clientId != uid &&
+      status == ServiceRequestStatus.pending;
+
   /// Short "where" text for cards: the area, prefixed for hybrid jobs.
   String get placeLabel => switch (modality) {
     JobModality.online => 'Online',
@@ -154,7 +165,7 @@ class ServiceRequest {
     );
     return ServiceRequest(
       id: id,
-      clientId: (data['clientId'] ?? '').toString(),
+      clientId: data['clientId'] is String ? data['clientId'] as String : '',
       clientName: (data['clientName'] ?? 'Client').toString(),
       title: (data['title'] ?? 'Untitled request').toString(),
       category: (data['category'] ?? 'Other').toString(),

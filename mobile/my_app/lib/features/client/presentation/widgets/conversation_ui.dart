@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/models/app_user.dart';
+import '../../../../shared/utils/role_context.dart';
+import '../../../../shared/widgets/role_notification_feed.dart';
 import '../../../../shared/widgets/simple_back_button.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../../../shared/utils/message_time.dart';
@@ -28,10 +31,12 @@ class _ConversationChoice {
 
 int conversationUnreadCount(
   Iterable<QueryDocumentSnapshot<Map<String, dynamic>>> conversations,
-  String userId,
-) {
+  String userId, {
+  UserRole role = UserRole.client,
+}) {
   return conversations.where((conversation) {
     final data = conversation.data();
+    if (!conversationMatchesRole(data, userId, role)) return false;
     final hiddenFor = data['hiddenFor'];
     final unreadFor = data['unreadFor'];
     return !(hiddenFor is List && hiddenFor.contains(userId)) &&
@@ -45,10 +50,12 @@ class ConversationUnreadBadge extends StatelessWidget {
     super.key,
     required this.userId,
     required this.child,
+    this.role = UserRole.client,
   });
 
   final String? userId;
   final Widget child;
+  final UserRole role;
 
   @override
   Widget build(BuildContext context) {
@@ -56,13 +63,14 @@ class ConversationUnreadBadge extends StatelessWidget {
       return child;
     }
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      key: ValueKey('conversation-badge-$userId-${role.name}'),
       stream: FirebaseFirestore.instance
           .collection('conversations')
           .where('participantIds', arrayContains: userId)
           .snapshots(),
       builder: (context, snapshot) {
         final count = snapshot.hasData
-            ? conversationUnreadCount(snapshot.data!.docs, userId!)
+            ? conversationUnreadCount(snapshot.data!.docs, userId!, role: role)
             : 0;
         return Badge(
           isLabelVisible: count > 0,
@@ -80,25 +88,25 @@ class NotificationUnreadBadge extends StatelessWidget {
     super.key,
     required this.userId,
     required this.child,
+    this.role = UserRole.client,
   });
 
   final String? userId;
   final Widget child;
+  final UserRole role;
 
   @override
   Widget build(BuildContext context) {
     if (userId == null || userId!.isEmpty || Firebase.apps.isEmpty) {
       return child;
     }
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('notifications')
-          .where('recipientId', isEqualTo: userId)
-          .snapshots(),
+    return RoleNotificationFeed(
+      uid: userId!,
+      role: role,
       builder: (context, snapshot) {
         final hasUnread =
             snapshot.hasData &&
-            snapshot.data!.docs.any(
+            snapshot.data!.any(
               (notification) => notification.data()['read'] != true,
             );
         return Badge(
@@ -116,6 +124,8 @@ class ConversationInboxScreen extends StatefulWidget {
   const ConversationInboxScreen({
     super.key,
     required this.userId,
+    required this.role,
+    this.conversationStream,
     required this.counterpartIdField,
     required this.counterpartNameField,
     required this.onOpenConversation,
@@ -125,6 +135,8 @@ class ConversationInboxScreen extends StatefulWidget {
   });
 
   final String userId;
+  final UserRole role;
+  final Stream<QuerySnapshot<Map<String, dynamic>>>? conversationStream;
   final String counterpartIdField;
   final String counterpartNameField;
   final void Function(String conversationId, String counterpartName)
@@ -140,6 +152,31 @@ class ConversationInboxScreen extends StatefulWidget {
 
 class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
   final _searchController = TextEditingController();
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _conversations;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+  }
+
+  void _subscribe() => _conversations =
+      widget.conversationStream ??
+      FirebaseFirestore.instance
+          .collection('conversations')
+          .where('participantIds', arrayContains: widget.userId)
+          .snapshots();
+
+  @override
+  void didUpdateWidget(ConversationInboxScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId ||
+        oldWidget.role != widget.role ||
+        oldWidget.conversationStream != widget.conversationStream) {
+      _searchController.clear();
+      _subscribe();
+    }
+  }
 
   Future<List<_ConversationChoice>> _blockedChoices() async {
     final blocks = await FirebaseFirestore.instance
@@ -159,11 +196,19 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
             .doc(conversationId)
             .get();
         final conversationData = conversation.data();
+        if (conversationData == null ||
+            !conversationMatchesRole(
+              conversationData,
+              widget.userId,
+              widget.role,
+            )) {
+          return null;
+        }
         return _ConversationChoice(
           id: conversationId,
           counterpartId: counterpartId,
           name:
-              (conversationData?[widget.counterpartNameField] ?? 'Blocked user')
+              (conversationData[widget.counterpartNameField] ?? 'Blocked user')
                   .toString(),
         );
       }),
@@ -203,6 +248,7 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
       });
     for (final document in documents) {
       final data = document.data();
+      if (!conversationMatchesRole(data, widget.userId, widget.role)) continue;
       final hiddenFor = data['hiddenFor'];
       if (hiddenFor is List && hiddenFor.contains(widget.userId)) continue;
       final counterpartId = data[widget.counterpartIdField]?.toString();
@@ -484,10 +530,10 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                       borderRadius: BorderRadius.zero,
                     ),
                     child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: FirebaseFirestore.instance
-                          .collection('conversations')
-                          .where('participantIds', arrayContains: widget.userId)
-                          .snapshots(),
+                      key: ValueKey(
+                        'inbox-${widget.userId}-${widget.role.name}',
+                      ),
+                      stream: _conversations,
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           return Center(
@@ -523,6 +569,13 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                               QueryDocumentSnapshot<Map<String, dynamic>>
                             >{};
                         for (final document in documents) {
+                          if (!conversationMatchesRole(
+                            document.data(),
+                            widget.userId,
+                            widget.role,
+                          )) {
+                            continue;
+                          }
                           final hiddenFor = document.data()['hiddenFor'];
                           if (hiddenFor is List &&
                               hiddenFor.contains(widget.userId)) {

@@ -5,8 +5,6 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import '../../../../shared/services/sos_service.dart';
-import '../../../../shared/widgets/sos_button.dart';
 import '../../../../shared/widgets/simple_back_button.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -19,8 +17,10 @@ import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
+import '../../../../shared/repositories/profile_repository.dart';
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
+import '../../../../shared/widgets/booking_details_cards.dart';
 import '../../../../shared/services/device_location_service.dart';
 import '../../../../shared/services/rider_location_service.dart';
 import '../../../../shared/services/road_route_service.dart';
@@ -28,7 +28,6 @@ import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/utils/navigation_links.dart';
 import '../../../../shared/utils/reroute_throttle.dart';
 import '../../../../shared/widgets/errand_map_layers.dart';
-import '../../../../shared/widgets/live_profile_avatar.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import 'worker_verification_screen.dart';
@@ -42,10 +41,12 @@ class WorkerJobDetailsScreen extends StatefulWidget {
     super.key,
     required this.request,
     required this.worker,
+    this.profileStream,
   });
 
   final ServiceRequest request;
   final AppUser worker;
+  final Stream<AppUser?>? profileStream;
 
   @override
   State<WorkerJobDetailsScreen> createState() => _WorkerJobDetailsScreenState();
@@ -63,11 +64,25 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
   DeviceLocationException? _locationError;
   // Keeps the worker's own marker moving on errand maps.
   StreamSubscription<Position>? _positionUpdates;
+  StreamSubscription<AppUser?>? _profileUpdates;
+  AppUser? _liveWorker;
+  AppUser get _currentWorker => _liveWorker ?? widget.worker;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final profiles =
+        widget.profileStream ??
+        (Firebase.apps.isNotEmpty &&
+                FirebaseAuth.instance.currentUser?.uid == widget.worker.id
+            ? ProfileRepository().watch(widget.worker.id)
+            : null);
+    _profileUpdates = profiles?.listen((profile) {
+      if (mounted && profile != null && profile.id == widget.worker.id) {
+        setState(() => _liveWorker = profile);
+      }
+    }, onError: (Object _) {});
     _loadLocationContext();
   }
 
@@ -75,6 +90,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _positionUpdates?.cancel();
+    _profileUpdates?.cancel();
     super.dispose();
   }
 
@@ -353,6 +369,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
         'senderId': user.uid,
         'requestId': request.id,
         'type': 'reviewReceived',
+        'recipientRole': 'client',
         'title': 'New review received',
         'body':
             '${widget.worker.fullName} rated you ${review.rating} out of 5 stars.',
@@ -380,7 +397,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
   ) {
     return _WorkerBookingDetailsBody(
       request: request,
-      worker: widget.worker,
+      worker: _currentWorker,
       palette: palette,
       locationCard: _locationCard(request, palette),
       savingAction: _savingAction,
@@ -392,7 +409,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
       onVerify: () => Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => WorkerVerificationScreen(profile: widget.worker),
+          builder: (_) => WorkerVerificationScreen(profile: _currentWorker),
         ),
       ),
       onApply: () => _confirmAndRun(
@@ -403,7 +420,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
         icon: Icons.send_outlined,
         action: () => ServiceRequestRepository().apply(
           request: request,
-          worker: widget.worker,
+          worker: _currentWorker,
         ),
         successMessage: 'Application sent.',
       ),
@@ -454,7 +471,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
       dark: Theme.of(context).brightness == Brightness.dark,
     );
     return Scaffold(
-      backgroundColor: palette.background,
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainer,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -535,301 +552,96 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
         request.isErrand &&
         isAssignedWorker &&
         request.status == ServiceRequestStatus.ongoing;
+    void viewProfile() => Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PublicProfileScreen(
+          userId: request.clientId,
+          role: PublicProfileRole.client,
+          initialData: <String, dynamic>{
+            'fullName': request.clientName,
+            'location': request.location,
+          },
+          onReport: isAssignedWorker ? onReport : null,
+          reporting: savingReport,
+          reportLabel: 'Report client',
+        ),
+      ),
+    );
     return Column(
       children: [
-        SizedBox(
-          height: 168,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 10),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    SimpleBackButton(
-                      key: const ValueKey('worker-booking-back'),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      'Booking Details',
-                      style: TextStyle(
-                        color: palette.text,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (isAssignedWorker) ...[
-                      const Spacer(),
-                      SosButton(request: request, compact: true),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 18),
-                LiveProfileAvatar(
-                  userId: request.clientId,
-                  fallbackName: request.clientName,
-                  radius: 32,
-                  backgroundColor: AppTheme.softYellow,
-                  foregroundColor: AppTheme.ink,
-                  textStyle: const TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
+        BookingDetailsHeader(
+          request: request,
+          showSos: isAssignedWorker,
+          backButton: SimpleBackButton(
+            key: const ValueKey('worker-booking-back'),
+            onPressed: () => Navigator.pop(context),
           ),
         ),
         Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: palette.background,
-              borderRadius: BorderRadius.zero,
-            ),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 30),
-              children: [
-                _ClientSummaryCard(request: request, palette: palette),
-                const SizedBox(height: 18),
-                _JobSummaryCard(request: request, palette: palette),
-                if (locationCard != null) ...[
-                  const SizedBox(height: 18),
-                  locationCard!,
-                ],
-                if (sharesLocation) ...[
-                  const SizedBox(height: 18),
-                  _RiderSharingBanner(
-                    key: ValueKey('rider-sharing-${request.id}'),
-                    requestId: request.id,
-                    palette: palette,
-                  ),
-                ],
-                const SizedBox(height: 22),
-                FilledButton.icon(
-                  key: const ValueKey('view-client-profile'),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => PublicProfileScreen(
-                        userId: request.clientId,
-                        role: PublicProfileRole.client,
-                        initialData: <String, dynamic>{
-                          'fullName': request.clientName,
-                          'location': request.location,
-                        },
-                        onReport: isAssignedWorker ? onReport : null,
-                        reporting: savingReport,
-                        reportLabel: 'Report client',
-                      ),
-                    ),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppTheme.yellow,
-                    foregroundColor: AppTheme.ink,
-                    minimumSize: const Size.fromHeight(52),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                  ),
-                  icon: const Icon(Icons.person_outline_rounded),
-                  label: const Text('View Profile'),
-                ),
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            children: [
+              BookingPartyCard(
+                userId: request.clientId,
+                name: request.clientName,
+                role: 'Client',
+                profileKey: const ValueKey('view-client-profile'),
+                messageKey: const ValueKey('message-booking-client'),
+                onViewProfile: viewProfile,
+                onMessage:
+                    isAssignedWorker &&
+                        request.status != ServiceRequestStatus.pending
+                    ? onMessage
+                    : null,
+              ),
+              const SizedBox(height: 16),
+              BookingFeeProgressCard(request: request),
+              if (locationCard != null) ...[
+                const SizedBox(height: 16),
+                locationCard!,
+              ] else if (request.modality.needsLocation) ...[
+                const SizedBox(height: 16),
+                BookingRouteCard(request: request),
                 const SizedBox(height: 12),
-                _WorkerBookingActions(
-                  request: request,
-                  worker: worker,
-                  palette: palette,
-                  isAssignedWorker: isAssignedWorker,
-                  saving: savingAction,
-                  savingReview: savingReview,
-                  onMessage: onMessage,
-                  onRateClient: onRateClient,
-                  onVerify: onVerify,
-                  onApply: onApply,
-                  onStart: onStart,
-                  onAdvanceStage: onAdvanceStage,
-                  onComplete: onComplete,
+                const BookingSectionCard(
+                  child: Text('Map unavailable for this booking.'),
                 ),
               ],
-            ),
+              if (sharesLocation) ...[
+                const SizedBox(height: 16),
+                _RiderSharingBanner(
+                  key: ValueKey('rider-sharing-${request.id}'),
+                  requestId: request.id,
+                  palette: palette,
+                ),
+              ],
+              const SizedBox(height: 16),
+              BookingInformationCard(
+                request: request,
+                dateLabel: _dateRange(request),
+              ),
+              const SizedBox(height: 16),
+              _WorkerBookingActions(
+                request: request,
+                worker: worker,
+                palette: palette,
+                isAssignedWorker: isAssignedWorker,
+                saving: savingAction,
+                savingReview: savingReview,
+                onRateClient: onRateClient,
+                onVerify: onVerify,
+                onApply: onApply,
+                onStart: onStart,
+                onAdvanceStage: onAdvanceStage,
+                onComplete: onComplete,
+              ),
+            ],
           ),
         ),
       ],
     );
   }
-}
-
-class _ClientSummaryCard extends StatelessWidget {
-  const _ClientSummaryCard({required this.request, required this.palette});
-
-  final ServiceRequest request;
-  final _WorkerDetailsPalette palette;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: palette.surface,
-      border: Border.all(color: _detailsYellow, width: 1.4),
-      borderRadius: BorderRadius.circular(20),
-      boxShadow: const [],
-    ),
-    child: Row(
-      children: [
-        LiveProfileAvatar(
-          userId: request.clientId,
-          fallbackName: request.clientName,
-          radius: 24,
-          backgroundColor: AppTheme.softYellow,
-          foregroundColor: _detailsInk,
-          textStyle: const TextStyle(fontWeight: FontWeight.w800),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                request.clientName,
-                style: TextStyle(
-                  color: palette.text,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              Text('Client', style: TextStyle(color: palette.muted)),
-            ],
-          ),
-        ),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              request.isErrand ? 'Delivery fee' : 'Budget',
-              style: TextStyle(color: palette.muted, fontSize: 11),
-            ),
-            Text(
-              '₱${request.budget.toStringAsFixed(0)}',
-              style: TextStyle(
-                color: palette.text,
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-class _JobSummaryCard extends StatelessWidget {
-  const _JobSummaryCard({required this.request, required this.palette});
-
-  final ServiceRequest request;
-  final _WorkerDetailsPalette palette;
-
-  @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(18),
-    decoration: BoxDecoration(
-      color: palette.surface,
-      borderRadius: BorderRadius.circular(18),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x20000000),
-          blurRadius: 5,
-          offset: Offset(0, 3),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          request.title,
-          style: TextStyle(
-            color: palette.text,
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _DetailLine(
-          icon: Icons.category_outlined,
-          label: request.category,
-          palette: palette,
-        ),
-        _DetailLine(
-          icon: Icons.calendar_month_outlined,
-          label: _dateRange(request),
-          palette: palette,
-        ),
-        _DetailLine(
-          icon: request.modality.needsLocation
-              ? Icons.work_outline
-              : Icons.laptop_mac_outlined,
-          label: request.modality.needsLocation
-              ? request.modality.label
-              : 'Online · done remotely',
-          palette: palette,
-        ),
-        if (request.isErrand) ...[
-          _DetailLine(
-            icon: Icons.storefront_outlined,
-            label: 'Pickup: ${request.location}',
-            palette: palette,
-          ),
-          _DetailLine(
-            icon: Icons.flag_outlined,
-            label: 'Drop-off: ${request.dropoffLocation ?? 'Not set'}',
-            palette: palette,
-          ),
-          if (request.distanceKm != null)
-            _DetailLine(
-              icon: Icons.route_outlined,
-              label: '~${request.distanceKm!.toStringAsFixed(1)} km trip',
-              palette: palette,
-            ),
-          if (request.errandItems?.isNotEmpty ?? false)
-            _DetailLine(
-              icon: Icons.shopping_bag_outlined,
-              label: request.errandItems!,
-              palette: palette,
-            ),
-          if (request.itemCostEstimate != null)
-            _DetailLine(
-              icon: Icons.payments_outlined,
-              label:
-                  'Items ~₱${request.itemCostEstimate!.toStringAsFixed(0)} '
-                  '(paid back on delivery)',
-              palette: palette,
-            ),
-        ] else if (request.modality.needsLocation)
-          _DetailLine(
-            icon: Icons.location_on_outlined,
-            label: request.location,
-            palette: palette,
-          ),
-        _DetailLine(
-          icon: Icons.info_outline,
-          label:
-              request.status == ServiceRequestStatus.ongoing &&
-                  request.errandStage != null
-              ? 'ONGOING · ${request.errandStage!.label.toUpperCase()}'
-              : request.status.name.toUpperCase(),
-          palette: palette,
-        ),
-        const SizedBox(height: 10),
-        Text(
-          request.description,
-          style: TextStyle(color: palette.muted, height: 1.35),
-        ),
-      ],
-    ),
-  );
 }
 
 class _WorkerBookingActions extends StatelessWidget {
@@ -840,7 +652,6 @@ class _WorkerBookingActions extends StatelessWidget {
     required this.isAssignedWorker,
     required this.saving,
     required this.savingReview,
-    required this.onMessage,
     required this.onRateClient,
     required this.onVerify,
     required this.onApply,
@@ -856,7 +667,6 @@ class _WorkerBookingActions extends StatelessWidget {
   final ValueChanged<ErrandStage> onAdvanceStage;
   final bool saving;
   final bool savingReview;
-  final VoidCallback onMessage;
   final VoidCallback onRateClient;
   final VoidCallback onVerify;
   final VoidCallback onApply;
@@ -865,6 +675,15 @@ class _WorkerBookingActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (request.status == ServiceRequestStatus.pending &&
+        !request.isAvailableToWorker(worker.id)) {
+      return Text(
+        request.clientId == worker.id
+            ? 'You cannot apply to your own job.'
+            : 'This job has no valid creator and cannot accept applications.',
+        style: TextStyle(color: palette.text),
+      );
+    }
     if (request.status == ServiceRequestStatus.pending &&
         worker.verificationStatus != VerificationStatus.verified) {
       return _DetailsButton(
@@ -963,16 +782,6 @@ class _WorkerBookingActions extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        if (sosAvailableFor(request)) ...[
-          SosButton(request: request),
-          const SizedBox(height: 12),
-        ],
-        _DetailsButton(
-          key: const ValueKey('message-booking-client'),
-          label: 'Message Client',
-          onPressed: onMessage,
-          palette: palette,
-        ),
         if (request.status == ServiceRequestStatus.accepted) ...[
           const SizedBox(height: 12),
           _DetailsButton(
@@ -1491,33 +1300,6 @@ class _DetailsButton extends StatelessWidget {
   );
 }
 
-class _DetailLine extends StatelessWidget {
-  const _DetailLine({
-    required this.icon,
-    required this.label,
-    required this.palette,
-  });
-
-  final IconData icon;
-  final String label;
-  final _WorkerDetailsPalette palette;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Row(
-      children: [
-        const SizedBox(width: 1),
-        Icon(icon, size: 18, color: _detailsYellow),
-        const SizedBox(width: 9),
-        Expanded(
-          child: Text(label, style: TextStyle(color: palette.text)),
-        ),
-      ],
-    ),
-  );
-}
-
 class _DetailsMessage extends StatelessWidget {
   const _DetailsMessage({required this.message});
 
@@ -1652,18 +1434,42 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
     required String value,
   }) => Padding(
     padding: const EdgeInsets.only(top: 6),
-    child: Row(
-      children: [
-        Icon(icon, size: 18, color: color),
-        const SizedBox(width: 8),
-        Expanded(child: Text(label)),
-        Text(
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final distance = Text(
           value,
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-        ),
-      ],
+        );
+        if (constraints.maxWidth < 300) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 18, color: color),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text(label)),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 26, top: 4),
+                child: distance,
+              ),
+            ],
+          );
+        }
+        return Row(
+          children: [
+            Icon(icon, size: 18, color: color),
+            const SizedBox(width: 8),
+            Expanded(child: Text(label)),
+            const SizedBox(width: 8),
+            Flexible(child: distance),
+          ],
+        );
+      },
     ),
   );
 
@@ -1700,22 +1506,196 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
     final requiresSettings =
         error?.failure == DeviceLocationFailure.serviceDisabled ||
         error?.failure == DeviceLocationFailure.permissionPermanentlyDenied;
-    return Material(
-      color: widget.palette.surface,
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: Theme.of(context).dividerColor),
-      ),
-      textStyle: Theme.of(
-        context,
-      ).textTheme.bodyMedium?.copyWith(color: widget.palette.text),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: 210,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        BookingSectionCard(
+          child: DefaultTextStyle.merge(
+            style: TextStyle(color: widget.palette.text),
+            child: Padding(
+              padding: EdgeInsets.zero,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (widget.approximate && dropoff != null)
+                        const ErrandAreaBadge(pickup: true, size: 22)
+                      else
+                        Icon(
+                          widget.approximate
+                              ? Icons.location_searching_outlined
+                              : Icons.location_on_outlined,
+                          size: 20,
+                        ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(switch ((
+                          widget.approximate,
+                          dropoff != null,
+                        )) {
+                          (true, true) => 'Approximate pickup area',
+                          (false, true) => 'Pickup',
+                          (true, false) => 'Approximate service area',
+                          (false, false) => 'Exact job location',
+                        }, style: Theme.of(context).textTheme.titleSmall),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(widget.address),
+                  if (dropoff != null) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        if (widget.approximate) ...[
+                          const ErrandAreaBadge(pickup: false, size: 22),
+                          const SizedBox(width: 8),
+                        ],
+                        Expanded(
+                          child: Text(
+                            widget.approximate
+                                ? 'Approximate drop-off area'
+                                : 'Drop-off',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(widget.dropoffAddress ?? ''),
+                  ],
+                  if (dropoff != null) ...[
+                    const SizedBox(height: 6),
+                    _tripLeg(
+                      icon: Icons.near_me_outlined,
+                      color: riderLegColor,
+                      label: widget.headsToDropoff
+                          ? 'You to drop-off'
+                          : 'You to pickup',
+                      value: switch (_riderLeg) {
+                        final leg? => formatRouteLeg(
+                          leg.distanceMeters,
+                          leg.durationSeconds,
+                          approximate: widget.approximate,
+                        ),
+                        null => _distanceLabel,
+                      },
+                    ),
+                    // Once the items are picked up, the worker's own leg is
+                    // the rest of the errand.
+                    if (!widget.headsToDropoff)
+                      _tripLeg(
+                        icon: Icons.route_outlined,
+                        color: errandDropoffColor,
+                        label: 'Pickup to drop-off',
+                        value: switch (_errandLeg) {
+                          final leg? => formatRouteLeg(
+                            leg.distanceMeters,
+                            leg.durationSeconds,
+                            approximate: widget.approximate,
+                          ),
+                          // Straight-line distance until (or if never) routed.
+                          null =>
+                            '${widget.approximate ? '~' : ''}'
+                                '${(distanceMetersBetween(widget.position, dropoff) / 1000).toStringAsFixed(1)} km',
+                        },
+                      ),
+                    if (!widget.approximate) ...[
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          key: const ValueKey('errand-navigate'),
+                          onPressed: _openNavigation,
+                          icon: const Icon(Icons.navigation_outlined),
+                          label: Text(
+                            widget.headsToDropoff
+                                ? 'Navigate to drop-off'
+                                : 'Navigate to pickup',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ] else ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      _distanceLabel,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                  if (widget.approximate) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      dropoff != null
+                          ? "Exact addresses are shared once you're hired."
+                          : "The exact address is shared once you're hired.",
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: widget.palette.muted,
+                      ),
+                    ),
+                  ],
+                  if (error != null) ...[
+                    const SizedBox(height: 8),
+                    Semantics(
+                      liveRegion: true,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(
+                                  Icons.location_off_outlined,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    error.userMessage,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.bodySmall,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: widget.onRecoverLocation,
+                                child: Text(
+                                  requiresSettings
+                                      ? 'Open settings'
+                                      : 'Try again',
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(bookingMapPreviewRadius),
+          child: SizedBox(
+            height: bookingMapPreviewHeight,
             child: Stack(
               children: [
                 Semantics(
@@ -1787,7 +1767,12 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
                             ),
                           ],
                         ),
-                      const SwiftServeMapAttribution(),
+                      DefaultTextStyle(
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall!.copyWith(fontSize: 10),
+                        child: const SwiftServeMapAttribution(),
+                      ),
                     ],
                   ),
                 ),
@@ -1795,154 +1780,8 @@ class _JobLocationMapCardState extends State<_JobLocationMapCard> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    if (widget.approximate && dropoff != null)
-                      const ErrandAreaBadge(pickup: true, size: 22)
-                    else
-                      Icon(
-                        widget.approximate
-                            ? Icons.location_searching_outlined
-                            : Icons.location_on_outlined,
-                        size: 20,
-                      ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(switch ((
-                        widget.approximate,
-                        dropoff != null,
-                      )) {
-                        (true, true) => 'Approximate pickup area',
-                        (false, true) => 'Pickup',
-                        (true, false) => 'Approximate service area',
-                        (false, false) => 'Exact job location',
-                      }, style: Theme.of(context).textTheme.titleSmall),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(widget.address),
-                if (dropoff != null) ...[
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      if (widget.approximate) ...[
-                        const ErrandAreaBadge(pickup: false, size: 22),
-                        const SizedBox(width: 8),
-                      ],
-                      Expanded(
-                        child: Text(
-                          widget.approximate
-                              ? 'Approximate drop-off area'
-                              : 'Drop-off',
-                          style: Theme.of(context).textTheme.titleSmall,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(widget.dropoffAddress ?? ''),
-                ],
-                if (dropoff != null) ...[
-                  const SizedBox(height: 6),
-                  _tripLeg(
-                    icon: Icons.near_me_outlined,
-                    color: riderLegColor,
-                    label: widget.headsToDropoff
-                        ? 'You to drop-off'
-                        : 'You to pickup',
-                    value: switch (_riderLeg) {
-                      final leg? => formatRouteLeg(
-                        leg.distanceMeters,
-                        leg.durationSeconds,
-                        approximate: widget.approximate,
-                      ),
-                      null => _distanceLabel,
-                    },
-                  ),
-                  // Once the items are picked up, the worker's own leg is
-                  // the rest of the errand.
-                  if (!widget.headsToDropoff)
-                    _tripLeg(
-                      icon: Icons.route_outlined,
-                      color: errandDropoffColor,
-                      label: 'Pickup to drop-off',
-                      value: switch (_errandLeg) {
-                        final leg? => formatRouteLeg(
-                          leg.distanceMeters,
-                          leg.durationSeconds,
-                          approximate: widget.approximate,
-                        ),
-                        // Straight-line distance until (or if never) routed.
-                        null =>
-                          '${widget.approximate ? '~' : ''}'
-                              '${(distanceMetersBetween(widget.position, dropoff) / 1000).toStringAsFixed(1)} km',
-                      },
-                    ),
-                  if (!widget.approximate) ...[
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        key: const ValueKey('errand-navigate'),
-                        onPressed: _openNavigation,
-                        icon: const Icon(Icons.navigation_outlined),
-                        label: Text(
-                          widget.headsToDropoff
-                              ? 'Navigate to drop-off'
-                              : 'Navigate to pickup',
-                        ),
-                      ),
-                    ),
-                  ],
-                ] else ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    _distanceLabel,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-                if (widget.approximate) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    dropoff != null
-                        ? "Exact addresses are shared once you're hired."
-                        : "The exact address is shared once you're hired.",
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: widget.palette.muted,
-                    ),
-                  ),
-                ],
-                if (error != null) ...[
-                  const SizedBox(height: 8),
-                  Semantics(
-                    liveRegion: true,
-                    child: Text(
-                      error.userMessage,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: widget.onRecoverLocation,
-                    child: Text(
-                      requiresSettings ? 'Open settings' : 'Try again',
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

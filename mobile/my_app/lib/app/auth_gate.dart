@@ -64,9 +64,15 @@ class _AuthGateState extends State<AuthGate> {
               return const ProfileCompletionScreen();
             }
             if (profile.role == UserRole.worker) {
-              return WorkerHomeScreen(profile: profile);
+              return WorkerHomeScreen(
+                key: ValueKey('${profile.id}-worker'),
+                profile: profile,
+              );
             }
-            return ClientThemeScope(child: ClientHomeScreen(profile: profile));
+            return ClientThemeScope(
+              key: ValueKey('${profile.id}-client'),
+              child: ClientHomeScreen(profile: profile),
+            );
           },
         );
       },
