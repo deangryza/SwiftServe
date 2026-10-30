@@ -37,6 +37,30 @@ class DeviceLocationException implements Exception {
 class DeviceLocationService {
   const DeviceLocationService();
 
+  /// Inspect access without presenting a permission dialog. Nearby discovery
+  /// explains its purpose before the user explicitly requests access.
+  Future<bool> hasPermission() async {
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        throw const DeviceLocationException(
+          DeviceLocationFailure.serviceDisabled,
+        );
+      }
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.deniedForever) {
+        throw const DeviceLocationException(
+          DeviceLocationFailure.permissionPermanentlyDenied,
+        );
+      }
+      return permission == LocationPermission.whileInUse ||
+          permission == LocationPermission.always;
+    } on DeviceLocationException {
+      rethrow;
+    } catch (_) {
+      throw const DeviceLocationException(DeviceLocationFailure.unavailable);
+    }
+  }
+
   Future<JobCoordinate> currentPosition() async {
     if (!await Geolocator.isLocationServiceEnabled()) {
       throw const DeviceLocationException(

@@ -3,8 +3,12 @@ import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../../../shared/theme/app_theme.dart';
+import '../../../../shared/models/worker_service_selection.dart';
+import '../widgets/worker_service_selector.dart';
 
 import '../widgets/phone_number_field.dart';
+import '../widgets/registration_contact_fields.dart';
+import '../widgets/registration_validation_theme.dart';
 import '../widgets/registration_address_fields.dart';
 
 const fallbackServiceCategories = ['Electrical', 'Repair', 'Tutoring', 'Other'];
@@ -54,6 +58,8 @@ class WorkerAccountForm extends StatefulWidget {
     this.federatedAccount = false,
     this.onChangeRole,
     this.onExit,
+    this.contactAvailability,
+    this.services,
   });
 
   final GlobalKey<FormState> formKey;
@@ -75,6 +81,8 @@ class WorkerAccountForm extends StatefulWidget {
   final bool federatedAccount;
   final VoidCallback? onChangeRole;
   final VoidCallback? onExit;
+  final ContactAvailabilityLookup? contactAvailability;
+  final WorkerServiceSelection? services;
 
   @override
   State<WorkerAccountForm> createState() => _WorkerAccountFormState();
@@ -86,12 +94,20 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
   var _page = 0;
+  final _contactKey = GlobalKey<RegistrationContactFieldsState>();
+  var _continuing = false;
   var _obscurePassword = true;
   var _obscureConfirmation = true;
+  late final WorkerServiceSelection _services;
 
   @override
   void initState() {
     super.initState();
+    _services = widget.services ?? WorkerServiceSelection();
+    if (widget.services == null && widget.category.text.trim().isNotEmpty) {
+      _services.toggle(widget.category.text.trim());
+    }
+    _services.addListener(_syncServices);
     final parts = widget.name.text.trim().split(RegExp(r'\s+'));
     if (parts.isNotEmpty && parts.first.isNotEmpty) {
       _firstName.text = parts.first;
@@ -106,6 +122,10 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         .trim();
   }
 
+  void _syncServices() {
+    widget.category.text = _services.services.firstOrNull ?? '';
+  }
+
   bool get _dark => Theme.of(context).brightness == Brightness.dark;
   Color get _surface => _dark ? AppTheme.ink : const Color(0xFFFFFFFF);
   Color get _field => _dark ? const Color(0xFF2C2C2C) : Colors.white;
@@ -118,6 +138,8 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     _firstName.dispose();
     _lastName.dispose();
     _scrollController.dispose();
+    _services.removeListener(_syncServices);
+    if (widget.services == null) _services.dispose();
     super.dispose();
   }
 
@@ -130,31 +152,52 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }
 
-  void _continue() {
-    if (_page == 0) {
-      if (!widget.formKey.currentState!.validate()) return;
-      widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
-    } else if (_page == 1) {
-      if (!widget.formKey.currentState!.validate()) return;
-      if (!widget.acceptedTerms) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please accept the terms and privacy policy.'),
-          ),
-        );
-        return;
+  Future<void> _continue() async {
+    if (_continuing) return;
+    _continuing = true;
+    try {
+      if (_page == 0) {
+        if (!widget.formKey.currentState!.validate()) return;
+        widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
+      } else if (_page == 1) {
+        final available =
+            await _contactKey.currentState?.checkAvailability() ?? false;
+        if (!mounted) return;
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        if (!widget.formKey.currentState!.validate() ||
+            !available ||
+            _contactKey.currentState?.hasCurrentAvailability != true) {
+          return;
+        }
+        if (!widget.acceptedTerms) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please accept the terms and privacy policy.'),
+            ),
+          );
+          return;
+        }
+      } else if (_page == 2) {
+        final valid = widget.formKey.currentState!.validate();
+        final error = _services.validationError;
+        if (!valid || error != null) {
+          if (error != null) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(error)));
+          }
+          return;
+        }
       }
-    } else if (_page == 2 && widget.category.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select a service category.')),
-      );
-      return;
-    }
 
-    if (_page == 6) {
-      widget.onRegister();
-    } else {
-      _goTo(_page + 1);
+      if (_page == 6) {
+        widget.onRegister();
+      } else {
+        _goTo(_page + 1);
+      }
+    } finally {
+      _continuing = false;
     }
   }
 
@@ -432,24 +475,22 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
 
   Widget _credentialsPage() => Column(
     children: [
-      _input(
-        'Email Address',
-        'john@example.com',
-        widget.email,
-        keyboardType: TextInputType.emailAddress,
-        readOnly: widget.federatedAccount,
-      ),
-      PhoneNumberField(
-        fieldKey: const ValueKey('worker-Phone Number'),
-        controller: widget.phone,
+      RegistrationContactFields(
+        key: _contactKey,
+        email: widget.email,
+        phone: widget.phone,
+        emailKey: const ValueKey('worker-Email Address'),
+        phoneKey: const ValueKey('worker-Phone Number'),
         dialCode: widget.countryCode,
         onDialCodeChanged: widget.onCountryCodeChanged ?? (_) {},
         enabled: !widget.loading,
         fieldColor: _field,
         textColor: _text,
-        mutedColor: _muted.withValues(alpha: 0.55),
+        mutedColor: _muted,
         borderColor: _border,
         focusColor: _yellow,
+        federatedAccount: widget.federatedAccount,
+        lookup: widget.contactAvailability,
       ),
       RegistrationAddressFields(
         address: widget.address,
@@ -520,149 +561,12 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         ),
       ),
       const SizedBox(height: 18),
-      StreamBuilder<List<String>>(
-        stream: activeServiceCategories(),
-        initialData: fallbackServiceCategories,
-        builder: (context, snapshot) {
-          final categories = snapshot.data ?? fallbackServiceCategories;
-          return GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              mainAxisExtent: 74,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: categories.length,
-            itemBuilder: (context, index) {
-              final category = categories[index];
-              final selected = widget.category.text == category;
-              return InkWell(
-                key: ValueKey('worker-category-$category'),
-                onTap: () => setState(() => widget.category.text = category),
-                borderRadius: BorderRadius.circular(14),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: selected ? _yellow.withValues(alpha: 0.22) : _field,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: selected ? _yellow : _border,
-                      width: selected ? 2 : 1,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(_categoryIcon(category), color: _text, size: 21),
-                      const SizedBox(height: 5),
-                      Text(
-                        category,
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _text,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          );
-        },
+      WorkerServiceSelector(
+        selection: _services,
+        categories: registrationServiceCategories,
+        enabled: !widget.loading,
+        referenceLayout: true,
       ),
-      const SizedBox(height: 34),
-      Text(
-        'Weekly Availability',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: _text,
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 18),
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: _field,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _border),
-        ),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const SizedBox(width: 32),
-                for (final day in ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'])
-                  Expanded(
-                    child: Text(
-                      day,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _text,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 7),
-            _availabilityRow('AM', true),
-            const SizedBox(height: 6),
-            _availabilityRow('PM', true),
-            const SizedBox(height: 6),
-            _availabilityRow('EVE', false),
-          ],
-        ),
-      ),
-    ],
-  );
-
-  IconData _categoryIcon(String category) {
-    final value = category.toLowerCase();
-    if (value.contains('electric')) return Icons.electrical_services_outlined;
-    if (value.contains('repair')) return Icons.handyman_outlined;
-    if (value.contains('tutor')) return Icons.school_outlined;
-    return Icons.add;
-  }
-
-  Widget _availabilityRow(String label, bool available) => Row(
-    children: [
-      SizedBox(
-        width: 32,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: _text,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      for (var index = 0; index < 7; index++)
-        Expanded(
-          child: Container(
-            height: 28,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            decoration: BoxDecoration(
-              color: available
-                  ? AppTheme.ink
-                  : _dark
-                  ? Colors.transparent
-                  : const Color(0xFF999999),
-              borderRadius: BorderRadius.circular(3),
-              border: !available && _dark
-                  ? Border.all(color: const Color(0xFF8C8C8C))
-                  : null,
-            ),
-          ),
-        ),
     ],
   );
 
@@ -875,104 +779,107 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
   };
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: _page == 0 && !widget.loading,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && _page > 0 && !widget.loading) _goTo(_page - 1);
-    },
-    child: Scaffold(
-      backgroundColor: _surface,
-      appBar: AppBar(
+  Widget build(BuildContext context) => RegistrationValidationTheme(
+    child: PopScope(
+      canPop: _page == 0 && !widget.loading,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _page > 0 && !widget.loading) _goTo(_page - 1);
+      },
+      child: Scaffold(
         backgroundColor: _surface,
-        foregroundColor: _text,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('SwiftServe'),
-        leading: IconButton(
-          onPressed: widget.loading
-              ? null
-              : () {
-                  if (_page > 0) {
-                    _goTo(_page - 1);
-                  } else if (widget.onExit != null) {
-                    widget.onExit!();
-                  } else {
-                    Navigator.maybePop(context);
-                  }
-                },
-          icon: const Icon(Icons.arrow_back),
+        appBar: AppBar(
+          backgroundColor: _surface,
+          foregroundColor: _text,
+          surfaceTintColor: Colors.transparent,
+          title: const Text('SwiftServe'),
+          leading: IconButton(
+            onPressed: widget.loading
+                ? null
+                : () {
+                    if (_page > 0) {
+                      _goTo(_page - 1);
+                    } else if (widget.onExit != null) {
+                      widget.onExit!();
+                    } else {
+                      Navigator.maybePop(context);
+                    }
+                  },
+            icon: const Icon(Icons.arrow_back),
+          ),
         ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _header(),
-            Expanded(
-              child: Form(
-                key: widget.formKey,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _pageContent(),
-                      const SizedBox(height: 12),
-                      if (_page == 3)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: SizedBox.square(
-                            dimension: 52,
-                            child: FilledButton(
-                              key: const ValueKey('worker-registration-next'),
-                              onPressed: widget.loading ? null : _continue,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _yellow,
-                                foregroundColor: AppTheme.ink,
-                                padding: EdgeInsets.zero,
-                                shape: const CircleBorder(),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              _header(),
+              Expanded(
+                child: Form(
+                  key: widget.formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _pageContent(),
+                        const SizedBox(height: 12),
+                        if (_page == 3)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: SizedBox.square(
+                              dimension: 52,
+                              child: FilledButton(
+                                key: const ValueKey('worker-registration-next'),
+                                onPressed: widget.loading ? null : _continue,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _yellow,
+                                  foregroundColor: AppTheme.ink,
+                                  padding: EdgeInsets.zero,
+                                  shape: const CircleBorder(),
+                                ),
+                                child: const Icon(Icons.arrow_forward_ios),
                               ),
-                              child: const Icon(Icons.arrow_forward_ios),
                             ),
-                          ),
-                        )
-                      else
-                        FilledButton(
-                          key: const ValueKey('worker-registration-next'),
-                          onPressed: widget.loading ? null : _continue,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _yellow,
-                            foregroundColor: AppTheme.ink,
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                          )
+                        else
+                          FilledButton(
+                            key: const ValueKey('worker-registration-next'),
+                            onPressed: widget.loading ? null : _continue,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: _yellow,
+                              foregroundColor: AppTheme.ink,
+                              minimumSize: const Size.fromHeight(52),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
                             ),
+                            child: widget.loading
+                                ? const SizedBox.square(
+                                    dimension: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(_page == 5 ? 'Start scan' : 'Next'),
                           ),
-                          child: widget.loading
-                              ? const SizedBox.square(
-                                  dimension: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(_page == 5 ? 'Start scan' : 'Next'),
-                        ),
-                      if (_page == 4 || _page == 5)
-                        TextButton(
-                          onPressed: () => _goTo(_page + 1),
-                          child: const Text('Skip for now'),
-                        ),
-                      if (_page == 2 || _page == 6)
-                        TextButton(
-                          onPressed: () {},
-                          child: const Text('Help & Support'),
-                        ),
-                    ],
+                        if (_page == 4 || _page == 5)
+                          TextButton(
+                            onPressed: () => _goTo(_page + 1),
+                            child: const Text('Skip for now'),
+                          ),
+                        if (_page == 2 || _page == 6)
+                          TextButton(
+                            onPressed: () {},
+                            child: const Text('Help & Support'),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

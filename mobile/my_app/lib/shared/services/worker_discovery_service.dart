@@ -2,6 +2,7 @@ import '../models/discovered_worker.dart';
 import '../models/job_location.dart';
 import '../repositories/worker_discovery_repository.dart';
 import '../utils/job_location_utils.dart';
+import '../utils/public_profile_location.dart';
 import 'device_location_service.dart';
 import 'job_geocoding_service.dart';
 
@@ -87,13 +88,15 @@ class WorkerDiscoveryService {
     if (origin == null) {
       try {
         final profile = await _source.clientProfile(clientId);
-        origin = await _resolve((profile?['address'] ?? '').toString());
+        origin = await _resolve(
+          PublicProfileLocation.fromAddress(profile?['address']).label,
+        );
       } catch (_) {
         // Worker discovery can still provide suggestions if the address fails.
       }
       locationMessage = origin == null
           ? 'Your location is unavailable. Showing suggestions with no confirmed nearby distance.'
-          : 'Approximate distances from your saved address.';
+          : 'Approximate distances between your saved area and worker areas.';
     }
     final newlyLoaded = <String>{};
     if (_hasMore) {
@@ -101,7 +104,9 @@ class WorkerDiscoveryService {
       _hasMore = page.hasMore;
       for (final worker in page.workers) {
         if (worker.eligibleFor(clientId)) {
-          if (_pool[worker.id]?.data['location'] != worker.data['location']) {
+          if (_pool[worker.id] == null ||
+              PublicProfileLocation.fromProfile(_pool[worker.id]!.data).label !=
+                  PublicProfileLocation.fromProfile(worker.data).label) {
             _positions.remove(worker.id);
           }
           _pool[worker.id] = worker;
@@ -128,7 +133,7 @@ class WorkerDiscoveryService {
       while (next < toResolve.length) {
         final worker = toResolve[next++];
         _positions[worker.id] = await _resolve(
-          (worker.data['location'] ?? '').toString(),
+          PublicProfileLocation.fromProfile(worker.data).label,
         );
       }
     }

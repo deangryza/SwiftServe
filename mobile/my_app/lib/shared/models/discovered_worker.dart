@@ -1,4 +1,5 @@
 import '../utils/job_location_utils.dart';
+import '../utils/public_profile_location.dart';
 
 const nearbyWorkerRadiusMeters = 10000.0;
 
@@ -14,6 +15,8 @@ class DiscoveredWorker {
   final double? distanceMeters;
 
   String get name => (data['fullName'] ?? 'Service provider').toString();
+  String get publicLocationLabel =>
+      PublicProfileLocation.fromProfile(data).displayLabel;
   bool get hasDistance =>
       distanceMeters != null &&
       distanceMeters!.isFinite &&

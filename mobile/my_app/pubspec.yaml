@@ -38,6 +38,7 @@ dependencies:
   firebase_auth: ^6.7.0
   google_sign_in: ^7.2.0
   http: ^1.6.0
+  crypto: ^3.0.7
   intl_phone_field: ^3.2.0
   cloud_firestore: ^6.10.0
   firebase_storage: ^13.0.5
@@ -54,8 +55,12 @@ dependencies:
   http_parser: ^4.1.2
   flutter_svg: ^2.3.0
   url_launcher: ^6.3.2
+  firebase_messaging: ^16.7.1
+  cloud_functions: ^6.5.1
+  firebase_app_check: ^0.4.9
 
 dev_dependencies:
+  flutter_launcher_icons: 0.14.4
   flutter_test:
     sdk: flutter
 

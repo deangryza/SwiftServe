@@ -14,6 +14,22 @@ import '../../../../shared/widgets/notification_swipe_actions.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import 'client_booking_flow.dart';
+import 'client_request_details_screen.dart';
+
+/// Uses the current saved state so even old application events cannot reopen
+/// an expired post as an available job.
+Widget clientNotificationDestination(String? type, ServiceRequest request) {
+  if (type == 'jobExpired' || request.status == ServiceRequestStatus.expired) {
+    return ClientRequestDetailsScreen(requestId: request.id);
+  }
+  if (type == 'workerApplication' || request.workerId == null) {
+    return ClientWorkersFoundScreen(requestId: request.id);
+  }
+  return ClientBookingDetailsScreen(
+    requestId: request.id,
+    workerId: request.workerId!,
+  );
+}
 
 const _unreadYellow = AppTheme.yellow;
 const _cream = Color(0xFFFFFFFF);
@@ -94,14 +110,7 @@ Future<void> _openClientNotification(
       throw StateError('This service request is no longer available.');
     }
     final request = ServiceRequest.fromDocument(requestDocument);
-    final destination =
-        type == 'workerApplication' ||
-            (type == null && request.workerId == null)
-        ? ClientWorkersFoundScreen(requestId: requestId)
-        : ClientBookingDetailsScreen(
-            requestId: requestId,
-            workerId: request.workerId!,
-          );
+    final destination = clientNotificationDestination(type, request);
     await notification.reference.update({'read': true});
     if (!context.mounted) return;
     Navigator.push(context, clientPageRoute(destination));

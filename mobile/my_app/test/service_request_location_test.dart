@@ -4,9 +4,12 @@
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:my_app/shared/models/job_location.dart';
 import 'package:my_app/shared/models/service_request.dart';
 import 'package:my_app/shared/repositories/service_request_repository.dart';
+import 'package:my_app/shared/utils/service_schedule.dart';
+import 'package:my_app/shared/utils/errand_location_validation.dart';
 
 class _Firestore extends Fake implements FirebaseFirestore {
   final writes = <String, Map<String, dynamic>>{};
@@ -36,10 +39,22 @@ class _Document extends Fake
   _Document(this.path);
   @override
   final String path;
+  @override
+  String get id => path.split('/').last;
 
   @override
   CollectionReference<Map<String, dynamic>> collection(String collectionPath) =>
       _Collection('$path/$collectionPath');
+
+  @override
+  Future<DocumentSnapshot<Map<String, dynamic>>> get([
+    GetOptions? options,
+  ]) async => _Snapshot();
+}
+
+class _Snapshot extends Fake implements DocumentSnapshot<Map<String, dynamic>> {
+  @override
+  Map<String, dynamic> data() => {'status': 'pending'};
 }
 
 class _Batch extends Fake implements WriteBatch {
@@ -48,6 +63,11 @@ class _Batch extends Fake implements WriteBatch {
 
   @override
   void set<T>(DocumentReference<T> document, T data, [SetOptions? options]) {
+    firestore.writes[document.path] = Map.of(data as Map<String, dynamic>);
+  }
+
+  @override
+  void update<T>(DocumentReference<T> document, T data) {
     firestore.writes[document.path] = Map.of(data as Map<String, dynamic>);
   }
 
@@ -68,6 +88,114 @@ void main() {
     exactAddress: 'Example building, Mandaluyong',
     areaLabel: 'Mandaluyong',
   );
+  for (final editing in [false, true]) {
+    test(
+      '${editing ? 'edit' : 'create'} rejects duplicate errand pins before any Firestore writes',
+      () async {
+        final firestore = _Firestore();
+        final repository = ServiceRequestRepository(firestore: firestore);
+        final duplicate = ErrandDetails(
+          dropoff: pickup.copyWith(
+            exactAddress: 'Same building, different spelling',
+          ),
+          items: 'Package',
+          distanceKm: 0,
+        );
+        final action = editing
+            ? repository.updateRequest(
+                requestId: 'existing',
+                title: 'Job',
+                category: 'Errands',
+                budget: 50,
+                scheduleFrom: DateTime(2026, 10, 30),
+                scheduleTo: DateTime(2026, 10, 30),
+                description: 'Example',
+                modality: JobModality.errand,
+                location: pickup,
+                errand: duplicate,
+              )
+            : repository.createRequest(
+                clientId: 'client',
+                clientName: 'Client',
+                title: 'Job',
+                category: 'Errands',
+                budget: 50,
+                scheduleFrom: DateTime(2026, 10, 30),
+                scheduleTo: DateTime(2026, 10, 30),
+                description: 'Example',
+                modality: JobModality.errand,
+                location: pickup,
+                errand: duplicate,
+              );
+        await expectLater(
+          action,
+          throwsA(
+            isA<ArgumentError>().having(
+              (error) => error.message,
+              'message',
+              errandSameLocationMessage,
+            ),
+          ),
+        );
+        expect(firestore.commits, 0);
+        expect(firestore.writes, isEmpty);
+      },
+    );
+  }
+  for (final editing in [false, true]) {
+    test(
+      '${editing ? 'editing' : 'posting'} preserves selected date and time in stored timestamps',
+      () async {
+        final firestore = _Firestore();
+        final repository = ServiceRequestRepository(firestore: firestore);
+        final from = serviceStartInstant(
+          DateTime(2026, 10, 30),
+          const TimeOfDay(hour: 17, minute: 45),
+        );
+        final to = serviceStartInstant(
+          DateTime(2026, 10, 31),
+          const TimeOfDay(hour: 17, minute: 45),
+        );
+        if (editing) {
+          await repository.updateRequest(
+            requestId: 'new-request',
+            title: 'Job',
+            category: 'Other',
+            budget: 100,
+            scheduleFrom: from,
+            scheduleTo: to,
+            description: 'Example',
+            modality: JobModality.onsite,
+            location: pickup,
+          );
+        } else {
+          await repository.createRequest(
+            clientId: 'client',
+            clientName: 'Client',
+            title: 'Job',
+            category: 'Other',
+            budget: 100,
+            scheduleFrom: from,
+            scheduleTo: to,
+            description: 'Example',
+            modality: JobModality.onsite,
+            location: pickup,
+          );
+        }
+        final written = firestore.writes['service_requests/new-request']!;
+        expect(written['schedule'], Timestamp.fromDate(from));
+        expect(written['scheduleFrom'], Timestamp.fromDate(from));
+        expect(written['scheduleTo'], Timestamp.fromDate(to));
+        final restored = ServiceRequest.fromMap('new-request', {
+          for (final key in ['schedule', 'scheduleFrom', 'scheduleTo'])
+            key: written[key],
+        });
+        expect(restored.scheduleFrom!.isAtSameMomentAs(from), isTrue);
+        expect(restored.scheduleTo!.isAtSameMomentAs(to), isTrue);
+        expect(serviceScheduleLabel(restored), contains('5:45 PM PHT'));
+      },
+    );
+  }
   for (final errand in [false, true]) {
     test(
       'saves selected ${errand ? 'pickup/drop-off' : 'job'} coordinates in the correct documents',

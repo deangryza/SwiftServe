@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../models/account_review.dart';
+import '../repositories/account_review_repository.dart';
+import '../widgets/account_rating_summary.dart';
 
 import '../widgets/live_profile_avatar.dart';
 
@@ -8,32 +11,19 @@ const _reviewsYellow = AppTheme.yellow;
 const _reviewsCream = Color(0xFFFFFFFF);
 const _reviewsInk = AppTheme.ink;
 
-enum ReviewsFor { client, worker }
+enum ReviewsFor { client, worker, account }
 
 class ReviewsScreen extends StatelessWidget {
   const ReviewsScreen({
     super.key,
     required this.userId,
-    required this.reviewsFor,
+    this.reviewsFor = ReviewsFor.account,
+    this.source,
   });
 
   final String userId;
   final ReviewsFor reviewsFor;
-
-  String get _collection =>
-      reviewsFor == ReviewsFor.worker ? 'reviews' : 'client_reviews';
-
-  String get _recipientField =>
-      reviewsFor == ReviewsFor.worker ? 'workerId' : 'clientId';
-
-  String get _reviewerField =>
-      reviewsFor == ReviewsFor.worker ? 'clientId' : 'workerId';
-
-  String get _reviewerNameField =>
-      reviewsFor == ReviewsFor.worker ? 'clientName' : 'workerName';
-
-  String get _reviewerFallback =>
-      reviewsFor == ReviewsFor.worker ? 'Client' : 'Worker';
+  final AccountReviewSource? source;
 
   @override
   Widget build(BuildContext context) {
@@ -60,11 +50,9 @@ class ReviewsScreen extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 430),
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection(_collection)
-                  .where(_recipientField, isEqualTo: userId)
-                  .snapshots(),
+            child: AccountReviewsBuilder(
+              userId: userId,
+              source: source,
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
                   return _ReviewsMessage(
@@ -81,18 +69,15 @@ class ReviewsScreen extends StatelessWidget {
                   );
                 }
 
-                final reviews =
-                    snapshot.data!.docs
-                        .map(
-                          (document) => _ReviewEntry.fromDocument(
-                            document,
-                            reviewerField: _reviewerField,
-                            reviewerNameField: _reviewerNameField,
-                          ),
-                        )
-                        .toList()
-                      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-
+                final reviews = snapshot.data!
+                    .where(
+                      (review) => switch (reviewsFor) {
+                        ReviewsFor.account => true,
+                        ReviewsFor.client => review.role == ReviewedRole.client,
+                        ReviewsFor.worker => review.role == ReviewedRole.worker,
+                      },
+                    )
+                    .toList();
                 if (reviews.isEmpty) {
                   return _ReviewsMessage(
                     icon: Icons.reviews_outlined,
@@ -104,12 +89,7 @@ class ReviewsScreen extends StatelessWidget {
                   );
                 }
 
-                final average =
-                    reviews
-                        .map((review) => review.rating)
-                        .fold<int>(0, (total, rating) => total + rating) /
-                    reviews.length;
-
+                final summary = AccountRatingSummary(reviews);
                 return ListView.builder(
                   key: const ValueKey('reviews-list'),
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
@@ -119,8 +99,8 @@ class ReviewsScreen extends StatelessWidget {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 16),
                         child: _RatingOverview(
-                          average: average,
-                          count: reviews.length,
+                          average: summary.average,
+                          count: summary.reviewCount,
                           surface: surface,
                           text: text,
                           muted: muted,
@@ -131,7 +111,7 @@ class ReviewsScreen extends StatelessWidget {
                       padding: const EdgeInsets.only(bottom: 12),
                       child: _ReviewCard(
                         review: reviews[index - 1],
-                        fallbackName: _reviewerFallback,
+                        fallbackName: reviews[index - 1].reviewerFallback,
                         surface: surface,
                         text: text,
                         muted: muted,
@@ -170,7 +150,7 @@ class _RatingOverview extends StatelessWidget {
     child: Row(
       children: [
         Text(
-          average.toStringAsFixed(1),
+          count == 0 ? '\u2014' : average.toStringAsFixed(1),
           style: TextStyle(
             color: text,
             fontSize: 40,
@@ -186,7 +166,11 @@ class _RatingOverview extends StatelessWidget {
               _Stars(rating: average, size: 23),
               const SizedBox(height: 5),
               Text(
-                count == 1 ? 'Based on 1 review' : 'Based on $count reviews',
+                count == 0
+                    ? 'No valid ratings yet'
+                    : count == 1
+                    ? 'Based on 1 review'
+                    : 'Based on $count reviews',
                 style: TextStyle(color: muted, fontSize: 13),
               ),
             ],
@@ -206,7 +190,7 @@ class _ReviewCard extends StatelessWidget {
     required this.muted,
   });
 
-  final _ReviewEntry review;
+  final AccountReview review;
   final String fallbackName;
   final Color surface;
   final Color text;
@@ -291,15 +275,31 @@ class _ReviewCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      Row(
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
                         children: [
-                          _Stars(rating: review.rating.toDouble(), size: 17),
-                          const SizedBox(width: 8),
+                          if (review.rating != null)
+                            _Stars(rating: review.rating!, size: 17)
+                          else
+                            Text(
+                              'Rating unavailable',
+                              style: TextStyle(color: muted),
+                            ),
                           Text(
                             _formatDate(review.createdAt),
                             style: TextStyle(color: muted, fontSize: 11),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        review.contextLabel,
+                        style: TextStyle(color: muted, fontSize: 12),
+                      ),
+                      Text(
+                        'Booking: ${review.requestId}',
+                        style: TextStyle(color: muted, fontSize: 12),
                       ),
                     ],
                   ),
@@ -389,50 +389,6 @@ class _ReviewsMessage extends StatelessWidget {
   );
 }
 
-class _ReviewEntry {
-  const _ReviewEntry({
-    required this.requestId,
-    required this.reviewerId,
-    required this.reviewerIdField,
-    required this.reviewerName,
-    required this.reviewerNameField,
-    required this.rating,
-    required this.comment,
-    required this.createdAt,
-  });
-
-  factory _ReviewEntry.fromDocument(
-    QueryDocumentSnapshot<Map<String, dynamic>> document, {
-    required String reviewerField,
-    required String reviewerNameField,
-  }) {
-    final data = document.data();
-    final ratingValue = data['rating'];
-    final timestamp = data['createdAt'];
-    return _ReviewEntry(
-      requestId: (data['requestId'] ?? document.id).toString(),
-      reviewerId: (data[reviewerField] ?? '').toString(),
-      reviewerIdField: reviewerField,
-      reviewerName: (data[reviewerNameField] ?? '').toString().trim(),
-      reviewerNameField: reviewerNameField,
-      rating: ratingValue is num ? ratingValue.round().clamp(1, 5) : 1,
-      comment: (data['comment'] ?? '').toString().trim(),
-      createdAt: timestamp is Timestamp
-          ? timestamp.toDate()
-          : DateTime.fromMillisecondsSinceEpoch(0),
-    );
-  }
-
-  final String requestId;
-  final String reviewerId;
-  final String reviewerIdField;
-  final String reviewerName;
-  final String reviewerNameField;
-  final int rating;
-  final String comment;
-  final DateTime createdAt;
-}
-
 extension on String {
   String ifEmpty(String fallback) => isEmpty ? fallback : this;
 }
@@ -447,8 +403,8 @@ BoxDecoration _reviewCardDecoration(Color surface) => BoxDecoration(
   ),
 );
 
-String _formatDate(DateTime date) {
-  if (date.millisecondsSinceEpoch == 0) return 'Recently';
+String _formatDate(DateTime? date) {
+  if (date == null) return 'Date unavailable';
   const months = <String>[
     'Jan',
     'Feb',

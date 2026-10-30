@@ -154,7 +154,8 @@ class BookingPartyCard extends StatelessWidget {
 /// Presentation only: no new status or transition is introduced.
 int bookingProgressIndex(ServiceRequest request) {
   if (request.status == ServiceRequestStatus.completed) return 2;
-  if (request.status == ServiceRequestStatus.cancelled ||
+  if (request.status == ServiceRequestStatus.expired ||
+      request.status == ServiceRequestStatus.cancelled ||
       request.status == ServiceRequestStatus.pending) {
     return -1;
   }

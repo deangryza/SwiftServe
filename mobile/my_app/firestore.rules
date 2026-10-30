@@ -491,6 +491,14 @@ service cloud.firestore {
       );
 
       match /applications/{workerId} {
+        // Enforce the stored start independently of client clocks/screens.
+        // Missing legacy schedules retain compatibility; malformed values fail closed.
+        function beforeServiceStart() {
+          let job = get(/databases/$(database)/documents/service_requests/$(requestId)).data;
+          let explicitStart = job.get('scheduleFrom', null);
+          let start = explicitStart == null ? job.get('schedule', null) : explicitStart;
+          return start == null || (start is timestamp && request.time < start);
+        }
         allow read: if signedIn()
           && (
             request.auth.uid == workerId
@@ -498,6 +506,7 @@ service cloud.firestore {
             || get(/databases/$(database)/documents/service_requests/$(requestId)).data.clientId == request.auth.uid
           );
         allow create: if verifiedWorker()
+          && beforeServiceStart()
           && request.auth.uid == workerId
           && validApplication(request.resource.data)
           && request.resource.data.clientId.matches('.*\\S.*')

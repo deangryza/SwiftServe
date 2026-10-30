@@ -22,6 +22,7 @@ ServiceRequest request(
   JobModality modality,
   ServiceRequestStatus status, {
   bool mapped = false,
+  DateTime? scheduledStart,
 }) => ServiceRequest(
   id: 'request-1',
   clientId: 'client-1',
@@ -34,6 +35,8 @@ ServiceRequest request(
   status: status,
   modality: modality,
   workerId: worker.id,
+  scheduleFrom: scheduledStart,
+  scheduleTo: scheduledStart,
   dropoffLocation: modality == JobModality.errand ? 'Bulakan' : null,
   errandItems: modality == JobModality.errand ? '2 kg rice' : null,
   distanceKm: modality == JobModality.errand ? 5 : null,
@@ -137,7 +140,11 @@ void main() {
       MaterialApp(
         theme: AppTheme.light,
         home: WorkerJobDetailsScreen(
-          request: request(JobModality.online, ServiceRequestStatus.ongoing),
+          request: request(
+            JobModality.online,
+            ServiceRequestStatus.ongoing,
+            scheduledStart: DateTime.utc(2026, 10, 30, 9, 45),
+          ),
           worker: worker,
         ),
       ),
@@ -145,6 +152,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Online · done remotely'), findsOneWidget);
     expect(find.text('Exact job location'), findsNothing);
+    final schedule = find.text('10/30/2026 \u00b7 5:45 PM PHT');
+    await tester.scrollUntilVisible(schedule, 150);
+    expect(schedule, findsOneWidget);
     await tester.scrollUntilVisible(find.text('Mark completed'), 150);
     await tester.pumpAndSettle();
     await tester.tap(find.text('Mark completed'));

@@ -5,10 +5,11 @@
   "main": "index.js",
   "scripts": {
     "start": "node --use-system-ca server.js",
-    "check": "node --check server.js && node --check src/app.js && node --check src/controllers/adminVerificationController.js && node --check src/routes/verificationRoutes.js && node --check src/services/faceVerificationService.js && node --check scripts/downloadFaceModels.js",
+    "check": "node --check server.js && node --check src/app.js && node --check src/controllers/adminVerificationController.js && node --check src/routes/verificationRoutes.js && node --check src/services/faceVerificationService.js && node --check scripts/downloadFaceModels.js && node --check src/services/expiredJobCleanupService.js && node --check src/services/expiredJobCheckpoint.js && node --check src/services/expiredJobWorker.js && node --check scripts/runExpiredJobCleanup.js && node --check scripts/expiredJobCleanupWorker.js",
     "test": "node --test",
     "models:download": "node scripts/downloadFaceModels.js",
-    "admin:claim": "node scripts/setAdminClaim.js"
+    "admin:claim": "node scripts/setAdminClaim.js",
+    "jobs:cleanup": "node --use-system-ca scripts/runExpiredJobCleanup.js"
   },
   "keywords": [],
   "author": "",

@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 
 const { db } = require('../config/firebase');
 const { normalizeProfilePhoto } = require('../services/profilePhotoService');
+const { publicProfileLocation } = require('../services/publicProfileLocation');
 
 const normalizePhoneNumber = (value) => {
   const phoneNumber = String(value || '').replace(/[\s()-]/g, '');
@@ -115,7 +116,7 @@ const createUserProfile = async (req, res) => {
           role,
           roles: [role],
           photoBase64: photo || '',
-          location: address || '',
+          ...publicProfileLocation(address),
           description: description || '',
           category: role === 'worker' ? category || '' : '',
           skills: role === 'worker' && Array.isArray(skills) ? skills : [],
@@ -128,7 +129,7 @@ const createUserProfile = async (req, res) => {
             fullName,
             category: category || '',
             skills: Array.isArray(skills) ? skills : [],
-            location: address || '',
+            ...publicProfileLocation(address),
             description: description || '',
             verificationStatus: 'pending',
             rating: 0,
@@ -161,6 +162,69 @@ const createUserProfile = async (req, res) => {
   }
 };
 
+// Only the authenticated account can update its private address and public area.
+// Keep these projections atomic: never report a private-only address save.
+const updateProfileAddress = async (req, res) => {
+  const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
+  const hasAddress = Object.hasOwn(req.body, 'address');
+  const hasDescription = Object.hasOwn(req.body, 'description');
+  const hasServices = Object.hasOwn(req.body, 'services');
+  const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
+  const location = hasAddress ? publicProfileLocation(address) : {};
+  if (!fullName || fullName.length > 120 || (!hasAddress && !hasDescription && !hasServices)
+    || (hasAddress && (!location.barangay || !location.cityMunicipality))) {
+    return res.status(400).json({ message: 'Enter your name and an address containing barangay and city / municipality.' });
+  }
+  if (hasDescription && (typeof req.body.description !== 'string' || req.body.description.length > 500)) {
+    return res.status(400).json({ message: 'About must be text of 500 characters or fewer.' });
+  }
+  const description = hasDescription ? { description: req.body.description.trim() } : {};
+  let services = [];
+  if (hasServices) {
+    if (!Array.isArray(req.body.services) || req.body.services.length === 0 || req.body.services.length > 50
+      || req.body.services.some(value => typeof value !== 'string' || !value.trim() || value.trim().length > 80 || value.trim().toLowerCase() === 'other')) {
+      return res.status(400).json({ message: 'Select at least one service and specify the actual service for Other.' });
+    }
+    for (const value of req.body.services) {
+      const name = value.trim();
+      if (!services.some(item => item.toLowerCase() === name.toLowerCase())) services.push(name);
+    }
+  }
+  const serviceFields = hasServices ? { category: services[0], skills: services } : {};
+  try {
+    const uid = req.user.uid;
+    const userRef = db.collection('users').doc(uid);
+    const publicRef = db.collection('public_profiles').doc(uid);
+    const workerRef = db.collection('worker_profiles').doc(uid);
+    const found = await db.runTransaction(async transaction => {
+      const userSnapshot = await transaction.get(userRef);
+      const workerSnapshot = await transaction.get(workerRef);
+      if (!userSnapshot.exists) return false;
+      const user = userSnapshot.data();
+      if (hasServices && (user.role !== 'worker' || !rolesOf(user).includes('worker') || !workerSnapshot.exists)) {
+        return 'forbidden';
+      }
+      const updatedAt = new Date();
+      transaction.set(userRef, { fullName, ...(hasAddress ? { address } : {}), ...description, ...serviceFields, updatedAt }, { merge: true });
+      transaction.set(publicRef, {
+        uid, fullName,
+        role: user.role === 'worker' ? 'worker' : 'client',
+        ...location, ...description, ...serviceFields, updatedAt,
+      }, { merge: true });
+      if (workerSnapshot.exists) {
+        transaction.set(workerRef, { ...location, ...description, ...serviceFields, updatedAt }, { merge: true });
+      }
+      return true;
+    });
+    if (!found) return res.status(404).json({ message: 'Profile not found.' });
+    if (found === 'forbidden') return res.status(403).json({ message: 'Service categories can only be edited from an existing worker account in Worker mode.' });
+    return res.status(200).json({ message: 'Profile and public location updated.' });
+  } catch (_) {
+    // Do not log the request body or private residential address.
+    return res.status(500).json({ message: 'Failed to update profile. Please try again.' });
+  }
+};
+
 const updateProfilePhoto = async (req, res) => {
   let photoBase64;
   try {
@@ -175,6 +239,9 @@ const updateProfilePhoto = async (req, res) => {
       return res.status(404).json({ message: 'Profile not found.' });
     }
     const user = userSnapshot.data();
+    const location = publicProfileLocation(user.address);
+    const workerRef = db.collection('worker_profiles').doc(req.user.uid);
+    const worker = rolesOf(user).includes('worker') ? await workerRef.get() : null;
     const updatedAt = new Date();
     const batch = db.batch();
     batch.update(userRef, { photoBase64, updatedAt });
@@ -183,8 +250,10 @@ const updateProfilePhoto = async (req, res) => {
       fullName: user.fullName || 'SwiftServe user',
       role: user.role === 'worker' ? 'worker' : 'client',
       photoBase64,
+      ...location,
       updatedAt,
     }, { merge: true });
+    if (worker?.exists) batch.set(workerRef, { ...location, updatedAt }, { merge: true });
     await batch.commit();
     return res.status(200).json({ message: 'Profile photo updated.' });
   } catch (error) {
@@ -224,6 +293,8 @@ const addRole = async (req, res) => {
       }
       const user = snapshot.data();
       const currentRoles = rolesOf(user);
+      const location = publicProfileLocation(user.address);
+      const existingWorker = await transaction.get(workerProfileRef);
       if (currentRoles.includes(role)) {
         throw new RoleRequestError(409, 'ROLE_ALREADY_ADDED', `This account is already a ${role}.`);
       }
@@ -232,7 +303,8 @@ const addRole = async (req, res) => {
 
       if (role === 'client') {
         transaction.set(userRef, { roles: nextRoles, updatedAt }, { merge: true });
-        transaction.set(publicProfileRef, { roles: nextRoles, updatedAt }, { merge: true });
+        transaction.set(publicProfileRef, { roles: nextRoles, ...location, updatedAt }, { merge: true });
+        if (existingWorker.exists) transaction.set(workerProfileRef, { ...location, updatedAt }, { merge: true });
         return nextRoles;
       }
 
@@ -251,6 +323,7 @@ const addRole = async (req, res) => {
       }, { merge: true });
       transaction.set(publicProfileRef, {
         roles: nextRoles,
+        ...location,
         category: trimmedCategory,
         skills,
         description: workerDescription,
@@ -261,7 +334,7 @@ const addRole = async (req, res) => {
         fullName: user.fullName || 'SwiftServe user',
         category: trimmedCategory,
         skills,
-        location: user.address || '',
+        ...location,
         description: workerDescription,
         verificationStatus,
         rating: 0,
@@ -292,7 +365,8 @@ const switchRole = async (req, res) => {
     if (!snapshot.exists) {
       return res.status(404).json({ message: 'Profile not found.' });
     }
-    const roles = rolesOf(snapshot.data());
+    const user = snapshot.data();
+    const roles = rolesOf(user);
     if (!roles.includes(role)) {
       return res.status(403).json({
         code: 'ROLE_NOT_ADDED',
@@ -300,13 +374,18 @@ const switchRole = async (req, res) => {
       });
     }
     const updatedAt = new Date();
+    const location = publicProfileLocation(user.address);
+    const workerRef = db.collection('worker_profiles').doc(req.user.uid);
+    const worker = roles.includes('worker') ? await workerRef.get() : null;
     const batch = db.batch();
     batch.update(userRef, { role, roles, updatedAt });
     batch.set(db.collection('public_profiles').doc(req.user.uid), {
       role,
       roles,
+      ...location,
       updatedAt,
     }, { merge: true });
+    if (worker?.exists) batch.set(workerRef, { ...location, updatedAt }, { merge: true });
     await batch.commit();
     return res.status(200).json({ message: `Switched to ${role}.`, role, roles });
   } catch (error) {
@@ -320,5 +399,6 @@ module.exports = {
   createUserProfile,
   rolesOf,
   switchRole,
+  updateProfileAddress,
   updateProfilePhoto,
 };

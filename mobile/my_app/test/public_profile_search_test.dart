@@ -6,7 +6,7 @@ void main() {
     final worker = <String, dynamic>{
       'role': 'worker',
       'fullName': 'Maria Santos',
-      'location': 'Malolos, Bulacan',
+      'location': 'Brgy. Bulihan, Malolos',
       'category': 'Home Services',
       'skills': ['Plumbing', 'Painting'],
       'description': 'Careful repairs for homes and small businesses.',
@@ -29,7 +29,7 @@ void main() {
       final client = <String, dynamic>{
         'role': 'client',
         'fullName': 'Juan Dela Cruz',
-        'location': 'Guiguinto',
+        'location': 'Municipality of Guiguinto',
         'description': 'Needs help with household projects.',
       };
 

@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
-import '../widgets/client_rating_summary.dart';
+import '../utils/public_profile_location.dart';
+import '../widgets/account_rating_summary.dart';
 import '../widgets/live_profile_avatar.dart';
-import '../widgets/worker_rating_summary.dart';
 import 'reviews_screen.dart';
 
 enum PublicProfileRole { client, worker }
@@ -32,7 +32,7 @@ bool publicProfileMatchesQuery(
   return <Object?>[
     profile['fullName'],
     profile['role'],
-    profile['location'],
+    PublicProfileLocation.fromProfile(profile).label,
     profile['category'],
     profile['description'],
     profile['bio'],
@@ -153,10 +153,10 @@ class _ProfileView extends StatelessWidget {
     final muted = dark ? const Color(0xFFB6B6B6) : AppTheme.muted;
     final line = dark ? const Color(0xFF444444) : AppTheme.line;
     final name = _value(data['fullName'], 'SwiftServe user');
-    final location = _value(data['location'], 'Location not provided');
+    final location = PublicProfileLocation.fromProfile(data).displayLabel;
     final skills = profileSkills(data['skills']);
     final category = _value(data['category'], '');
-    final description = _description(data, role);
+    final description = publicProfileDescription(data, role);
     final createdAt = data['createdAt'];
     final joinedAt = createdAt is Timestamp ? createdAt.toDate() : null;
     final verified =
@@ -414,34 +414,16 @@ class _Stats extends StatelessWidget {
     ),
   );
 
-  Widget _rating(BuildContext context) {
-    if (role == PublicProfileRole.worker) {
-      return WorkerRatingBuilder(
-        workerId: userId,
-        builder: (context, summary) => _Stat(
-          value: summary.displayAverage,
-          label: summary.reviewCount == 1
-              ? '1 review'
-              : '${summary.reviewCount} reviews',
-          text: text,
-          muted: muted,
-          onTap: () => _openReviews(context, ReviewsFor.worker),
-        ),
-      );
-    }
-    return ClientRatingBuilder(
-      clientId: userId,
-      builder: (context, summary) => _Stat(
-        value: summary.displayAverage,
-        label: summary.reviewCount == 1
-            ? '1 review'
-            : '${summary.reviewCount} reviews',
-        text: text,
-        muted: muted,
-        onTap: () => _openReviews(context, ReviewsFor.client),
-      ),
-    );
-  }
+  Widget _rating(BuildContext context) => AccountRatingBuilder(
+    userId: userId,
+    builder: (context, summary) => _Stat(
+      value: summary.displayAverage,
+      label: summary.label,
+      text: text,
+      muted: muted,
+      onTap: () => _openReviews(context, ReviewsFor.account),
+    ),
+  );
 
   void _openReviews(BuildContext context, ReviewsFor reviewsFor) {
     Navigator.push(
@@ -622,8 +604,15 @@ bool _hasDescription(Map<String, dynamic> data) => [
   data['about'],
 ].any((value) => (value ?? '').toString().trim().isNotEmpty);
 
-String _description(Map<String, dynamic> data, PublicProfileRole role) {
-  for (final value in [data['description'], data['bio'], data['about']]) {
+String publicProfileDescription(
+  Map<String, dynamic> data,
+  PublicProfileRole role,
+) {
+  // An explicitly cleared About must not resurrect an older bio/about alias.
+  final values = data.containsKey('description')
+      ? [data['description']]
+      : [data['bio'], data['about']];
+  for (final value in values) {
     final text = (value ?? '').toString().trim();
     if (text.isNotEmpty) return text;
   }

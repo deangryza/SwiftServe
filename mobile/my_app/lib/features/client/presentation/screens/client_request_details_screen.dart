@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/utils/service_schedule.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
@@ -35,14 +36,7 @@ class _ClientRequestDetailsScreenState
   );
   late ServiceRequest _request;
 
-  String _dateRange(ServiceRequest request) {
-    String format(DateTime date) => '${date.month}/${date.day}/${date.year}';
-    final from = request.scheduleFrom ?? request.schedule;
-    final to = request.scheduleTo ?? from;
-    if (from == null) return 'Flexible';
-    if (to == null || DateUtils.isSameDay(from, to)) return format(from);
-    return '${format(from)} – ${format(to)}';
-  }
+  String _dateRange(ServiceRequest request) => serviceScheduleLabel(request);
 
   Future<void> _cancel() async {
     final confirmed = await showActionConfirmation(
@@ -220,6 +214,17 @@ class _ClientRequestDetailsScreenState
   Widget _buildDetails(BuildContext context, ServiceRequest request) {
     return ClientRequestDetailsContent(
       request: request,
+      viewerId: FirebaseAuth.instance.currentUser?.uid,
+      onRepost: () {
+        if (FirebaseAuth.instance.currentUser?.uid != request.clientId ||
+            request.status != ServiceRequestStatus.expired) {
+          return;
+        }
+        Navigator.push(
+          context,
+          clientPageRoute(PostRequestScreen(repostOf: request)),
+        );
+      },
       dateLabel: _dateRange(request),
       saving: _saving,
       onEdit: () => _edit(request),
@@ -317,6 +322,8 @@ class ClientRequestDetailsContent extends StatelessWidget {
     required this.onViewProfile,
     this.applications,
     this.map,
+    this.viewerId,
+    this.onRepost,
   });
   final ServiceRequest request;
   final String dateLabel;
@@ -324,9 +331,17 @@ class ClientRequestDetailsContent extends StatelessWidget {
   final VoidCallback onEdit, onCancel, onMessage, onRate, onViewProfile;
   final Widget? applications;
   final Widget? map;
+  final String? viewerId;
+  final VoidCallback? onRepost;
 
   @override
   Widget build(BuildContext context) {
+    final canRepost =
+        request.status == ServiceRequestStatus.expired &&
+        viewerId != null &&
+        viewerId!.isNotEmpty &&
+        viewerId == request.clientId &&
+        onRepost != null;
     final canEdit = request.status == ServiceRequestStatus.pending;
     final canCancel =
         canEdit || request.status == ServiceRequestStatus.accepted;
@@ -362,6 +377,25 @@ class ClientRequestDetailsContent extends StatelessWidget {
                   child: ListView(
                     padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
                     children: [
+                      if (request.status == ServiceRequestStatus.expired) ...[
+                        const BookingSectionCard(
+                          child: Text(
+                            'Job Post Expired. The service time passed without applications. '
+                            'This post is unavailable. Choose a new date and time to repost.',
+                          ),
+                        ),
+                        if (canRepost)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: FilledButton.icon(
+                              key: const ValueKey('repost-job'),
+                              onPressed: saving ? null : onRepost,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Repost Job'),
+                            ),
+                          ),
+                        const SizedBox(height: 16),
+                      ],
                       if (request.workerId != null)
                         BookingPartyCard(
                           userId: request.workerId!,

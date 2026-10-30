@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../../../../shared/utils/public_profile_location.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -294,7 +295,7 @@ class _ClientSearchScreenState extends State<ClientSearchScreen> {
                 title: Text(name),
                 subtitle: Text(
                   '${_skillsText(worker['skills'])}\n'
-                  '${worker['location'] ?? 'Location not provided'}',
+                  '${PublicProfileLocation.fromProfile(worker).displayLabel}',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),

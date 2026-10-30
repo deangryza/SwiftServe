@@ -2,12 +2,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'client_request_details_screen.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/utils/errand_pricing.dart';
+import '../../../../shared/utils/errand_location_validation.dart';
+import '../../../../shared/utils/service_schedule.dart';
 import '../../../../shared/widgets/job_location_picker.dart';
 
 String? resolvePostCategory(
@@ -44,19 +47,25 @@ bool isErrandCategory(String? category) {
   return normalized.contains('errand') || normalized.contains('deliver');
 }
 
+enum _GpsAddress { pickup, dropoff }
+
 class PostRequestScreen extends StatefulWidget {
   const PostRequestScreen({
     super.key,
     this.initialCategory,
     this.categoryNames,
     this.existing,
-  });
+    this.repostOf,
+  }) : assert(existing == null || repostOf == null);
 
   final String? initialCategory;
   final Stream<List<String>>? categoryNames;
 
   /// The open post being edited. Leave null to post a new job.
   final ServiceRequest? existing;
+
+  /// Copy editable details into a new job, keeping the expired original intact.
+  final ServiceRequest? repostOf;
 
   @override
   State<PostRequestScreen> createState() => _PostRequestScreenState();
@@ -73,13 +82,17 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   String? _selectedCategory;
   DateTime? _fromDate;
   DateTime? _toDate;
+  TimeOfDay? _startTime;
+  String? _scheduleError;
   JobModality _modality = JobModality.onsite;
   JobLocationSelection? _selectedLocation;
   JobLocationSelection? _dropoffLocation;
+  _GpsAddress? _gpsAddress;
   bool _isPosting = false;
   bool _loadingLocation = false;
 
   bool get _isEditing => widget.existing != null;
+  bool get _isReposting => widget.repostOf != null;
 
   late final _categoryNames =
       widget.categoryNames ??
@@ -98,6 +111,23 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
 
   bool get _isErrand => _modality == JobModality.errand;
 
+  bool _gpsEnabled(_GpsAddress address) =>
+      !_isErrand || _gpsAddress == null || _gpsAddress == address;
+
+  bool _requestGps(_GpsAddress address) {
+    if (!_gpsEnabled(address)) return false;
+    setState(() => _gpsAddress = address);
+    return true;
+  }
+
+  void _releaseGps(_GpsAddress address) {
+    if (_gpsAddress == address) setState(() => _gpsAddress = null);
+  }
+
+  String get _gpsRestrictionMessage =>
+      'Current location is in use for ${_gpsAddress == _GpsAddress.pickup ? 'pickup' : 'drop-off'}. '
+      'Enter an address or choose a map point here.';
+
   /// Estimated km between pickup and drop-off, once both are pinned.
   double? get _errandDistanceKm {
     final pickup = _selectedLocation;
@@ -113,7 +143,7 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   @override
   void initState() {
     super.initState();
-    final existing = widget.existing;
+    final existing = widget.existing ?? widget.repostOf;
     if (existing != null) {
       _prefill(existing);
       return;
@@ -135,8 +165,13 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     }
     _selectedCategory = request.category;
     _modality = request.modality;
-    _fromDate = request.scheduleFrom ?? request.schedule;
-    _toDate = request.scheduleTo ?? _fromDate;
+    final start = request.scheduleFrom ?? request.schedule;
+    if (start != null && !_isReposting) {
+      _fromDate = serviceCalendarDate(start);
+      _toDate = serviceCalendarDate(request.scheduleTo ?? start);
+      final wall = serviceWallTime(start);
+      _startTime = TimeOfDay(hour: wall.hour, minute: wall.minute);
+    }
     if (request.modality.needsLocation) {
       _loadingLocation = true;
       _loadSavedLocation(request);
@@ -200,7 +235,7 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   }
 
   Future<void> _pickSchedule({required bool pickingFrom}) async {
-    final now = DateTime.now();
+    final now = serviceWallTime(DateTime.now());
     final today = DateTime(now.year, now.month, now.day);
     final firstDate = pickingFrom ? today : (_fromDate ?? today);
     final initialDate = pickingFrom
@@ -224,13 +259,15 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
         } else {
           _toDate = selectedDate;
         }
+        _revalidateSchedule();
       });
     }
   }
 
   Widget _dateField({
     required String label,
-    required DateTime? value,
+    DateTime? value,
+    String? timeLabel,
     required VoidCallback onTap,
     required Color field,
     required Color border,
@@ -238,44 +275,92 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     required Color muted,
   }) {
     return InkWell(
-      key: ValueKey('post-job-${label.toLowerCase()}-date'),
+      key: ValueKey(
+        label == 'START TIME'
+            ? 'post-job-time'
+            : 'post-job-${label.toLowerCase()}-date',
+      ),
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       child: Container(
-        height: 52,
-        padding: const EdgeInsets.symmetric(horizontal: 11),
+        constraints: const BoxConstraints(minHeight: 64),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: field,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           border: Border.all(color: border),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                color: muted,
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                      color: muted,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    timeLabel ??
+                        (value == null ? 'Select' : _displayDate(value)),
+                    style: TextStyle(
+                      color: value == null && timeLabel == null ? muted : text,
+                      fontSize: 15,
+                      fontWeight: timeLabel == null
+                          ? FontWeight.w400
+                          : FontWeight.w600,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 2),
-            Text(
-              value == null ? 'Select' : _displayDate(value),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: value == null ? muted : text,
-                fontSize: 11,
-              ),
+            const SizedBox(width: 8),
+            Icon(
+              label == 'START TIME'
+                  ? Icons.schedule_outlined
+                  : Icons.calendar_today_outlined,
+              size: 20,
+              color: text,
             ),
           ],
         ),
       ),
     );
+  }
+
+  void _revalidateSchedule() {
+    _scheduleError = validateServiceSchedule(
+      from: _fromDate,
+      to: _toDate,
+      time: _startTime,
+      now: DateTime.now(),
+    );
+  }
+
+  Future<void> _pickTime() async {
+    final wall = serviceWallTime(DateTime.now());
+    final selected = await showTimePicker(
+      context: context,
+      initialTime:
+          _startTime ?? TimeOfDay(hour: wall.hour, minute: wall.minute),
+      helpText: 'Preferred start time (PHT)',
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: false),
+        child: child!,
+      ),
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      _startTime = selected;
+      _revalidateSchedule();
+    });
   }
 
   Future<void> _postJob() async {
@@ -298,10 +383,21 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
       return;
     }
 
-    if (_fromDate == null || _toDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please choose both FROM and TO dates.')),
-      );
+    _revalidateSchedule();
+    final errandError = _isErrand
+        ? validateErrandLocations(_selectedLocation, _dropoffLocation)
+        : null;
+    if (errandError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(errandError)));
+      return;
+    }
+    if (_scheduleError != null) {
+      setState(() {});
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_scheduleError!)));
       return;
     }
 
@@ -329,14 +425,15 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           ? fullName.trim()
           : 'Client';
 
-      await ServiceRequestRepository().createRequest(
+      final newRequestId = await ServiceRequestRepository().createRequest(
         clientId: user.uid,
         clientName: clientName,
+        repostSourceId: widget.repostOf?.id,
         title: _titleController.text.trim(),
         category: _selectedCategory!,
         budget: _jobBudget(),
-        scheduleFrom: _fromDate!,
-        scheduleTo: _toDate!,
+        scheduleFrom: serviceStartInstant(_fromDate!, _startTime!),
+        scheduleTo: serviceStartInstant(_toDate!, _startTime!),
         description: _descriptionController.text.trim(),
         modality: _modality,
         location: _modality.needsLocation ? _selectedLocation : null,
@@ -344,7 +441,21 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
       );
 
       if (!mounted) return;
-      Navigator.pop(context, true);
+      if (_isReposting) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Job reposted. Your original post is preserved.'),
+          ),
+        );
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute<void>(
+            builder: (_) => ClientRequestDetailsScreen(requestId: newRequestId),
+          ),
+        );
+      } else {
+        Navigator.pop(context, true);
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -363,8 +474,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
         title: _titleController.text.trim(),
         category: _selectedCategory!,
         budget: _jobBudget(),
-        scheduleFrom: _fromDate!,
-        scheduleTo: _toDate!,
+        scheduleFrom: serviceStartInstant(_fromDate!, _startTime!),
+        scheduleTo: serviceStartInstant(_toDate!, _startTime!),
         description: _descriptionController.text.trim(),
         modality: _modality,
         location: _modality.needsLocation ? _selectedLocation : null,
@@ -413,16 +524,17 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     Widget? prefixIcon,
   }) {
     final outline = OutlineInputBorder(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(14),
       borderSide: BorderSide(color: border),
     );
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: muted, fontSize: 13),
+      hintStyle: TextStyle(color: muted, fontSize: 15),
       filled: true,
       fillColor: field,
       prefixIcon: prefixIcon,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      prefixIconConstraints: const BoxConstraints(minWidth: 0, minHeight: 0),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
       border: outline,
       enabledBorder: outline,
       focusedBorder: outline.copyWith(
@@ -437,34 +549,18 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     );
   }
 
-  Widget _sectionCard({
-    required Widget child,
-    required Color surface,
-    required bool dark,
-    EdgeInsetsGeometry padding = const EdgeInsets.all(14),
-  }) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: dark ? const Color(0xFF444444) : AppTheme.line,
-        ),
-      ),
-      child: child,
-    );
-  }
+  Widget _formSection({required Widget child}) =>
+      Semantics(container: true, child: child);
 
   Widget _label(String text, Color color) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Text(
         text,
         style: TextStyle(
           color: color,
-          fontSize: 13,
-          fontWeight: FontWeight.w500,
+          fontSize: 16,
+          fontWeight: FontWeight.w700,
         ),
       ),
     );
@@ -474,23 +570,45 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final background = dark ? const Color(0xFF171717) : _cream;
-    final surface = dark ? const Color(0xFF2C2C2C) : Colors.white;
+    final surface = dark ? const Color(0xFF303030) : Colors.white;
     final field = dark ? const Color(0xFF303030) : const Color(0xFFFFFFFF);
     final text = dark ? const Color(0xFFF4F4F4) : _ink;
-    final muted = dark ? const Color(0xFFB5B5B5) : const Color(0xFF9AA1AE);
-    final border = dark ? const Color(0xFF777777) : const Color(0xFFB8BBC2);
+    final muted = dark ? const Color(0xFFB5B5B5) : AppTheme.muted;
+    final border = dark ? const Color(0xFF777777) : AppTheme.line;
 
     return Scaffold(
       backgroundColor: background,
       appBar: AppBar(
         backgroundColor: background,
         foregroundColor: text,
-        leading: IconButton(
-          key: const ValueKey('post-request-back'),
-          onPressed: () => Navigator.pop(context),
-          icon: const Icon(Icons.arrow_back_rounded),
+        leadingWidth: 72,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 20),
+          child: Center(
+            child: SizedBox.square(
+              dimension: 48,
+              child: IconButton.outlined(
+                key: const ValueKey('post-request-back'),
+                onPressed: () => Navigator.pop(context),
+                style: IconButton.styleFrom(side: BorderSide(color: border)),
+                icon: const Icon(Icons.arrow_back_rounded),
+              ),
+            ),
+          ),
         ),
-        title: Text(_isEditing ? 'Edit post' : 'Post need'),
+        title: Text(
+          _isEditing
+              ? 'Edit post'
+              : _isReposting
+              ? 'Repost Job'
+              : 'Post need',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: text,
+            fontSize: 24,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        toolbarHeight: 80,
       ),
       body: SafeArea(
         top: false,
@@ -500,15 +618,21 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
             child: Form(
               key: _formKey,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
                 // Keep every form field registered, including map selections,
                 // when it scrolls off screen.
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _sectionCard(
-                      surface: surface,
-                      dark: dark,
+                    if (_isReposting)
+                      const Padding(
+                        padding: EdgeInsets.only(bottom: 20),
+                        child: Text(
+                          'Review the details and choose new dates and a start time. '
+                          'Reposting creates a new job and preserves the original.',
+                        ),
+                      ),
+                    _formSection(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -533,10 +657,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    _sectionCard(
-                      surface: surface,
-                      dark: dark,
+                    const SizedBox(height: 24),
+                    _formSection(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -590,10 +712,12 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                               }
 
                               return DropdownButtonFormField<String>(
+                                isExpanded: true,
                                 key: ValueKey(selectedCategory),
                                 initialValue: selectedCategory,
                                 dropdownColor: surface,
-                                style: TextStyle(color: text, fontSize: 14),
+                                style: Theme.of(context).textTheme.bodyLarge
+                                    ?.copyWith(color: text, fontSize: 15),
                                 decoration: _inputDecoration(
                                   hint: categories.isEmpty
                                       ? 'No active categories'
@@ -631,114 +755,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          flex: 9,
-                          child: _sectionCard(
-                            surface: surface,
-                            dark: dark,
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label(
-                                  _isErrand ? 'Delivery fee' : 'Budget (₱)',
-                                  text,
-                                ),
-                                if (_isErrand)
-                                  _ErrandFeePreview(
-                                    distanceKm: _errandDistanceKm,
-                                    text: text,
-                                    muted: muted,
-                                  )
-                                else
-                                  TextFormField(
-                                    key: const ValueKey('post-job-budget'),
-                                    controller: _budgetController,
-                                    style: TextStyle(color: text),
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.allow(
-                                        RegExp(r'^\d*\.?\d{0,2}'),
-                                      ),
-                                    ],
-                                    decoration: _inputDecoration(
-                                      hint: 'e.g. 200',
-                                      field: field,
-                                      border: border,
-                                      text: text,
-                                      muted: muted,
-                                    ),
-                                    validator: (value) {
-                                      final amount = double.tryParse(
-                                        value?.trim() ?? '',
-                                      );
-                                      return amount == null || amount <= 0
-                                          ? 'Invalid budget'
-                                          : null;
-                                    },
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          flex: 10,
-                          child: _sectionCard(
-                            surface: surface,
-                            dark: dark,
-                            padding: const EdgeInsets.all(14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _label('Schedule', text),
-                                Row(
-                                  key: const ValueKey('post-job-schedule'),
-                                  children: [
-                                    Expanded(
-                                      child: _dateField(
-                                        label: 'FROM',
-                                        value: _fromDate,
-                                        onTap: () =>
-                                            _pickSchedule(pickingFrom: true),
-                                        field: field,
-                                        border: border,
-                                        text: text,
-                                        muted: muted,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Expanded(
-                                      child: _dateField(
-                                        label: 'TO',
-                                        value: _toDate,
-                                        onTap: () =>
-                                            _pickSchedule(pickingFrom: false),
-                                        field: field,
-                                        border: border,
-                                        text: text,
-                                        muted: muted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _sectionCard(
-                      surface: surface,
-                      dark: dark,
+                    const SizedBox(height: 24),
+                    _formSection(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -755,20 +773,145 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                               // reappears.
                               if (!modality.needsLocation) {
                                 _selectedLocation = null;
+                                _gpsAddress = null;
                               }
                               if (modality != JobModality.errand) {
                                 _dropoffLocation = null;
+                                if (_gpsAddress == _GpsAddress.dropoff) {
+                                  _gpsAddress = null;
+                                }
                               }
                             }),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 24),
+                    _formSection(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _label('Schedule', text),
+                          Row(
+                            key: const ValueKey('post-job-schedule'),
+                            children: [
+                              Expanded(
+                                child: _dateField(
+                                  label: 'FROM',
+                                  value: _fromDate,
+                                  onTap: () => _pickSchedule(pickingFrom: true),
+                                  field: field,
+                                  border: border,
+                                  text: text,
+                                  muted: muted,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _dateField(
+                                  label: 'TO',
+                                  value: _toDate,
+                                  onTap: () =>
+                                      _pickSchedule(pickingFrom: false),
+                                  field: field,
+                                  border: border,
+                                  text: text,
+                                  muted: muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          _dateField(
+                            label: 'START TIME',
+                            timeLabel: _startTime == null
+                                ? null
+                                : serviceTimeLabel(_startTime!),
+                            onTap: _pickTime,
+                            field: field,
+                            border: border,
+                            text: text,
+                            muted: muted,
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Preferred start time for the selected dates (PHT).',
+                            style: TextStyle(color: muted, fontSize: 12),
+                          ),
+                          if (_scheduleError != null)
+                            Text(
+                              _scheduleError!,
+                              key: const ValueKey('post-job-schedule-error'),
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.error,
+                                fontSize: 12,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _formSection(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _label(_isErrand ? 'Delivery fee' : 'Budget', text),
+                          if (_isErrand)
+                            _ErrandFeePreview(
+                              distanceKm: _errandDistanceKm,
+                              text: text,
+                              muted: muted,
+                            )
+                          else
+                            TextFormField(
+                              key: const ValueKey('post-job-budget'),
+                              controller: _budgetController,
+                              style: TextStyle(color: text),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d*\.?\d{0,2}'),
+                                ),
+                              ],
+                              decoration: _inputDecoration(
+                                hint: 'e.g. 200',
+                                prefixIcon: Padding(
+                                  padding: const EdgeInsets.only(
+                                    left: 16,
+                                    right: 8,
+                                  ),
+                                  child: Text(
+                                    '\u20b1',
+                                    style: TextStyle(
+                                      color: text,
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                                field: field,
+                                border: border,
+                                text: text,
+                                muted: muted,
+                              ),
+                              validator: (value) {
+                                final amount = double.tryParse(
+                                  value?.trim() ?? '',
+                                );
+                                return amount == null || amount <= 0
+                                    ? 'Invalid budget'
+                                    : null;
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
                     if (_modality.needsLocation) ...[
-                      const SizedBox(height: 12),
-                      _sectionCard(
-                        surface: surface,
-                        dark: dark,
+                      const SizedBox(height: 24),
+                      _formSection(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -794,6 +937,15 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                 },
                                 builder: (field) => JobLocationPicker(
                                   initialValue: _selectedLocation,
+                                  currentLocationEnabled: _gpsEnabled(
+                                    _GpsAddress.pickup,
+                                  ),
+                                  currentLocationDisabledReason:
+                                      _gpsRestrictionMessage,
+                                  onCurrentLocationRequested: () =>
+                                      _requestGps(_GpsAddress.pickup),
+                                  onCurrentLocationReleased: () =>
+                                      _releaseGps(_GpsAddress.pickup),
                                   errorText: field.errorText,
                                   onChanged: (value) {
                                     setState(() => _selectedLocation = value);
@@ -806,10 +958,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                       ),
                     ],
                     if (_isErrand) ...[
-                      const SizedBox(height: 12),
-                      _sectionCard(
-                        surface: surface,
-                        dark: dark,
+                      const SizedBox(height: 24),
+                      _formSection(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -819,6 +969,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                             else
                               FormField<JobLocationSelection>(
                                 key: const ValueKey('post-job-dropoff'),
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
                                 initialValue: _dropoffLocation,
                                 validator: (value) {
                                   if (value == null) {
@@ -827,10 +979,22 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                   if (value.exactAddress.trim().isEmpty) {
                                     return 'Enter the drop-off address.';
                                   }
-                                  return null;
+                                  return validateErrandLocations(
+                                    _selectedLocation,
+                                    value,
+                                  );
                                 },
                                 builder: (field) => JobLocationPicker(
                                   initialValue: _dropoffLocation,
+                                  currentLocationEnabled: _gpsEnabled(
+                                    _GpsAddress.dropoff,
+                                  ),
+                                  currentLocationDisabledReason:
+                                      _gpsRestrictionMessage,
+                                  onCurrentLocationRequested: () =>
+                                      _requestGps(_GpsAddress.dropoff),
+                                  onCurrentLocationReleased: () =>
+                                      _releaseGps(_GpsAddress.dropoff),
                                   errorText: field.errorText,
                                   onChanged: (value) {
                                     setState(() => _dropoffLocation = value);
@@ -841,10 +1005,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      _sectionCard(
-                        surface: surface,
-                        dark: dark,
+                      const SizedBox(height: 24),
+                      _formSection(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -895,10 +1057,8 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                         ),
                       ),
                     ],
-                    const SizedBox(height: 12),
-                    _sectionCard(
-                      surface: surface,
-                      dark: dark,
+                    const SizedBox(height: 24),
+                    _formSection(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -953,7 +1113,13 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                                   color: _ink,
                                 ),
                               )
-                            : Text(_isEditing ? 'Save changes' : 'Post job'),
+                            : Text(
+                                _isEditing
+                                    ? 'Save changes'
+                                    : _isReposting
+                                    ? 'Repost Job'
+                                    : 'Post job',
+                              ),
                       ),
                     ),
                     const SizedBox(height: 8),
@@ -986,7 +1152,6 @@ class _ModalitySelector extends StatelessWidget {
   final Color muted;
 
   static const _yellow = AppTheme.yellow;
-  static const _pink = AppTheme.ink;
 
   static IconData _icon(JobModality modality) => switch (modality) {
     JobModality.onsite => Icons.home_repair_service_outlined,
@@ -1014,43 +1179,68 @@ class _ModalitySelector extends StatelessWidget {
               if (modality != JobModality.values.first)
                 const SizedBox(width: 8),
               Expanded(
-                child: InkWell(
-                  key: ValueKey('post-job-modality-${modality.name}'),
-                  onTap: () => onChanged(modality),
-                  borderRadius: BorderRadius.circular(12),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    height: 64,
-                    decoration: BoxDecoration(
-                      color: modality == value
-                          ? _yellow.withValues(alpha: 0.22)
-                          : field,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: modality == value ? _yellow : border,
-                        width: modality == value ? 1.6 : 1,
+                child: Semantics(
+                  selected: modality == value,
+                  button: true,
+                  child: InkWell(
+                    key: ValueKey('post-job-modality-${modality.name}'),
+                    onTap: () => onChanged(modality),
+                    borderRadius: BorderRadius.circular(14),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      constraints: const BoxConstraints(minHeight: 84),
+                      decoration: BoxDecoration(
+                        color: modality == value
+                            ? _yellow.withValues(alpha: 0.18)
+                            : field,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: modality == value ? _yellow : border,
+                          width: modality == value ? 1.8 : 1,
+                        ),
                       ),
-                    ),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          _icon(modality),
-                          size: 20,
-                          color: modality == value ? _pink : text,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          modality.label,
-                          style: TextStyle(
-                            color: text,
-                            fontSize: 12,
-                            fontWeight: modality == value
-                                ? FontWeight.w700
-                                : FontWeight.w500,
+                      child: Stack(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 2,
+                              vertical: 16,
+                            ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Center(
+                                  child: Icon(
+                                    _icon(modality),
+                                    size: 24,
+                                    color: text,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  modality.label,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: text,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                          if (modality == value)
+                            Positioned(
+                              top: 5,
+                              right: 5,
+                              child: Icon(
+                                Icons.check_circle,
+                                color: text,
+                                size: 15,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

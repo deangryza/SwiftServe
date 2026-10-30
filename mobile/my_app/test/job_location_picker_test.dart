@@ -83,6 +83,9 @@ Widget _harness({
   JobLocationSelection? initialValue,
   String? errorText,
   JobLocationMapBuilder? mapBuilder = _testMap,
+  bool currentLocationEnabled = true,
+  bool Function()? onCurrentLocationRequested,
+  VoidCallback? onCurrentLocationReleased,
 }) => MaterialApp(
   home: Scaffold(
     body: SingleChildScrollView(
@@ -92,6 +95,9 @@ Widget _harness({
         initialValue: initialValue,
         mapBuilder: mapBuilder,
         errorText: errorText,
+        currentLocationEnabled: currentLocationEnabled,
+        onCurrentLocationRequested: onCurrentLocationRequested,
+        onCurrentLocationReleased: onCurrentLocationReleased,
         onChanged: onChanged ?? (_) {},
       ),
     ),
@@ -103,6 +109,188 @@ void main() {
   const resolved = ResolvedJobAddress(
     exactAddress: '123 Example Street, Malolos, Bulacan',
     areaLabel: 'Malolos, Bulacan',
+  );
+
+  testWidgets(
+    'reserves GPS before startup and releases when typing cancels startup',
+    (tester) async {
+      final gps = Completer<JobCoordinate>();
+      var reservations = 0;
+      var releases = 0;
+      final selections = <JobLocationSelection?>[];
+      await tester.pumpWidget(
+        _harness(
+          locationService: _FakeLocationService(response: gps.future),
+          geocodingService: _FakeGeocodingService(result: resolved),
+          onCurrentLocationRequested: () {
+            reservations++;
+            return true;
+          },
+          onCurrentLocationReleased: () {
+            releases++;
+          },
+          onChanged: selections.add,
+        ),
+      );
+      await tester.tap(find.text('Use my current location'));
+      await tester.pump();
+      expect(reservations, 1);
+      expect(releases, 0);
+      await tester.enterText(
+        find.byKey(const ValueKey('job-location-search')),
+        'M',
+      );
+      await tester.pump();
+      expect(releases, 1);
+      gps.complete(coordinate);
+      await tester.pumpAndSettle();
+      expect(selections.whereType<JobLocationSelection>(), isEmpty);
+      expect(find.text('Choose pin'), findsOneWidget);
+    },
+  );
+
+  for (final permissionError in [true, false]) {
+    testWidgets(
+      'GPS ${permissionError ? 'permission' : 'unexpected'} failure releases reservation',
+      (tester) async {
+        var releases = 0;
+        final gps = Completer<JobCoordinate>();
+        await tester.pumpWidget(
+          _harness(
+            locationService: _FakeLocationService(response: gps.future),
+            geocodingService: _FakeGeocodingService(result: resolved),
+            onCurrentLocationRequested: () => true,
+            onCurrentLocationReleased: () {
+              releases++;
+            },
+          ),
+        );
+        await tester.tap(find.text('Use my current location'));
+        await tester.pump();
+        gps.completeError(
+          permissionError
+              ? const DeviceLocationException(
+                  DeviceLocationFailure.permissionDenied,
+                )
+              : StateError('GPS platform unavailable'),
+        );
+        await tester.pumpAndSettle();
+        expect(releases, 1);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
+    'failed GPS retry retains ownership of the previously selected GPS pin',
+    (tester) async {
+      var releases = 0;
+      Widget harness(DeviceLocationService service) => _harness(
+        locationService: service,
+        geocodingService: _FakeGeocodingService(result: resolved),
+        onCurrentLocationRequested: () => true,
+        onCurrentLocationReleased: () {
+          releases++;
+        },
+      );
+      await tester.pumpWidget(
+        harness(_FakeLocationService(position: coordinate)),
+      );
+      await tester.tap(find.text('Use my current location'));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        harness(
+          _FakeLocationService(
+            error: const DeviceLocationException(
+              DeviceLocationFailure.timedOut,
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Use my current location'));
+      await tester.pumpAndSettle();
+      expect(releases, 0);
+      expect(find.text('Pin selected'), findsOneWidget);
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('job-location-exact-address')),
+            )
+            .controller!
+            .text,
+        resolved.exactAddress,
+      );
+    },
+  );
+
+  testWidgets(
+    'map selection releases GPS ownership without disabling manual lookup',
+    (tester) async {
+      var releases = 0;
+      await tester.pumpWidget(
+        _harness(
+          locationService: _FakeLocationService(position: coordinate),
+          geocodingService: _FakeGeocodingService(result: resolved),
+          onCurrentLocationRequested: () => true,
+          onCurrentLocationReleased: () {
+            releases++;
+          },
+        ),
+      );
+      await tester.tap(find.text('Use my current location'));
+      await tester.pumpAndSettle();
+      expect(releases, 0);
+      await tester.tap(find.byKey(const Key('select-map-pin')));
+      await tester.pumpAndSettle();
+      expect(releases, 1);
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('job-location-search')),
+            )
+            .enabled,
+        isNot(false),
+      );
+    },
+  );
+
+  testWidgets(
+    'disabled GPS leaves manual search enabled and request veto prevents GPS startup',
+    (tester) async {
+      var attempts = 0;
+      Widget harness(bool enabled) => _harness(
+        locationService: _FakeLocationService(),
+        geocodingService: _FakeGeocodingService(result: resolved),
+        currentLocationEnabled: enabled,
+        onCurrentLocationRequested: () {
+          attempts++;
+          return false;
+        },
+      );
+      await tester.pumpWidget(harness(false));
+      expect(
+        tester
+            .widget<OutlinedButton>(
+              find.byKey(const ValueKey('job-location-gps')),
+            )
+            .onPressed,
+        isNull,
+      );
+      expect(
+        tester
+            .widget<TextField>(
+              find.byKey(const ValueKey('job-location-search')),
+            )
+            .enabled,
+        isNot(false),
+      );
+      await tester.pumpWidget(harness(true));
+      await tester.tap(find.text('Use my current location'));
+      await tester.pumpAndSettle();
+      expect(attempts, 1);
+      expect(find.text('Choose pin'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
   );
 
   testWidgets('starts without a pin and exposes inline validation', (

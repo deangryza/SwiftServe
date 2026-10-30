@@ -14,7 +14,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(home: WorkerRegisterScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: WorkerRegisterScreen(contactAvailability: _available),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.text('Create Account'), findsOneWidget);
@@ -35,7 +39,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(home: WorkerRegisterScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: WorkerRegisterScreen(contactAvailability: _available),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final fields = find.byType(TextFormField);
@@ -61,7 +69,11 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
 
-      await tester.pumpWidget(const MaterialApp(home: WorkerRegisterScreen()));
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: WorkerRegisterScreen(contactAvailability: _available),
+        ),
+      );
       await tester.pumpAndSettle();
 
       var fields = find.byType(TextFormField);
@@ -97,9 +109,23 @@ void main() {
       await _tapNext(tester);
 
       expect(find.text('Service Categories'), findsOneWidget);
+      expect(find.text('Weekly Availability'), findsNothing);
+      expect(find.text('Choose your services'), findsOneWidget);
       await tester.tap(
-        find.byKey(const ValueKey('worker-category-Electrical')),
+        find.byKey(const ValueKey('worker-category-Academic Help')),
       );
+      final repairs = find.byKey(const ValueKey('worker-category-Repairs'));
+      await tester.ensureVisible(repairs);
+      await tester.tap(repairs);
+      final other = find.byKey(const ValueKey('worker-category-Other'));
+      await tester.ensureVisible(other);
+      await tester.tap(other);
+      await _tapNext(tester);
+      expect(find.text('Service Categories'), findsOneWidget);
+      expect(find.text('Please specify your service.'), findsWidgets);
+      final customService = find.byKey(const ValueKey('worker-custom-service'));
+      await tester.ensureVisible(customService);
+      await tester.enterText(customService, 'Pet grooming');
       await _tapNext(tester);
       expect(find.text('Enter code'), findsOneWidget);
 
@@ -123,7 +149,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(home: WorkerRegisterScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: WorkerRegisterScreen(contactAvailability: _available),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
@@ -150,7 +180,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
 
-    await tester.pumpWidget(const MaterialApp(home: WorkerRegisterScreen()));
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: WorkerRegisterScreen(contactAvailability: _available),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final avatar = tester.getRect(
@@ -172,3 +206,5 @@ Future<void> _tapNext(WidgetTester tester) async {
   await tester.tap(button);
   await tester.pumpAndSettle();
 }
+
+Future<bool> _available(String kind, String value) async => true;

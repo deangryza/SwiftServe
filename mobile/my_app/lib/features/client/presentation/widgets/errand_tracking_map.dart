@@ -292,6 +292,7 @@ String riderStatusText(
     case ServiceRequestStatus.ongoing:
       break;
     case ServiceRequestStatus.pending:
+    case ServiceRequestStatus.expired:
     case ServiceRequestStatus.cancelled:
       return '';
   }

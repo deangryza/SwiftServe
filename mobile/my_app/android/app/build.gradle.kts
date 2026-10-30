@@ -1,3 +1,5 @@
+import java.util.Base64
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -7,6 +9,12 @@ plugins {
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// A demo override must prevent native production auto-init before Dart selects
+// demo FirebaseOptions. Normal builds keep the standard FirebaseInitProvider.
+val localFirebaseEmulator = (project.findProperty("dart-defines")?.toString()?.split(",") ?: emptyList())
+    .mapNotNull { runCatching { String(Base64.getDecoder().decode(it), Charsets.UTF_8) }.getOrNull() }
+    .any { it.startsWith("LOCAL_FIREBASE_EMULATOR_HOST=") && it.substringAfter("=").isNotBlank() }
 
 android {
     namespace = "com.example.my_app"
@@ -25,6 +33,7 @@ android {
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.my_app"
+        manifestPlaceholders["firebaseInitProviderEnabled"] = (!localFirebaseEmulator).toString()
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

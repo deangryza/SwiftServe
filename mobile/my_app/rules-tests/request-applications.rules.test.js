@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const assert = require('node:assert/strict');
 const path = require('node:path');
 const { after, before, beforeEach, test } = require('node:test');
 const {
@@ -31,9 +32,11 @@ const requestData = {
   title: 'Repair a kitchen sink',
   category: 'Repairs',
   budget: 500,
-  schedule: Timestamp.fromDate(new Date('2026-10-20T00:00:00Z')),
-  scheduleFrom: Timestamp.fromDate(new Date('2026-10-20T00:00:00Z')),
-  scheduleTo: Timestamp.fromDate(new Date('2026-10-21T00:00:00Z')),
+  // Authorization tests need a future start: an overdue fixture now correctly
+  // fails independently of the role/ownership condition under test.
+  schedule: Timestamp.fromMillis(Date.now() + 86400000),
+  scheduleFrom: Timestamp.fromMillis(Date.now() + 86400000),
+  scheduleTo: Timestamp.fromMillis(Date.now() + 172800000),
   location: 'Malolos',
   description: 'Fix the leaking pipe under the kitchen sink.',
   status: 'pending',
@@ -75,6 +78,52 @@ beforeEach(async () => {
 
 after(async () => {
   await environment.cleanup();
+});
+
+test('deadline: overdue pending job rejects atomic application and notification', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    const past = Timestamp.fromMillis(Date.now() - 60000);
+    await updateDoc(doc(context.firestore(), 'service_requests/request-1'), {
+      schedule: past, scheduleFrom: past, scheduleTo: past,
+    });
+  });
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  await assertFails(applyWithNotification(worker, 'worker-1'));
+  await environment.withSecurityRulesDisabled(async context => {
+    for (const path of ['service_requests/request-1/applications/worker-1', 'notifications/application-notification']) {
+      assert.equal((await getDoc(doc(context.firestore(), path))).exists(), false);
+    }
+    assert.equal((await getDoc(doc(context.firestore(), 'service_requests/request-1'))).data().status, 'pending');
+  });
+});
+
+test('deadline: bypassing the UI cannot apply at/past the server-clock boundary', async () => {
+  await environment.withSecurityRulesDisabled(async context => {
+    await updateDoc(doc(context.firestore(), 'service_requests/request-1'), {
+      scheduleFrom: Timestamp.now(),
+    });
+  });
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  await assertFails(setDoc(doc(worker, 'service_requests/request-1/applications/worker-1'), {
+    requestId: 'request-1', clientId: 'client-1', workerId: 'worker-1', workerName: 'Worker',
+    status: 'pending', appliedAt: serverTimestamp(),
+  }));
+});
+
+test('deadline: Philippine midnight and legacy schedule fallback reject late applications', async () => {
+  const worker = environment.authenticatedContext('worker-1').firestore();
+  const wall = new Date(Date.now() + 8 * 3600000);
+  const midnight = Timestamp.fromMillis(Date.UTC(wall.getUTCFullYear(), wall.getUTCMonth(), wall.getUTCDate()) - 8 * 3600000);
+  for (const overrides of [
+    { scheduleFrom: midnight },
+    { scheduleFrom: null, schedule: midnight },
+    { scheduleFrom: 'invalid' },
+  ]) {
+    await environment.withSecurityRulesDisabled(async context => {
+      await updateDoc(doc(context.firestore(), 'service_requests/request-1'), overrides);
+    });
+    await assertFails(applyWithNotification(worker, 'worker-1'));
+  }
 });
 
 test('creator cannot apply after repeated role switches, including atomic notification writes', async () => {

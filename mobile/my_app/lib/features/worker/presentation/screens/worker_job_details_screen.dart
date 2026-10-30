@@ -16,6 +16,8 @@ import '../../../../shared/models/app_user.dart';
 import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/utils/service_schedule.dart';
+import '../../../../shared/widgets/service_deadline_builder.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/profile_repository.dart';
 import '../../../../shared/screens/public_profile_screen.dart';
@@ -140,7 +142,8 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
     final canReadExact =
         request.workerId == widget.worker.id &&
         request.status != ServiceRequestStatus.pending &&
-        request.status != ServiceRequestStatus.cancelled;
+        request.status != ServiceRequestStatus.cancelled &&
+        request.status != ServiceRequestStatus.expired;
 
     if (canReadExact) {
       try {
@@ -622,19 +625,23 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
                 dateLabel: _dateRange(request),
               ),
               const SizedBox(height: 16),
-              _WorkerBookingActions(
-                request: request,
-                worker: worker,
-                palette: palette,
-                isAssignedWorker: isAssignedWorker,
-                saving: savingAction,
-                savingReview: savingReview,
-                onRateClient: onRateClient,
-                onVerify: onVerify,
-                onApply: onApply,
-                onStart: onStart,
-                onAdvanceStage: onAdvanceStage,
-                onComplete: onComplete,
+              ServiceDeadlineBuilder(
+                requests: [request],
+                builder: (context, now) => _WorkerBookingActions(
+                  now: now,
+                  request: request,
+                  worker: worker,
+                  palette: palette,
+                  isAssignedWorker: isAssignedWorker,
+                  saving: savingAction,
+                  savingReview: savingReview,
+                  onRateClient: onRateClient,
+                  onVerify: onVerify,
+                  onApply: onApply,
+                  onStart: onStart,
+                  onAdvanceStage: onAdvanceStage,
+                  onComplete: onComplete,
+                ),
               ),
             ],
           ),
@@ -645,7 +652,13 @@ class _WorkerBookingDetailsBody extends StatelessWidget {
 }
 
 class _WorkerBookingActions extends StatelessWidget {
+  Widget _deadlineMessage() => Text(
+    'This job has reached its service start time and no longer accepts applications.',
+    style: TextStyle(color: palette.text),
+  );
+
   const _WorkerBookingActions({
+    required this.now,
     required this.request,
     required this.worker,
     required this.palette,
@@ -660,6 +673,7 @@ class _WorkerBookingActions extends StatelessWidget {
     required this.onComplete,
   });
 
+  final DateTime now;
   final ServiceRequest request;
   final AppUser worker;
   final _WorkerDetailsPalette palette;
@@ -675,8 +689,16 @@ class _WorkerBookingActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (request.status == ServiceRequestStatus.expired) {
+      return Text(
+        'This job post has expired and is no longer available.',
+        style: TextStyle(color: palette.text),
+      );
+    }
     if (request.status == ServiceRequestStatus.pending &&
-        !request.isAvailableToWorker(worker.id)) {
+        (worker.id.isEmpty ||
+            request.clientId == worker.id ||
+            !request.hasKnownCreator)) {
       return Text(
         request.clientId == worker.id
             ? 'You cannot apply to your own job.'
@@ -686,6 +708,9 @@ class _WorkerBookingActions extends StatelessWidget {
     }
     if (request.status == ServiceRequestStatus.pending &&
         worker.verificationStatus != VerificationStatus.verified) {
+      if (request.applicationDeadlineReached(now: now)) {
+        return _deadlineMessage();
+      }
       return _DetailsButton(
         label: 'Verify to apply',
         onPressed: onVerify,
@@ -712,6 +737,9 @@ class _WorkerBookingActions extends StatelessWidget {
           }
           final application = snapshot.data;
           if (application == null) {
+            if (request.applicationDeadlineReached(now: now)) {
+              return _deadlineMessage();
+            }
             return _DetailsButton(
               label: saving ? 'Applying...' : 'Apply for this request',
               onPressed: saving ? null : onApply,
@@ -1799,11 +1827,4 @@ class _WorkerDetailsPalette {
   final Color muted;
 }
 
-String _dateRange(ServiceRequest request) {
-  String format(DateTime date) => '${date.month}/${date.day}/${date.year}';
-  final from = request.scheduleFrom ?? request.schedule;
-  final to = request.scheduleTo ?? from;
-  if (from == null) return 'Flexible schedule';
-  if (to == null || DateUtils.isSameDay(from, to)) return format(from);
-  return '${format(from)} – ${format(to)}';
-}
+String _dateRange(ServiceRequest request) => serviceScheduleLabel(request);

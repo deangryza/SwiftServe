@@ -168,6 +168,157 @@ AppUser _worker({
 );
 
 void main() {
+  testWidgets('overdue details do not offer Verify or Apply', (tester) async {
+    final request = ServiceRequest.fromMap('overdue', {
+      ..._job('user-b'),
+      'modality': 'online',
+      'scheduleFrom': Timestamp.fromDate(
+        DateTime.now().subtract(const Duration(hours: 1)),
+      ),
+    });
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WorkerJobDetailsScreen(
+          request: request,
+          worker: _worker(verification: VerificationStatus.pending),
+        ),
+      ),
+    );
+    final message = find.text(
+      'This job has reached its service start time and no longer accepts applications.',
+    );
+    await tester.scrollUntilVisible(message, 200);
+    await tester.pumpAndSettle();
+    expect(message, findsOneWidget);
+    expect(find.text('Apply for this request'), findsNothing);
+    expect(find.text('Verify to apply'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  test(
+    'deadline crossed during transaction reads rejects both writes',
+    () async {
+      final start = DateTime.utc(2026, 10, 30, 1);
+      var now = start.subtract(const Duration(seconds: 1));
+      var reads = 0;
+      final db = _Firestore()
+        ..documents['service_requests/job'] = {
+          ..._job('user-b'),
+          'scheduleFrom': Timestamp.fromDate(start),
+        }
+        ..onRead = () {
+          if (++reads == 2) now = start;
+        };
+      await expectLater(
+        ServiceRequestRepository(
+          firestore: db,
+          auth: _Auth('user-a'),
+          now: () => now,
+        ).apply(
+          request: ServiceRequest.fromMap('job', _job('user-b')),
+          worker: _worker(),
+        ),
+        throwsStateError,
+      );
+      expect(db.writes, isEmpty);
+    },
+  );
+
+  for (final offset in [-1, 0, 1]) {
+    test(
+      'transaction enforces exact service deadline offset $offset',
+      () async {
+        final now = DateTime.utc(2026, 10, 29, 16); // Oct 30 midnight PHT.
+        final start = now.add(Duration(microseconds: offset));
+        final db = _Firestore()
+          ..documents['service_requests/job'] = {
+            ..._job('user-b'),
+            'scheduleFrom': Timestamp.fromDate(start),
+          };
+        final future = ServiceRequest.fromMap('job', {
+          ..._job('user-b'),
+          'scheduleFrom': Timestamp.fromDate(now.add(const Duration(days: 1))),
+        });
+        final apply = ServiceRequestRepository(
+          firestore: db,
+          auth: _Auth('user-a'),
+          now: () => now,
+        ).apply(request: future, worker: _worker());
+        if (offset <= 0) {
+          await expectLater(apply, throwsStateError);
+          expect(db.writes, isEmpty);
+        } else {
+          await apply;
+          expect(
+            db.writes.keys,
+            contains('service_requests/job/applications/user-a'),
+          );
+          expect(db.writes.keys, contains('notifications/new'));
+        }
+      },
+    );
+  }
+
+  test(
+    'overdue latest document rejects a stale future screen without writes',
+    () async {
+      final db = _Firestore()
+        ..documents['service_requests/job'] = {
+          ..._job('user-b'),
+          'scheduleFrom': Timestamp.fromDate(
+            DateTime.now().subtract(const Duration(hours: 1)),
+          ),
+        };
+      final stale = ServiceRequest.fromMap('job', {
+        ..._job('user-b'),
+        'scheduleFrom': Timestamp.fromDate(
+          DateTime.now().add(const Duration(days: 1)),
+        ),
+      });
+      await expectLater(
+        ServiceRequestRepository(
+          firestore: db,
+          auth: _Auth('user-a'),
+        ).apply(request: stale, worker: _worker()),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('service start time'),
+          ),
+        ),
+      );
+      expect(db.writes, isEmpty);
+    },
+  );
+
+  test('Recent and Search exclude overdue pending jobs before limits', () {
+    final past = ServiceRequest.fromMap('past', {
+      ..._job('user-b'),
+      'scheduleFrom': Timestamp.fromDate(
+        DateTime.now().subtract(const Duration(hours: 1)),
+      ),
+    });
+    expect(
+      filterWorkerDashboardRequests(
+        workerId: 'user-a',
+        requests: [past],
+        applications: const [],
+        filter: WorkerDashboardRequestFilter.recent,
+      ),
+      isEmpty,
+    );
+    expect(
+      availableWorkerSearchRequests(
+        workerId: 'user-a',
+        requests: [past],
+        applications: const [],
+        query: '',
+      ),
+      isEmpty,
+    );
+  });
+
   testWidgets(
     'own-job details show an explanation instead of Apply or Verify',
     (tester) async {
@@ -184,6 +335,26 @@ void main() {
       await tester.scrollUntilVisible(message, 200);
       await tester.pumpAndSettle();
       expect(message, findsOneWidget);
+      expect(find.text('Apply for this request'), findsNothing);
+      expect(find.text('Verify to apply'), findsNothing);
+      expect(tester.takeException(), isNull);
+
+      // Deadline handling must not remove the pre-existing account-ID guard.
+      await tester.pumpWidget(
+        MaterialApp(
+          home: WorkerJobDetailsScreen(
+            request: request,
+            worker: _worker(id: '', verification: VerificationStatus.pending),
+          ),
+        ),
+      );
+      await tester.scrollUntilVisible(
+        find.text(
+          'This job has no valid creator and cannot accept applications.',
+        ),
+        200,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('Apply for this request'), findsNothing);
       expect(find.text('Verify to apply'), findsNothing);
       expect(tester.takeException(), isNull);
@@ -204,7 +375,7 @@ void main() {
           requests: jobs,
           applications: const [],
           filter: filter,
-          workerAddressPosition: const JobCoordinate(
+          workerCurrentPosition: const JobCoordinate(
             latitude: 14.84,
             longitude: 120.81,
           ),
