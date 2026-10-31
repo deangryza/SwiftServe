@@ -142,9 +142,13 @@ class PhoneNumberField extends StatelessWidget {
     required this.borderColor,
     required this.focusColor,
     this.fieldKey,
+    this.errorText,
+    this.suffixIcon,
   });
 
   final Key? fieldKey;
+  final String? errorText;
+  final Widget? suffixIcon;
   final TextEditingController controller;
   final String dialCode;
   final ValueChanged<String> onDialCodeChanged;
@@ -229,8 +233,11 @@ class PhoneNumberField extends StatelessWidget {
                     _NationalPhoneInputFormatter(),
                   ],
                   validator: (value) => validatePhoneNumber(value, dialCode),
+                  forceErrorText: errorText,
                   style: TextStyle(color: textColor),
                   decoration: InputDecoration(
+                    suffixIcon: suffixIcon,
+                    errorMaxLines: 3,
                     hintText: country.example,
                     counterText: '',
                     hintStyle: TextStyle(color: mutedColor),

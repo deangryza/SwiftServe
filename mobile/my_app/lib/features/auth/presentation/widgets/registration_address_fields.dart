@@ -30,6 +30,13 @@ class RegistrationAddressFields extends StatefulWidget {
 }
 
 class _RegistrationAddressFieldsState extends State<RegistrationAddressFields> {
+  String _barangayName(String value) => value
+      .trim()
+      .replaceFirst(
+        RegExp(r'^(?:brgy\.?|barangay)(?:\s+|$)', caseSensitive: false),
+        '',
+      )
+      .trim();
   final _street = TextEditingController();
   final _barangay = TextEditingController();
   final _city = TextEditingController();
@@ -47,7 +54,7 @@ class _RegistrationAddressFieldsState extends State<RegistrationAddressFields> {
     if (parts.length >= 3) {
       _province.text = parts.removeLast();
       _city.text = parts.removeLast();
-      _barangay.text = parts.removeLast();
+      _barangay.text = _barangayName(parts.removeLast());
       _street.text = parts.join(', ');
     } else {
       _street.text = widget.address.text;
@@ -62,7 +69,10 @@ class _RegistrationAddressFieldsState extends State<RegistrationAddressFields> {
     // reinterpret the street as a barangay when an address is incomplete.
     widget.address.text = [
       if (_street.text.trim().isNotEmpty) _street.text.trim(),
-      _barangay.text.trim(),
+      if (_barangayName(_barangay.text).isNotEmpty)
+        'Brgy. ${_barangayName(_barangay.text)}'
+      else
+        '',
       _city.text.trim(),
       _province.text.trim(),
     ].join(', ');
@@ -76,7 +86,7 @@ class _RegistrationAddressFieldsState extends State<RegistrationAddressFields> {
             address.province.isEmpty
         ? address.exactAddress
         : address.street;
-    _barangay.text = address.barangay;
+    _barangay.text = _barangayName(address.barangay);
     _city.text = address.cityMunicipality;
     _province.text = address.province;
     _syncAddress();
@@ -116,7 +126,10 @@ class _RegistrationAddressFieldsState extends State<RegistrationAddressFields> {
           enabled: widget.enabled,
           textCapitalization: TextCapitalization.words,
           validator: (value) =>
-              required && (value == null || value.trim().isEmpty)
+              required &&
+                  (value == null ||
+                      value.trim().isEmpty ||
+                      (label == 'Barangay' && _barangayName(value).isEmpty))
               ? '$label is required.'
               : null,
           style: TextStyle(color: widget.textColor),

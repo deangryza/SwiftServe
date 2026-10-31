@@ -9,6 +9,46 @@ class ApiService {
   ApiService({http.Client? client}) : _client = client ?? http.Client();
 
   final http.Client _client;
+  Future<bool> registrationContactAvailable(
+    String kind,
+    String value, {
+    String? idToken,
+  }) async {
+    late final http.Response response;
+    try {
+      response = await _client
+          .post(
+            Uri.parse(
+              '${ApiConfig.baseUrl}/api/users/registration-availability',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+              if (idToken != null) 'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({'kind': kind, 'value': value}),
+          )
+          .timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      throw const ApiConnectionException(
+        'Availability check timed out. Please try again.',
+      );
+    } on http.ClientException {
+      throw const ApiConnectionException(
+        'Could not check availability. Check your connection and try again.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw ApiException(response.statusCode, response.body);
+    }
+    final body = jsonDecode(response.body);
+    if (body is! Map || body['available'] is! bool) {
+      throw const ApiConnectionException(
+        'Could not verify availability. Please try again.',
+      );
+    }
+    return body['available'] as bool;
+  }
+
   static const _requestTimeout = Duration(seconds: 30);
 
   /// Throws [ApiConnectionException] when the backend cannot be reached, so
@@ -110,6 +150,30 @@ class ApiService {
       throw ApiException(response.statusCode, response.body);
     }
   }
+
+  /// Atomically saves the private address and its public locality projection.
+  Future<void> updateProfileAddress({
+    required String idToken,
+    required String fullName,
+    required String address,
+  }) => _postJson('/api/users/profile/address', idToken, {
+    'fullName': fullName,
+    'address': address,
+  });
+
+  /// Saves About and/or address changes together with their public projections.
+  Future<void> updateProfileDetails({
+    required String idToken,
+    required String fullName,
+    String? address,
+    String? description,
+    List<String>? services,
+  }) => _postJson('/api/users/profile/details', idToken, {
+    'fullName': fullName,
+    'address': ?address,
+    'description': ?description,
+    'services': ?services,
+  });
 
   /// Adds the client or worker role to an existing account, keeping its data.
   Future<void> addRole({

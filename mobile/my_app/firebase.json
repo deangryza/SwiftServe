@@ -25,5 +25,19 @@
   },
   "storage": {
     "rules": "storage.rules"
-  }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "expired-jobs",
+      "runtime": "nodejs22",
+      "ignore": [
+        "node_modules",
+        ".git",
+        "test",
+        "*.log",
+        ".env*"
+      ]
+    }
+  ]
 }

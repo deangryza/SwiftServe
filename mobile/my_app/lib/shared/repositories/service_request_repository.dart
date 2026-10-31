@@ -7,6 +7,7 @@ import '../models/rider_location.dart';
 import '../models/service_application.dart';
 import '../models/service_request.dart';
 import '../utils/job_location_utils.dart';
+import '../utils/errand_location_validation.dart';
 
 String conversationIdFor({
   required String clientId,
@@ -49,6 +50,10 @@ class _PostDetails {
     }
     if (modality == JobModality.errand && errand == null) {
       throw ArgumentError.notNull('errand');
+    }
+    if (modality == JobModality.errand) {
+      final error = validateErrandLocations(location, errand!.dropoff);
+      if (error != null) throw ArgumentError(error);
     }
   }
 
@@ -107,15 +112,20 @@ class _PostDetails {
 }
 
 class ServiceRequestRepository {
-  ServiceRequestRepository({FirebaseFirestore? firestore, FirebaseAuth? auth})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _authOverride = auth;
+  ServiceRequestRepository({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? auth,
+    DateTime Function()? now,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _authOverride = auth,
+       _now = now ?? DateTime.now;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth? _authOverride;
+  final DateTime Function() _now;
   FirebaseAuth get _auth => _authOverride ?? FirebaseAuth.instance;
 
-  Future<void> createRequest({
+  Future<String> createRequest({
     required String clientId,
     required String clientName,
     required String title,
@@ -127,6 +137,7 @@ class ServiceRequestRepository {
     required JobModality modality,
     JobLocationSelection? location,
     ErrandDetails? errand,
+    String? repostSourceId,
   }) async {
     final details = _PostDetails(
       title: title,
@@ -140,16 +151,45 @@ class ServiceRequestRepository {
       errand: errand,
     );
     final requestRef = _firestore.collection('service_requests').doc();
-    final batch = _firestore.batch();
-
-    batch.set(requestRef, {
+    final fields = <String, dynamic>{
       'clientId': clientId,
       'clientName': clientName,
       ...details.publicFields(),
       'status': ServiceRequestStatus.pending.name,
       'createdAt': FieldValue.serverTimestamp(),
-    });
+    };
     final privateLocation = details.privateLocation();
+    if (repostSourceId != null) {
+      final uid = _auth.currentUser?.uid;
+      if (uid == null || uid != clientId) {
+        throw StateError('Only the owning client can repost this job.');
+      }
+      await _firestore.runTransaction((transaction) async {
+        final source = await transaction.get(
+          _firestore.collection('service_requests').doc(repostSourceId),
+        );
+        final original = source.data();
+        if (original == null ||
+            original['clientId'] != uid ||
+            original['status'] != ServiceRequestStatus.expired.name) {
+          throw StateError('Only your expired jobs can be reposted.');
+        }
+        if (!scheduleFrom.isAfter(DateTime.now()) ||
+            scheduleTo.isBefore(scheduleFrom)) {
+          throw ArgumentError('Choose a new future service date and time.');
+        }
+        transaction.set(requestRef, fields);
+        if (privateLocation != null) {
+          transaction.set(
+            requestRef.collection('private').doc('location'),
+            privateLocation,
+          );
+        }
+      });
+      return requestRef.id;
+    }
+    final batch = _firestore.batch();
+    batch.set(requestRef, fields);
     if (privateLocation != null) {
       batch.set(
         requestRef.collection('private').doc('location'),
@@ -157,6 +197,7 @@ class ServiceRequestRepository {
       );
     }
     await batch.commit();
+    return requestRef.id;
   }
 
   /// Edits a posted job. Only allowed while no worker has been hired.
@@ -373,7 +414,13 @@ class ServiceRequestRepository {
       if (existingApplication.exists) {
         throw StateError('You already applied for this request.');
       }
-
+      // Re-evaluate on every transaction retry, using the latest stored schedule.
+      // Security rules independently enforce the same boundary with request.time.
+      if (latest.applicationDeadlineReached(now: _now())) {
+        throw StateError(
+          'This job has reached its service start time and no longer accepts applications.',
+        );
+      }
       transaction.set(applicationRef, {
         'requestId': request.id,
         'clientId': latest.clientId,

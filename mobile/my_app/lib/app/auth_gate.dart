@@ -8,6 +8,7 @@ import '../features/client/presentation/screens/client_home_screen.dart';
 import '../features/onboarding/presentation/screens/swiftserve_onboarding_screen.dart';
 import '../features/worker/presentation/screens/worker_home_screen.dart';
 import '../shared/models/app_user.dart';
+import '../shared/services/expiry_push_service.dart';
 import '../shared/repositories/profile_repository.dart';
 import '../shared/services/client_theme_controller.dart';
 
@@ -63,6 +64,9 @@ class _AuthGateState extends State<AuthGate> {
               }
               return const ProfileCompletionScreen();
             }
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (mounted) ExpiryPushService.instance.profileReady(profile.id);
+            });
             if (profile.role == UserRole.worker) {
               return WorkerHomeScreen(
                 key: ValueKey('${profile.id}-worker'),

@@ -1,3 +1,4 @@
+import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../shared/theme/app_theme.dart';
@@ -75,6 +76,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   }
 
   Future<void> _signOut() async {
+    await ExpiryPushService.instance.beforeSignOut();
     await FirebaseAuth.instance.signOut();
   }
 

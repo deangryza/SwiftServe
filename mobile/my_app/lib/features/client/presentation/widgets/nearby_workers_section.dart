@@ -270,6 +270,11 @@ class _NearbyWorkersSectionState extends State<NearbyWorkersSection> {
                         ),
                         const SizedBox(height: 10),
                         Text(
+                          worker.publicLocationLabel,
+                          style: theme.textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
                           '${worker.isNearby ? 'Nearby' : 'Suggested'} · ${worker.distanceLabel}',
                           style: const TextStyle(fontSize: 12),
                         ),

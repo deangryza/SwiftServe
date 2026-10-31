@@ -1,3 +1,4 @@
+import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -7,6 +8,7 @@ import '../services/api_service.dart';
 import '../services/client_theme_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_confirmation_dialog.dart';
+import '../widgets/push_notification_preferences.dart';
 
 /// Shared settings presentation for the client and worker experiences.
 class SwiftServeSettingsScreen extends StatelessWidget {
@@ -104,6 +106,9 @@ class SwiftServeSettingsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
+                _SectionLabel(label: 'Notifications', color: muted),
+                const PushNotificationPreferences(),
+                const SizedBox(height: 28),
                 _SectionLabel(label: 'Account', color: muted),
                 const SizedBox(height: 10),
                 Material(
@@ -166,6 +171,7 @@ class SwiftServeSettingsScreen extends StatelessWidget {
       icon: Icons.logout_rounded,
     );
     if (!confirmed) return;
+    await ExpiryPushService.instance.beforeSignOut();
     await FirebaseAuth.instance.signOut();
     if (!context.mounted) return;
     Navigator.of(context).popUntil((route) => route.isFirst);

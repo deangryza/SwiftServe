@@ -7,7 +7,8 @@ enum ServiceRequestStatus {
   accepted,
   ongoing,
   completed,
-  cancelled;
+  cancelled,
+  expired;
 
   static ServiceRequestStatus fromWire(Object? value) => values.firstWhere(
     (status) => status.name == value,
@@ -82,6 +83,7 @@ class ServiceRequest {
     this.scheduleFrom,
     this.scheduleTo,
     this.createdAt,
+    this.expiredAt,
     this.dropoffLocation,
     this.dropoffLatitude,
     this.dropoffLongitude,
@@ -109,6 +111,7 @@ class ServiceRequest {
   final DateTime? scheduleFrom;
   final DateTime? scheduleTo;
   final DateTime? createdAt;
+  final DateTime? expiredAt;
 
   // Errand-only fields. For errands, [location] and [areaPosition] are the
   // pickup point, so code that only knows about one place keeps working.
@@ -126,12 +129,22 @@ class ServiceRequest {
   bool get hasKnownCreator =>
       clientId.trim().isNotEmpty && clientId.length <= 128;
 
-  bool isAvailableToWorker(String? uid) =>
+  /// A stored start is an absolute instant, including Philippine midnight.
+  /// Legacy posts without any schedule retain their existing availability.
+  DateTime? get applicationDeadline => scheduleFrom ?? schedule;
+
+  bool applicationDeadlineReached({DateTime? now}) {
+    final start = applicationDeadline;
+    return start != null && !start.isAfter(now ?? DateTime.now());
+  }
+
+  bool isAvailableToWorker(String? uid, {DateTime? now}) =>
       uid != null &&
       uid.isNotEmpty &&
       hasKnownCreator &&
       clientId != uid &&
-      status == ServiceRequestStatus.pending;
+      status == ServiceRequestStatus.pending &&
+      !applicationDeadlineReached(now: now);
 
   /// Short "where" text for cards: the area, prefixed for hybrid jobs.
   String get placeLabel => switch (modality) {
@@ -186,6 +199,7 @@ class ServiceRequest {
           (data['scheduleTo'] as Timestamp?)?.toDate() ??
           (data['schedule'] as Timestamp?)?.toDate(),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate(),
+      expiredAt: (data['expiredAt'] as Timestamp?)?.toDate(),
       dropoffLocation: data['dropoffLocation']?.toString(),
       dropoffLatitude: dropoffAreaPosition?.latitude,
       dropoffLongitude: dropoffAreaPosition?.longitude,

@@ -28,6 +28,7 @@ NotificationAudience? notificationAudience(
   switch (data['type']) {
     case 'workerApplication':
     case 'requestAccepted':
+    case 'jobExpired':
       return NotificationAudience.client;
     case 'applicationAccepted':
       return NotificationAudience.worker;

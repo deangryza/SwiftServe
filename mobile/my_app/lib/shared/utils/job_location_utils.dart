@@ -8,6 +8,12 @@ const double _earthRadiusMeters = 6371000;
 /// decimals moves a point up to ~770 m, so the shown area covers that.
 const double publicAreaRadiusMeters = 800;
 
+bool isValidJobCoordinate(JobCoordinate point) =>
+    point.latitude.isFinite &&
+    point.longitude.isFinite &&
+    point.latitude.abs() <= 90 &&
+    point.longitude.abs() <= 180;
+
 JobCoordinate roundToPublicArea(JobCoordinate coordinate) => JobCoordinate(
   latitude: _roundToTwoDecimals(coordinate.latitude),
   longitude: _roundToTwoDecimals(coordinate.longitude),

@@ -5,6 +5,8 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/phone_number_field.dart';
+import '../widgets/registration_contact_fields.dart';
+import '../widgets/registration_validation_theme.dart';
 import '../widgets/registration_address_fields.dart';
 import 'login_screen.dart';
 
@@ -29,6 +31,7 @@ class ClientAccountForm extends StatefulWidget {
     this.federatedAccount = false,
     this.onChangeRole,
     this.onExit,
+    this.contactAvailability,
   });
 
   final GlobalKey<FormState> formKey;
@@ -49,6 +52,7 @@ class ClientAccountForm extends StatefulWidget {
   final bool federatedAccount;
   final VoidCallback? onChangeRole;
   final VoidCallback? onExit;
+  final ContactAvailabilityLookup? contactAvailability;
 
   @override
   State<ClientAccountForm> createState() => _ClientAccountFormState();
@@ -60,6 +64,8 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
   var _page = 0;
+  final _contactKey = GlobalKey<RegistrationContactFieldsState>();
+  var _continuing = false;
   var _obscurePassword = true;
   var _obscureConfirmation = true;
 
@@ -104,25 +110,40 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
   }
 
-  void _continue() {
-    if (_page == 0) {
-      if (!widget.formKey.currentState!.validate()) return;
-      widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
-    } else if (_page == 1) {
-      if (!widget.formKey.currentState!.validate()) return;
-      if (!widget.acceptedTerms) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please accept the terms and privacy policy.'),
-          ),
-        );
-        return;
+  Future<void> _continue() async {
+    if (_continuing) return;
+    _continuing = true;
+    try {
+      if (_page == 0) {
+        if (!widget.formKey.currentState!.validate()) return;
+        widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
+      } else if (_page == 1) {
+        final available =
+            await _contactKey.currentState?.checkAvailability() ?? false;
+        if (!mounted) return;
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted) return;
+        if (!widget.formKey.currentState!.validate() ||
+            !available ||
+            _contactKey.currentState?.hasCurrentAvailability != true) {
+          return;
+        }
+        if (!widget.acceptedTerms) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please accept the terms and privacy policy.'),
+            ),
+          );
+          return;
+        }
       }
-    }
-    if (_page == 5) {
-      widget.onRegister();
-    } else {
-      _goTo(_page + 1);
+      if (_page == 5) {
+        widget.onRegister();
+      } else {
+        _goTo(_page + 1);
+      }
+    } finally {
+      _continuing = false;
     }
   }
 
@@ -472,16 +493,12 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
 
   Widget _credentialsPage() => Column(
     children: [
-      _inputField(
-        'Email Address',
-        'john@example.com',
-        widget.email,
-        keyboardType: TextInputType.emailAddress,
-        readOnly: widget.federatedAccount,
-      ),
-      PhoneNumberField(
-        fieldKey: const ValueKey('Phone Number'),
-        controller: widget.phone,
+      RegistrationContactFields(
+        key: _contactKey,
+        email: widget.email,
+        phone: widget.phone,
+        emailKey: const ValueKey('Email Address'),
+        phoneKey: const ValueKey('Phone Number'),
         dialCode: widget.countryCode,
         onDialCodeChanged: widget.onCountryCodeChanged ?? (_) {},
         enabled: !widget.loading,
@@ -490,6 +507,8 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         mutedColor: _muted,
         borderColor: _border,
         focusColor: _yellow,
+        federatedAccount: widget.federatedAccount,
+        lookup: widget.contactAvailability,
       ),
       RegistrationAddressFields(
         address: widget.address,
@@ -715,97 +734,102 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   };
 
   @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: _page == 0 && !widget.loading,
-    onPopInvokedWithResult: (didPop, _) {
-      if (!didPop && _page > 0 && !widget.loading) _goTo(_page - 1);
-    },
-    child: Scaffold(
-      backgroundColor: _surface,
-      appBar: AppBar(
+  Widget build(BuildContext context) => RegistrationValidationTheme(
+    child: PopScope(
+      canPop: _page == 0 && !widget.loading,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _page > 0 && !widget.loading) _goTo(_page - 1);
+      },
+      child: Scaffold(
         backgroundColor: _surface,
-        foregroundColor: _text,
-        surfaceTintColor: Colors.transparent,
-        title: const Text('SwiftServe'),
-        leading: IconButton(
-          onPressed: widget.loading
-              ? null
-              : () {
-                  if (_page > 0) {
-                    _goTo(_page - 1);
-                  } else if (widget.onExit != null) {
-                    widget.onExit!();
-                  } else {
-                    Navigator.maybePop(context);
-                  }
-                },
-          icon: const Icon(Icons.arrow_back),
+        appBar: AppBar(
+          backgroundColor: _surface,
+          foregroundColor: _text,
+          surfaceTintColor: Colors.transparent,
+          title: const Text('SwiftServe'),
+          leading: IconButton(
+            onPressed: widget.loading
+                ? null
+                : () {
+                    if (_page > 0) {
+                      _goTo(_page - 1);
+                    } else if (widget.onExit != null) {
+                      widget.onExit!();
+                    } else {
+                      Navigator.maybePop(context);
+                    }
+                  },
+            icon: const Icon(Icons.arrow_back),
+          ),
         ),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _header(),
-            Expanded(
-              child: Form(
-                key: widget.formKey,
-                child: SingleChildScrollView(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _pageContent(),
-                      const SizedBox(height: 12),
-                      FilledButton(
-                        key: const ValueKey('client-registration-next'),
-                        onPressed: widget.loading ? null : _continue,
-                        style: FilledButton.styleFrom(
-                          backgroundColor: _yellow,
-                          foregroundColor: AppTheme.ink,
-                          minimumSize: const Size.fromHeight(52),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: widget.loading
-                            ? const SizedBox.square(
-                                dimension: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                _page == 4
-                                    ? 'Start scan'
-                                    : _page == 5
-                                    ? 'Go to Dashboard'
-                                    : 'Next',
-                              ),
-                      ),
-                      if (_page == 3 || _page == 4)
-                        TextButton(
-                          onPressed: () => _goTo(_page + 1),
-                          child: const Text('Skip for now'),
-                        ),
-                      const SizedBox(height: 8),
-                      if (!widget.federatedAccount)
-                        TextButton(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const LoginScreen(),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              _header(),
+              Expanded(
+                child: Form(
+                  key: widget.formKey,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  child: SingleChildScrollView(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _pageContent(),
+                        const SizedBox(height: 12),
+                        FilledButton(
+                          key: const ValueKey('client-registration-next'),
+                          onPressed: widget.loading ? null : _continue,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: _yellow,
+                            foregroundColor: AppTheme.ink,
+                            minimumSize: const Size.fromHeight(52),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
                             ),
                           ),
-                          child: const Text('Already have an account? Log In'),
+                          child: widget.loading
+                              ? const SizedBox.square(
+                                  dimension: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : Text(
+                                  _page == 4
+                                      ? 'Start scan'
+                                      : _page == 5
+                                      ? 'Go to Dashboard'
+                                      : 'Next',
+                                ),
                         ),
-                    ],
+                        if (_page == 3 || _page == 4)
+                          TextButton(
+                            onPressed: () => _goTo(_page + 1),
+                            child: const Text('Skip for now'),
+                          ),
+                        const SizedBox(height: 8),
+                        if (!widget.federatedAccount)
+                          TextButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const LoginScreen(),
+                              ),
+                            ),
+                            child: const Text(
+                              'Already have an account? Log In',
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     ),

@@ -12,13 +12,16 @@ import '../../../../shared/widgets/role_notification_feed.dart';
 import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/utils/service_schedule.dart';
+import '../../../../shared/widgets/service_deadline_builder.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/repositories/verification_repository.dart';
 import '../../../../shared/services/device_location_service.dart';
-import '../../../../shared/services/job_geocoding_service.dart';
+import '../../../../shared/services/nearby_location_controller.dart';
+import '../widgets/worker_nearby_location_panel.dart';
 import '../../../../shared/utils/job_location_utils.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
-import '../../../../shared/widgets/worker_rating_summary.dart';
+import '../../../../shared/widgets/account_rating_summary.dart';
 import '../../../../shared/screens/reviews_screen.dart';
 import '../../../../shared/screens/swiftserve_settings_screen.dart';
 import '../../../client/presentation/screens/client_sections.dart';
@@ -208,7 +211,8 @@ List<ServiceRequest> filterWorkerDashboardRequests({
   required Iterable<ServiceRequest> requests,
   required Iterable<ServiceApplication> applications,
   required WorkerDashboardRequestFilter filter,
-  JobCoordinate? workerAddressPosition,
+  JobCoordinate? workerCurrentPosition,
+  DateTime? now,
 }) {
   final appliedRequestIds = applications
       .map((application) => application.requestId)
@@ -217,7 +221,7 @@ List<ServiceRequest> filterWorkerDashboardRequests({
       requests
           .where(
             (request) =>
-                request.isAvailableToWorker(workerId) &&
+                request.isAvailableToWorker(workerId, now: now) &&
                 !appliedRequestIds.contains(request.id),
           )
           .toList()
@@ -230,13 +234,18 @@ List<ServiceRequest> filterWorkerDashboardRequests({
           return rightTime.compareTo(leftTime);
         });
   if (filter == WorkerDashboardRequestFilter.nearby) {
-    if (workerAddressPosition == null) return [];
+    if (workerCurrentPosition == null ||
+        !isValidJobCoordinate(workerCurrentPosition)) {
+      return [];
+    }
     final nearby = eligible.where((request) {
       final position = request.areaPosition;
       return request.modality.needsLocation &&
           position != null &&
-          distanceMetersBetween(workerAddressPosition, position) <=
-              workerNearbyRadiusMeters;
+          isValidJobCoordinate(position) &&
+          distanceMetersBetween(workerCurrentPosition, position) <=
+              workerNearbyRadiusMeters +
+                  0.000001; // Floating-point boundary tolerance (1 micrometre).
     }).toList();
     // List.sort is not stable; preserve newest-first order for equal distances.
     final recentOrder = {
@@ -245,10 +254,10 @@ List<ServiceRequest> filterWorkerDashboardRequests({
     nearby.sort((left, right) {
       final comparison =
           distanceMetersBetween(
-            workerAddressPosition,
+            workerCurrentPosition,
             left.areaPosition!,
           ).compareTo(
-            distanceMetersBetween(workerAddressPosition, right.areaPosition!),
+            distanceMetersBetween(workerCurrentPosition, right.areaPosition!),
           );
       return comparison == 0
           ? recentOrder[left.id]!.compareTo(recentOrder[right.id]!)
@@ -287,82 +296,92 @@ class _WorkerDashboard extends StatefulWidget {
   State<_WorkerDashboard> createState() => _WorkerDashboardState();
 }
 
-class _WorkerDashboardState extends State<_WorkerDashboard> {
-  static const _locationService = DeviceLocationService();
+class _WorkerDashboardState extends State<_WorkerDashboard>
+    with WidgetsBindingObserver {
+  final _nearbyLocation = NearbyLocationController();
   var _filter = WorkerDashboardRequestFilter.recent;
-  JobCoordinate? _workerPosition;
-  DeviceLocationException? _locationError;
-  bool _loadingLocation = true;
-  JobCoordinate? _addressPosition;
-  bool _loadingAddress = false;
-  String? _addressError;
-  int _addressRequest = 0;
+  late Stream<List<ServiceRequest>> _requestStream;
+  late Stream<List<ServiceApplication>> _applicationStream;
+
+  void _loadJobStreams() {
+    final repository = ServiceRequestRepository();
+    _requestStream = repository.watchAvailable();
+    _applicationStream = repository.watchWorkerApplications(widget.worker.id);
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadLocation();
-    _loadAddress();
+    WidgetsBinding.instance.addObserver(this);
+    _loadJobStreams();
+    _nearbyLocation.addListener(_locationChanged);
+    _nearbyLocation.refresh(); // Inspect existing permission without prompting.
+  }
+
+  void _locationChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void didUpdateWidget(covariant _WorkerDashboard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.worker.address != widget.worker.address) _loadAddress();
-  }
-
-  Future<void> _loadAddress() async {
-    final request = ++_addressRequest;
-    final address = widget.worker.address.trim();
-    setState(() {
-      _addressPosition = null;
-      _addressError = null;
-      _loadingAddress = address.isNotEmpty;
-      if (address.isEmpty) {
-        _addressError = 'Add your address to your profile to find nearby jobs.';
-      }
-    });
-    if (address.isEmpty) return;
-    try {
-      final location = await JobGeocodingService()
-          .search(address)
-          .timeout(const Duration(seconds: 20));
-      if (!mounted || request != _addressRequest) return;
-      setState(() => _addressPosition = location.position);
-    } catch (_) {
-      if (!mounted || request != _addressRequest) return;
-      setState(
-        () => _addressError =
-            'Could not locate your saved address. Check your address and connection, then retry.',
-      );
-    } finally {
-      if (mounted && request == _addressRequest) {
-        setState(() => _loadingAddress = false);
-      }
+    if (oldWidget.worker.id != widget.worker.id) {
+      _loadJobStreams();
+      _nearbyLocation.invalidate();
+      _nearbyLocation.refresh();
     }
   }
 
-  Future<void> _loadLocation() async {
-    setState(() {
-      _loadingLocation = true;
-      _locationError = null;
-    });
-    try {
-      final position = await _locationService.currentPosition();
-      if (!mounted) return;
-      setState(() => _workerPosition = position);
-    } on DeviceLocationException catch (error) {
-      if (!mounted) return;
-      setState(() => _locationError = error);
-    } finally {
-      if (mounted) setState(() => _loadingLocation = false);
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _nearbyLocation.removeListener(_locationChanged);
+    _nearbyLocation.dispose();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _nearbyLocation.invalidate();
+    } else if (state == AppLifecycleState.resumed &&
+        _filter == WorkerDashboardRequestFilter.nearby) {
+      _nearbyLocation.refresh();
     }
   }
 
-  Future<void> _openLocationSettings() async {
-    final error = _locationError;
-    if (error == null) return;
-    await _locationService.openRecoverySettings(error.failure);
+  void _selectRequestFilter(WorkerDashboardRequestFilter filter) {
+    setState(() => _filter = filter);
+    _nearbyLocation.invalidate();
+    _nearbyLocation.refresh();
+  }
+
+  Future<void> _loadLocation() =>
+      _nearbyLocation.refresh(requestPermission: true);
+  Future<void> _openLocationSettings() => _nearbyLocation.openSettings();
+
+  Widget _jobsError(String message) => Center(
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(message, textAlign: TextAlign.center),
+          TextButton(
+            onPressed: () => setState(_loadJobStreams),
+            child: const Text('Retry jobs'),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Future<void> _openRequest(ServiceRequest request) async {
+    await _openJob(context, request, widget.worker);
+    if (!mounted || _filter != WorkerDashboardRequestFilter.nearby) return;
+    _nearbyLocation.invalidate();
+    await _nearbyLocation.refresh();
   }
 
   String? _distanceLabel(ServiceRequest request) {
@@ -370,9 +389,8 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
     if (!request.modality.needsLocation) return null;
     final jobPosition = request.areaPosition;
     if (jobPosition == null) return 'Distance unavailable';
-    final nearby = _filter == WorkerDashboardRequestFilter.nearby;
-    if (nearby ? _loadingAddress : _loadingLocation) return 'Finding distance…';
-    final workerPosition = nearby ? _addressPosition : _workerPosition;
+    if (_nearbyLocation.loading) return 'Finding distance\u2026';
+    final workerPosition = _nearbyLocation.position;
     if (workerPosition == null) return 'Distance unavailable';
     final toJob = formatDistance(
       distanceMetersBetween(workerPosition, jobPosition),
@@ -388,168 +406,179 @@ class _WorkerDashboardState extends State<_WorkerDashboard> {
   Widget build(BuildContext context) {
     final palette = _WorkerPalette.of(context);
     return StreamBuilder<List<ServiceRequest>>(
-      stream: ServiceRequestRepository().watchAvailable(),
+      stream: _requestStream,
       builder: (context, requestSnapshot) {
         if (requestSnapshot.hasError) {
-          return Center(child: Text('${requestSnapshot.error}'));
+          return _jobsError(
+            'Could not load jobs. Check your connection and try again.',
+          );
         }
         if (!requestSnapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 12),
+                Text('Loading job requests...'),
+              ],
+            ),
+          );
         }
-        return StreamBuilder<List<ServiceApplication>>(
-          stream: ServiceRequestRepository().watchWorkerApplications(
-            widget.worker.id,
-          ),
-          builder: (context, applicationSnapshot) {
-            if (applicationSnapshot.hasError) {
-              return Center(child: Text('${applicationSnapshot.error}'));
-            }
-            if (!applicationSnapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            final allEligible = filterWorkerDashboardRequests(
-              workerId: widget.worker.id,
-              requests: requestSnapshot.data!,
-              applications: applicationSnapshot.data!,
-              filter: WorkerDashboardRequestFilter.available,
-            );
-            final requests = filterWorkerDashboardRequests(
-              workerId: widget.worker.id,
-              requests: requestSnapshot.data!,
-              applications: applicationSnapshot.data!,
-              filter: _filter,
-              workerAddressPosition: _addressPosition,
-            );
-            return ColoredBox(
-              color: palette.background,
-              child: SafeArea(
-                bottom: false,
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 430),
-                    child: ListView(
-                      padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
-                      children: [
-                        _WorkerDashboardHeader(worker: widget.worker),
-                        const SizedBox(height: 14),
-                        _WorkerDashboardSearchField(
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  WorkerSearchScreen(worker: widget.worker),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 18),
-                        const _WorkerHeroBannerCarousel(),
-                        if (!widget.verificationState.isVerified) ...[
+        return ServiceDeadlineBuilder(
+          requests: requestSnapshot.data!,
+          builder: (context, now) => StreamBuilder<List<ServiceApplication>>(
+            stream: _applicationStream,
+            builder: (context, applicationSnapshot) {
+              if (applicationSnapshot.hasError) {
+                return _jobsError(
+                  'Could not load your applications. Check your connection and try again.',
+                );
+              }
+              if (!applicationSnapshot.hasData) {
+                return const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 12),
+                      Text('Checking your applications...'),
+                    ],
+                  ),
+                );
+              }
+              final allEligible = filterWorkerDashboardRequests(
+                workerId: widget.worker.id,
+                requests: requestSnapshot.data!,
+                applications: applicationSnapshot.data!,
+                filter: WorkerDashboardRequestFilter.available,
+                now: now,
+              );
+              final requests = filterWorkerDashboardRequests(
+                workerId: widget.worker.id,
+                requests: requestSnapshot.data!,
+                applications: applicationSnapshot.data!,
+                filter: _filter,
+                now: now,
+                workerCurrentPosition: _nearbyLocation.position,
+              );
+              return ColoredBox(
+                color: palette.background,
+                child: SafeArea(
+                  bottom: false,
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 430),
+                      child: ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+                        children: [
+                          _WorkerDashboardHeader(worker: widget.worker),
                           const SizedBox(height: 14),
-                          _VerificationBanner(
-                            state: widget.verificationState,
-                            onTap: () =>
-                                _openVerification(context, widget.worker),
-                          ),
-                        ],
-                        if (_filter != WorkerDashboardRequestFilter.nearby &&
-                            _locationError != null &&
-                            requests.any(
-                              (request) => request.areaPosition != null,
-                            )) ...[
-                          const SizedBox(height: 14),
-                          _LocationStatusBanner(
-                            error: _locationError!,
-                            onRetry: _loadLocation,
-                            onOpenSettings: _openLocationSettings,
-                          ),
-                        ],
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Job Requests',
-                                style: TextStyle(
-                                  color: palette.text,
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                ),
+                          _WorkerDashboardSearchField(
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    WorkerSearchScreen(worker: widget.worker),
                               ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 15,
-                                vertical: 7,
-                              ),
-                              decoration: BoxDecoration(
-                                color: palette.surface,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${allEligible.length} open',
-                                style: TextStyle(
-                                  color: palette.text,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        _WorkerRequestFilter(
-                          selected: _filter,
-                          onChanged: (filter) =>
-                              setState(() => _filter = filter),
-                        ),
-                        const SizedBox(height: 14),
-                        if (_filter == WorkerDashboardRequestFilter.nearby) ...[
-                          Text(
-                            _loadingAddress
-                                ? 'Finding jobs near your saved address…'
-                                : _addressError ??
-                                      'Within 10 km of your saved address · Approximate distances',
-                            style: TextStyle(
-                              color: palette.muted,
-                              fontSize: 12,
                             ),
                           ),
-                          if (_loadingAddress) const LinearProgressIndicator(),
-                          if (_addressError != null &&
-                              widget.worker.address.trim().isNotEmpty)
-                            TextButton(
-                              onPressed: _loadAddress,
-                              child: const Text('Retry address lookup'),
-                            ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (_filter == WorkerDashboardRequestFilter.nearby &&
-                            (_loadingAddress || _addressError != null))
-                          const SizedBox.shrink()
-                        else if (requests.isEmpty &&
-                            _filter == WorkerDashboardRequestFilter.nearby)
-                          const Text(
-                            'No open jobs within 10 km of your saved address. Check Recent for more jobs.',
-                          )
-                        else if (requests.isEmpty)
-                          const _EmptyWorkerRequests()
-                        else
-                          for (final request in requests) ...[
-                            _WorkerRequestCard(
-                              request: request,
-                              distanceLabel: _distanceLabel(request),
-                              onTap: () =>
-                                  _openJob(context, request, widget.worker),
-                            ),
+                          const SizedBox(height: 18),
+                          const _WorkerHeroBannerCarousel(),
+                          if (!widget.verificationState.isVerified) ...[
                             const SizedBox(height: 14),
+                            _VerificationBanner(
+                              state: widget.verificationState,
+                              onTap: () =>
+                                  _openVerification(context, widget.worker),
+                            ),
                           ],
-                      ],
+                          if (_filter != WorkerDashboardRequestFilter.nearby &&
+                              _nearbyLocation.error != null &&
+                              requests.any(
+                                (request) => request.areaPosition != null,
+                              )) ...[
+                            const SizedBox(height: 14),
+                            _LocationStatusBanner(
+                              error: _nearbyLocation.error!,
+                              onRetry: _loadLocation,
+                              onOpenSettings: _openLocationSettings,
+                            ),
+                          ],
+                          const SizedBox(height: 20),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'Job Requests',
+                                  style: TextStyle(
+                                    color: palette.text,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 15,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: palette.surface,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  '${allEligible.length} open',
+                                  style: TextStyle(
+                                    color: palette.text,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _WorkerRequestFilter(
+                            selected: _filter,
+                            onChanged: _selectRequestFilter,
+                          ),
+                          const SizedBox(height: 14),
+                          if (_filter ==
+                              WorkerDashboardRequestFilter.nearby) ...[
+                            WorkerNearbyLocationPanel(
+                              controller: _nearbyLocation,
+                            ),
+                            const SizedBox(height: 12),
+                          ],
+                          if (_filter == WorkerDashboardRequestFilter.nearby &&
+                              (_nearbyLocation.loading ||
+                                  _nearbyLocation.position == null))
+                            const SizedBox.shrink()
+                          else if (requests.isEmpty &&
+                              _filter == WorkerDashboardRequestFilter.nearby)
+                            const Text(
+                              'No open jobs within 10 km of your current location. Refresh after moving or check Recent for more jobs.',
+                            )
+                          else if (requests.isEmpty)
+                            const _EmptyWorkerRequests()
+                          else
+                            for (final request in requests) ...[
+                              _WorkerRequestCard(
+                                request: request,
+                                distanceLabel: _distanceLabel(request),
+                                onTap: () => _openRequest(request),
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         );
       },
     );
@@ -934,6 +963,10 @@ class _WorkerRequestCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: palette.muted, fontSize: 13),
+                    ),
+                    Text(
+                      serviceScheduleLabel(request),
+                      style: TextStyle(color: palette.muted, fontSize: 12),
                     ),
                     if (distanceLabel != null)
                       Text(
@@ -1375,7 +1408,6 @@ class _WorkerBookingCard extends StatelessWidget {
     final palette = _WorkerPalette.of(context);
     final request = entry.request;
     final (statusLabel, _) = _workerBookingStatus(entry);
-    final date = request.scheduleFrom ?? request.schedule ?? request.createdAt;
     return Material(
       color: palette.surface,
       elevation: 0,
@@ -1409,10 +1441,15 @@ class _WorkerBookingCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${request.location.isEmpty ? 'Location unavailable' : request.placeLabel}'
-                        '${date == null ? '' : ' · ${_formatBookingDate(date)}'}',
+                        request.location.isEmpty
+                            ? 'Location unavailable'
+                            : request.placeLabel,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: palette.muted, fontSize: 11),
+                      ),
+                      Text(
+                        serviceScheduleLabel(request),
                         style: TextStyle(color: palette.muted, fontSize: 11),
                       ),
                       Text(
@@ -1490,27 +1527,12 @@ class _WorkerBookingsEmptyState extends StatelessWidget {
   };
 }
 
-String _formatBookingDate(DateTime date) {
-  final local = date.toLocal();
-  const months = [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ];
-  return '${months[local.month - 1]} ${local.day}, ${local.year}';
-}
-
-void _openJob(BuildContext context, ServiceRequest request, AppUser worker) {
-  Navigator.push(
+Future<void> _openJob(
+  BuildContext context,
+  ServiceRequest request,
+  AppUser worker,
+) async {
+  await Navigator.push(
     context,
     MaterialPageRoute(
       builder: (_) => WorkerJobDetailsScreen(request: request, worker: worker),
@@ -1648,8 +1670,8 @@ class _WorkerProfileView extends StatelessWidget {
                     const SizedBox(height: 21),
                     Divider(color: muted.withValues(alpha: 0.18), height: 1),
                     const SizedBox(height: 18),
-                    WorkerRatingBuilder(
-                      workerId: worker.id,
+                    AccountRatingBuilder(
+                      userId: worker.id,
                       builder: (context, rating) =>
                           StreamBuilder<List<ServiceApplication>>(
                             stream: ServiceRequestRepository()
@@ -1666,9 +1688,7 @@ class _WorkerProfileView extends StatelessWidget {
                                 ),
                                 _WorkerProfileStat(
                                   value: rating.displayAverage,
-                                  label: rating.reviewCount == 1
-                                      ? '1 rating'
-                                      : '${rating.reviewCount} ratings',
+                                  label: rating.label,
                                   text: text,
                                   muted: muted,
                                   onTap: () => Navigator.push(
@@ -1676,7 +1696,7 @@ class _WorkerProfileView extends StatelessWidget {
                                     MaterialPageRoute(
                                       builder: (_) => ReviewsScreen(
                                         userId: worker.id,
-                                        reviewsFor: ReviewsFor.worker,
+                                        reviewsFor: ReviewsFor.account,
                                       ),
                                     ),
                                   ),
@@ -1779,7 +1799,7 @@ class _WorkerProfileView extends StatelessWidget {
                     MaterialPageRoute(
                       builder: (_) => ReviewsScreen(
                         userId: worker.id,
-                        reviewsFor: ReviewsFor.worker,
+                        reviewsFor: ReviewsFor.account,
                       ),
                     ),
                   ),

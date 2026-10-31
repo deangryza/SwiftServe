@@ -25,7 +25,9 @@ DiscoveredWorker worker(
 );
 
 class _Source implements WorkerDiscoverySource {
-  Map<String, dynamic>? profile = {'address': 'Client address'};
+  Map<String, dynamic>? profile = {
+    'address': '123 Client Street, Brgy. Client, Exampletown, Province',
+  };
   final pages = <List<DiscoveredWorker>>[];
   int reads = 0;
   int pageIndex = 0;
@@ -67,9 +69,22 @@ class _Source implements WorkerDiscoverySource {
 class _Resolver extends Fake implements JobAddressResolver {
   final calls = <String>[];
   final coordinates = <String, JobCoordinate>{
-    'Client address': const JobCoordinate(latitude: 14.84, longitude: 120.81),
-    'Nearby address': const JobCoordinate(latitude: 14.841, longitude: 120.81),
-    'Far address': const JobCoordinate(latitude: 15.84, longitude: 120.81),
+    // The old implementation could resolve these private details; regression
+    // assertions must prove they are no longer sent, rather than fail by chance.
+    '123 Client Street, Brgy. Client, Exampletown, Province':
+        const JobCoordinate(latitude: 14.84, longitude: 120.81),
+    'Brgy. Client, Exampletown': const JobCoordinate(
+      latitude: 14.84,
+      longitude: 120.81,
+    ),
+    'Brgy. Nearby, Exampletown': const JobCoordinate(
+      latitude: 14.841,
+      longitude: 120.81,
+    ),
+    'Brgy. Far, Exampletown': const JobCoordinate(
+      latitude: 15.84,
+      longitude: 120.81,
+    ),
   };
   @override
   Future<JobLocationSelection> search(String address) async {
@@ -100,6 +115,55 @@ class _Location extends DeviceLocationService {
 }
 
 void main() {
+  test(
+    'worker discovery geocodes the public locality, never the residential address',
+    () async {
+      const exact = '123 Example Street, Brgy. Ligas, Malolos, Bulacan';
+      final source = _Source()
+        ..pages.add([worker('private-worker', address: exact)]);
+      final resolver = _Resolver()
+        ..coordinates.addAll({
+          exact: const JobCoordinate(latitude: 14.841, longitude: 120.81),
+          'Brgy. Ligas, Malolos': const JobCoordinate(
+            latitude: 14.841,
+            longitude: 120.81,
+          ),
+        });
+      final service = WorkerDiscoveryService(
+        clientId: 'client',
+        source: source,
+        resolver: resolver,
+      );
+      final result = await service.nextBatch();
+      expect(result.workers.single.isNearby, isTrue);
+      expect(result.workers.single.publicLocationLabel, 'Brgy. Ligas, Malolos');
+      expect(resolver.calls, contains('Brgy. Ligas, Malolos'));
+      expect(resolver.calls, isNot(contains(exact)));
+      expect(resolver.calls, isNot(contains(source.profile!['address'])));
+    },
+  );
+
+  test(
+    'unrecognized residential address produces a suggestion without geocoding it',
+    () async {
+      final source = _Source()
+        ..pages.add([worker('private-worker', address: '123 Example Street')]);
+      final resolver = _Resolver();
+      final result = await WorkerDiscoveryService(
+        clientId: 'client',
+        source: source,
+        resolver: resolver,
+      ).nextBatch();
+      expect(result.workers.single.isNearby, isFalse);
+      expect(result.workers.single.distanceMeters, isNull);
+      expect(
+        result.workers.single.publicLocationLabel,
+        'Location not provided',
+      );
+      expect(resolver.calls, isNot(contains('123 Example Street')));
+    },
+  );
+
   test('nearby includes zero through exactly 10 km, sorted nearest first', () {
     final result = nextWorkerRecommendations(
       workers: [
@@ -201,9 +265,9 @@ void main() {
   test(
     'refresh re-reads the directory after all workers have been shown',
     () async {
-      source.pages.add([worker('old', address: 'Nearby address')]);
+      source.pages.add([worker('old', address: 'Brgy. Nearby, Exampletown')]);
       expect((await service.nextBatch()).workers.single.id, 'old');
-      source.pages[0] = [worker('new', address: 'Nearby address')];
+      source.pages[0] = [worker('new', address: 'Brgy. Nearby, Exampletown')];
       expect((await service.nextBatch()).workers.single.id, 'new');
       expect(source.restarts, 1);
       expect(source.reads, 2);
@@ -214,15 +278,15 @@ void main() {
     'repeated profile IDs are deduplicated and changed locations are recalculated',
     () async {
       source.pages.addAll([
-        [worker('a', address: 'Nearby address')],
+        [worker('a', address: 'Brgy. Nearby, Exampletown')],
         [
-          worker('a', address: 'Far address'),
-          worker('b', address: 'Nearby address'),
+          worker('a', address: 'Brgy. Far, Exampletown'),
+          worker('b', address: 'Brgy. Nearby, Exampletown'),
         ],
       ]);
       expect((await service.nextBatch()).workers.single.id, 'a');
       expect((await service.nextBatch()).workers.single.id, 'b');
-      expect(resolver.calls, contains('Far address'));
+      expect(resolver.calls, contains('Brgy. Far, Exampletown'));
     },
   );
 
@@ -230,8 +294,8 @@ void main() {
     'real resolved coordinates determine distances; successful lookups are cached',
     () async {
       source.pages.addAll([
-        [worker('a', address: 'Nearby address')],
-        [worker('b', address: 'Nearby address')],
+        [worker('a', address: 'Brgy. Nearby, Exampletown')],
+        [worker('b', address: 'Brgy. Nearby, Exampletown')],
       ]);
       final first = await service.nextBatch();
       expect(first.workers.single.distanceMeters, inInclusiveRange(110, 112));
@@ -239,8 +303,14 @@ void main() {
       final next = await service.nextBatch();
       expect(next.workers.single.id, 'b');
       expect(source.reads, 2);
-      expect(resolver.calls.where((q) => q == 'Nearby address'), hasLength(1));
-      expect(resolver.calls.where((q) => q == 'Client address'), hasLength(1));
+      expect(
+        resolver.calls.where((q) => q == 'Brgy. Nearby, Exampletown'),
+        hasLength(1),
+      );
+      expect(
+        resolver.calls.where((q) => q == 'Brgy. Client, Exampletown'),
+        hasLength(1),
+      );
       expect(location.calls, 0);
     },
   );
@@ -249,7 +319,7 @@ void main() {
     'unknown client location returns clearly described suggestions',
     () async {
       source.profile = null;
-      source.pages.add([worker('a', address: 'Nearby address')]);
+      source.pages.add([worker('a', address: 'Brgy. Nearby, Exampletown')]);
       final result = await service.nextBatch();
       expect(result.workers.single.distanceMeters, isNull);
       expect(result.locationMessage, contains('no confirmed nearby distance'));
@@ -259,7 +329,7 @@ void main() {
 
   test('GPS permission denial falls back to saved address', () async {
     location.denied = true;
-    source.pages.add([worker('a', address: 'Nearby address')]);
+    source.pages.add([worker('a', address: 'Brgy. Nearby, Exampletown')]);
     final result = await service.nextBatch(useCurrentLocation: true);
     expect(result.workers.single.isNearby, isTrue);
     expect(
@@ -272,29 +342,32 @@ void main() {
     'GPS selection changes the origin without changing stored profile data',
     () async {
       source.pages.add([
-        worker('a', address: 'Nearby address'),
-        worker('b', address: 'Far address'),
+        worker('a', address: 'Brgy. Nearby, Exampletown'),
+        worker('b', address: 'Brgy. Far, Exampletown'),
       ]);
       expect((await service.nextBatch()).workers.single.id, 'a');
       expect(
         (await service.nextBatch(useCurrentLocation: true)).workers.single.id,
         'b',
       );
-      expect(source.profile!['address'], 'Client address');
+      expect(
+        source.profile!['address'],
+        '123 Client Street, Brgy. Client, Exampletown, Province',
+      );
     },
   );
 
   test(
     'missing and invalid worker coordinates never invent distances',
     () async {
-      resolver.coordinates['Invalid address'] = const JobCoordinate(
+      resolver.coordinates['Brgy. Invalid, Exampletown'] = const JobCoordinate(
         latitude: 91,
         longitude: 120,
       );
       source.pages.add([
         worker('a'),
-        worker('b', address: 'Invalid address'),
-        worker('c', address: 'Offline address'),
+        worker('b', address: 'Brgy. Invalid, Exampletown'),
+        worker('c', address: 'Brgy. Offline, Exampletown'),
       ]);
       final result = await service.nextBatch();
       expect(result.workers, hasLength(3));

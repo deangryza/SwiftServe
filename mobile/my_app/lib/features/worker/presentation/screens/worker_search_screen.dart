@@ -5,6 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/utils/service_schedule.dart';
+import '../../../../shared/utils/public_profile_location.dart';
+import '../../../../shared/widgets/service_deadline_builder.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/theme/app_theme.dart';
@@ -56,6 +59,7 @@ List<ServiceRequest> availableWorkerSearchRequests({
   required Iterable<ServiceRequest> requests,
   required Iterable<ServiceApplication> applications,
   required String query,
+  DateTime? now,
 }) {
   final appliedRequestIds = applications
       .map((application) => application.requestId)
@@ -64,7 +68,7 @@ List<ServiceRequest> availableWorkerSearchRequests({
       requests
           .where(
             (request) =>
-                request.isAvailableToWorker(workerId) &&
+                request.isAvailableToWorker(workerId, now: now) &&
                 !appliedRequestIds.contains(request.id) &&
                 matchesWorkerSearchRequest(request, query),
           )
@@ -342,98 +346,108 @@ class _WorkerSearchScreenState extends State<WorkerSearchScreen> {
                 message: 'Could not search services right now.',
               );
             }
-            return StreamBuilder<List<ServiceApplication>>(
-              stream: ServiceRequestRepository().watchWorkerApplications(
-                widget.worker.id,
-              ),
-              builder: (context, applicationSnapshot) {
-                if (applicationSnapshot.hasError) {
-                  return const _SearchMessage(
-                    message: 'Could not check your applications right now.',
-                  );
-                }
-                if (!clientSnapshot.hasData ||
-                    !requestSnapshot.hasData ||
-                    !applicationSnapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+            return ServiceDeadlineBuilder(
+              requests: requestSnapshot.data ?? const [],
+              builder: (context, now) =>
+                  StreamBuilder<List<ServiceApplication>>(
+                    stream: ServiceRequestRepository().watchWorkerApplications(
+                      widget.worker.id,
+                    ),
+                    builder: (context, applicationSnapshot) {
+                      if (applicationSnapshot.hasError) {
+                        return const _SearchMessage(
+                          message:
+                              'Could not check your applications right now.',
+                        );
+                      }
+                      if (!clientSnapshot.hasData ||
+                          !requestSnapshot.hasData ||
+                          !applicationSnapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
 
-                final users = clientSnapshot.data!.docs
-                    .where(
-                      (document) =>
-                          document.id != widget.worker.id &&
-                          publicProfileMatchesQuery(document.data(), query),
-                    )
-                    .toList(growable: false);
-                final services = availableWorkerSearchRequests(
-                  workerId: widget.worker.id,
-                  requests: requestSnapshot.data!,
-                  applications: applicationSnapshot.data!,
-                  query: query,
-                );
-                if (users.isEmpty && services.isEmpty) {
-                  return const _SearchMessage(
-                    message: 'No matching users or services found.',
-                  );
-                }
-                return ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-                  children: [
-                    if (users.isNotEmpty) ...[
-                      const _ResultsTitle(title: 'Users'),
-                      const SizedBox(height: 10),
-                      for (final user in users) ...[
-                        _UserResult(
-                          id: user.id,
-                          data: user.data(),
-                          onOpen: () async {
-                            await _saveSearch(_searchController.text);
-                            if (!context.mounted) return;
-                            final role = profileHasRole(user.data(), 'worker')
-                                ? PublicProfileRole.worker
-                                : PublicProfileRole.client;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => PublicProfileScreen(
-                                  userId: user.id,
-                                  role: role,
-                                  initialData: user.data(),
+                      final users = clientSnapshot.data!.docs
+                          .where(
+                            (document) =>
+                                document.id != widget.worker.id &&
+                                publicProfileMatchesQuery(
+                                  document.data(),
+                                  query,
                                 ),
+                          )
+                          .toList(growable: false);
+                      final services = availableWorkerSearchRequests(
+                        workerId: widget.worker.id,
+                        requests: requestSnapshot.data!,
+                        applications: applicationSnapshot.data!,
+                        query: query,
+                        now: now,
+                      );
+                      if (users.isEmpty && services.isEmpty) {
+                        return const _SearchMessage(
+                          message: 'No matching users or services found.',
+                        );
+                      }
+                      return ListView(
+                        padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+                        children: [
+                          if (users.isNotEmpty) ...[
+                            const _ResultsTitle(title: 'Users'),
+                            const SizedBox(height: 10),
+                            for (final user in users) ...[
+                              _UserResult(
+                                id: user.id,
+                                data: user.data(),
+                                onOpen: () async {
+                                  await _saveSearch(_searchController.text);
+                                  if (!context.mounted) return;
+                                  final role =
+                                      profileHasRole(user.data(), 'worker')
+                                      ? PublicProfileRole.worker
+                                      : PublicProfileRole.client;
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PublicProfileScreen(
+                                        userId: user.id,
+                                        role: role,
+                                        initialData: user.data(),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ],
-                    if (services.isNotEmpty) ...[
-                      if (users.isNotEmpty) const SizedBox(height: 18),
-                      const _ResultsTitle(title: 'Services'),
-                      const SizedBox(height: 10),
-                      for (final request in services) ...[
-                        _ServiceResult(
-                          request: request,
-                          onOpen: () async {
-                            await _saveSearch(_searchController.text);
-                            if (!context.mounted) return;
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => WorkerJobDetailsScreen(
-                                  request: request,
-                                  worker: widget.worker,
-                                ),
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                          if (services.isNotEmpty) ...[
+                            if (users.isNotEmpty) const SizedBox(height: 18),
+                            const _ResultsTitle(title: 'Services'),
+                            const SizedBox(height: 10),
+                            for (final request in services) ...[
+                              _ServiceResult(
+                                request: request,
+                                onOpen: () async {
+                                  await _saveSearch(_searchController.text);
+                                  if (!context.mounted) return;
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => WorkerJobDetailsScreen(
+                                        request: request,
+                                        worker: widget.worker,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 10),
-                      ],
-                    ],
-                  ],
-                );
-              },
+                              const SizedBox(height: 10),
+                            ],
+                          ],
+                        ],
+                      );
+                    },
+                  ),
             );
           },
         );
@@ -467,7 +481,7 @@ class _UserResult extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final name = (data['fullName'] ?? 'SwiftServe user').toString();
-    final location = (data['location'] ?? 'Location not provided').toString();
+    final location = PublicProfileLocation.fromProfile(data).displayLabel;
     final worker = profileHasRole(data, 'worker');
     return Card(
       child: ListTile(
@@ -515,8 +529,8 @@ class _ServiceResult extends StatelessWidget {
       title: Text(request.title),
       subtitle: Text(
         '${request.clientName} · ${request.category}\n'
-        '${request.location} · ₱${request.budget.toStringAsFixed(0)}',
-        maxLines: 2,
+        '${request.location} · ₱${request.budget.toStringAsFixed(0)}\n'
+        '${serviceScheduleLabel(request)}',
         overflow: TextOverflow.ellipsis,
       ),
       isThreeLine: true,

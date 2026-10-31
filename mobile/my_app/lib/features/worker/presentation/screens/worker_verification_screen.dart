@@ -1,3 +1,4 @@
+import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -785,6 +786,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     if (widget.signOut != null) {
       await widget.signOut!();
     } else {
+      await ExpiryPushService.instance.beforeSignOut();
       await FirebaseAuth.instance.signOut();
     }
   }

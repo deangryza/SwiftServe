@@ -1,3 +1,4 @@
+import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -9,6 +10,7 @@ import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../../../../shared/services/profile_draft_store.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
+import '../../../../shared/models/worker_service_selection.dart';
 import '../widgets/phone_number_field.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
@@ -30,6 +32,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
   final _category = TextEditingController();
+  final _services = WorkerServiceSelection();
   String _role = 'client';
   String _countryCode = '+63';
   bool _saving = false;
@@ -57,6 +60,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     ]) {
       controller.dispose();
     }
+    _services.dispose();
     super.dispose();
   }
 
@@ -119,6 +123,12 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
 
   Future<void> _save() async {
     if (_saving) return;
+    if (_role == 'worker' && _services.validationError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_services.validationError!)));
+      return;
+    }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     setState(() => _saving = true);
@@ -130,7 +140,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
       address: _address.text.trim(),
       role: _role,
       category: category,
-      skills: category.isEmpty ? const [] : [category],
+      skills: _role == 'worker' ? _services.services : const [],
       photoBase64: _profileImageBytes == null
           ? ''
           : base64Encode(_profileImageBytes!),
@@ -174,6 +184,16 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     }
   }
 
+  Future<bool> _contactAvailability(String kind, String value) async {
+    final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+    if (token == null) throw StateError('Please sign in again.');
+    return ApiService().registrationContactAvailable(
+      kind,
+      value,
+      idToken: token,
+    );
+  }
+
   void _showError(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(
@@ -181,8 +201,9 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _signOut() {
-    FirebaseAuth.instance.signOut();
+  Future<void> _signOut() async {
+    await ExpiryPushService.instance.beforeSignOut();
+    await FirebaseAuth.instance.signOut();
   }
 
   @override
@@ -190,6 +211,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     void changeCountry(String value) => setState(() => _countryCode = value);
     final form = _role == 'client'
         ? ClientAccountForm(
+            contactAvailability: _contactAvailability,
             key: const ValueKey('google-client-account-flow'),
             formKey: _form,
             name: _name,
@@ -211,6 +233,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             onExit: _signOut,
           )
         : WorkerAccountForm(
+            contactAvailability: _contactAvailability,
             key: const ValueKey('google-worker-account-flow'),
             formKey: _form,
             name: _name,
@@ -220,6 +243,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             password: _password,
             confirmPassword: _confirmPassword,
             category: _category,
+            services: _services,
             acceptedTerms: _accepted,
             onTermsChanged: (value) => setState(() => _accepted = value),
             loading: _saving,

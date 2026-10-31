@@ -10,6 +10,7 @@ import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/conversation_ui.dart';
+import '../../../../shared/widgets/chat_message_timeline.dart';
 import 'client_booking_flow.dart';
 import 'client_profile_screen.dart';
 import 'client_request_details_screen.dart';
@@ -323,13 +324,35 @@ class ClientChatScreen extends StatefulWidget {
 
 class _ClientChatScreenState extends State<ClientChatScreen> {
   final _messageController = TextEditingController();
+  late Stream<QuerySnapshot<Map<String, dynamic>>> _messages;
   bool _sending = false;
   bool _markingRead = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _markRead());
+    _watchMessages();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _markRead();
+    });
+  }
+
+  void _watchMessages() => _messages = FirebaseFirestore.instance
+      .collection('conversations')
+      .doc(widget.conversationId)
+      .collection('messages')
+      .orderBy('createdAt')
+      .snapshots();
+
+  @override
+  void didUpdateWidget(ClientChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
+      _watchMessages();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _markRead();
+      });
+    }
   }
 
   Future<void> _markRead() async {
@@ -615,12 +638,8 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
     required Color surface,
     required Color text,
   }) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-    stream: FirebaseFirestore.instance
-        .collection('conversations')
-        .doc(widget.conversationId)
-        .collection('messages')
-        .orderBy('createdAt')
-        .snapshots(),
+    key: ValueKey('messages-${widget.conversationId}'),
+    stream: _messages,
     builder: (context, snapshot) {
       if (snapshot.hasError) {
         return Center(child: Text('Could not load chat: ${snapshot.error}'));
@@ -629,15 +648,25 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
         return const Center(child: CircularProgressIndicator());
       }
 
-      WidgetsBinding.instance.addPostFrameCallback((_) => _markRead());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _markRead();
+      });
       final messages = snapshot.data!.docs;
       if (messages.isEmpty) {
         return const Center(child: Text('Start the conversation.'));
       }
 
-      return ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: messages.length,
+      return ChatMessageTimeline(
+        key: ValueKey('timeline-${widget.conversationId}'),
+        conversationId: widget.conversationId,
+        currentUserId: uid,
+        messages: [
+          for (final message in messages)
+            ChatMessageIdentity(
+              id: message.id,
+              senderId: (message.data()['senderId'] ?? '').toString(),
+            ),
+        ],
         itemBuilder: (context, index) {
           final data = messages[index].data();
           final isMine = data['senderId'] == uid;

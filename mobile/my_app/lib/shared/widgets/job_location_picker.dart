@@ -26,6 +26,10 @@ class JobLocationPicker extends StatefulWidget {
     this.locationService = const DeviceLocationService(),
     this.geocodingService,
     this.mapBuilder,
+    this.currentLocationEnabled = true,
+    this.currentLocationDisabledReason,
+    this.onCurrentLocationRequested,
+    this.onCurrentLocationReleased,
   });
 
   final ValueChanged<JobLocationSelection?> onChanged;
@@ -36,6 +40,13 @@ class JobLocationPicker extends StatefulWidget {
   final DeviceLocationService locationService;
   final JobAddressResolver? geocodingService;
   final JobLocationMapBuilder? mapBuilder;
+  final bool currentLocationEnabled;
+  final String? currentLocationDisabledReason;
+
+  /// A synchronous reservation lets a parent coordinate multiple GPS buttons,
+  /// including requests that are still waiting for permission or a GPS fix.
+  final bool Function()? onCurrentLocationRequested;
+  final VoidCallback? onCurrentLocationReleased;
 
   @override
   State<JobLocationPicker> createState() => _JobLocationPickerState();
@@ -55,6 +66,7 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   bool _loading = false;
   bool _locating = false;
   bool _searchUnresolved = false;
+  bool _usesCurrentLocation = false;
   Timer? _searchDebounce;
   bool _mapReady = false;
   bool _mapFailed = false;
@@ -112,6 +124,7 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
 
   void _searchChanged(String text) {
     final version = _beginLookup();
+    _releaseCurrentLocation();
     final query = text.trim();
     setState(() {
       _searchUnresolved = true;
@@ -165,6 +178,10 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   }
 
   Future<void> _useCurrentLocation() async {
+    if (_locating || !widget.currentLocationEnabled) return;
+    final alreadyUsingCurrentLocation = _usesCurrentLocation;
+    if (widget.onCurrentLocationRequested?.call() == false) return;
+    _usesCurrentLocation = true;
     final version = _beginLookup();
     setState(() {
       _loading = true;
@@ -175,14 +192,30 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
     try {
       final position = await widget.locationService.currentPosition();
       if (!mounted || version != _lookupVersion) return;
-      await _selectPosition(position, moveCamera: true);
+      await _selectPosition(
+        position,
+        moveCamera: true,
+        fromCurrentLocation: true,
+      );
     } on DeviceLocationException catch (error) {
       if (!mounted || version != _lookupVersion) return;
+      if (!alreadyUsingCurrentLocation) _releaseCurrentLocation();
       setState(() {
         _loading = false;
         _locating = false;
         _failure = error.failure;
         _statusMessage = error.userMessage;
+      });
+    } catch (_) {
+      if (!mounted || version != _lookupVersion) return;
+      if (!alreadyUsingCurrentLocation) _releaseCurrentLocation();
+      setState(() {
+        _loading = false;
+        _locating = false;
+        _failure = DeviceLocationFailure.unavailable;
+        _statusMessage = const DeviceLocationException(
+          DeviceLocationFailure.unavailable,
+        ).userMessage;
       });
     }
   }
@@ -190,8 +223,10 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
   Future<void> _selectPosition(
     JobCoordinate position, {
     bool moveCamera = false,
+    bool fromCurrentLocation = false,
   }) async {
     final version = _beginLookup();
+    if (!fromCurrentLocation) _releaseCurrentLocation();
     _searchUnresolved = false;
     _areaLabel = 'Pinned service area';
     _searchController.clear();
@@ -235,6 +270,26 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
       });
       _notifySelection();
     }
+  }
+
+  void _releaseCurrentLocation() {
+    if (!_usesCurrentLocation) return;
+    _usesCurrentLocation = false;
+    widget.onCurrentLocationReleased?.call();
+  }
+
+  void _manualAddressChanged(String address) {
+    // A manual edit wins over GPS/reverse lookups that are still in flight.
+    _beginLookup();
+    _releaseCurrentLocation();
+    setState(() {
+      _loading = false;
+      _locating = false;
+      _failure = null;
+      _statusMessage = address.trim().isEmpty
+          ? 'Enter the address for the selected pin.'
+          : 'Exact address is shared only with the accepted worker.';
+    });
   }
 
   void _showPosition(JobCoordinate position) {
@@ -388,7 +443,10 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
           width: double.infinity,
           height: 48,
           child: OutlinedButton.icon(
-            onPressed: _locating ? null : _useCurrentLocation,
+            key: const ValueKey('job-location-gps'),
+            onPressed: _locating || !widget.currentLocationEnabled
+                ? null
+                : _useCurrentLocation,
             icon: _locating
                 ? const SizedBox(
                     width: 18,
@@ -399,10 +457,19 @@ class _JobLocationPickerState extends State<JobLocationPicker> {
             label: Text(_locating ? 'Locating…' : 'Use my current location'),
           ),
         ),
+        if (!widget.currentLocationEnabled &&
+            widget.currentLocationDisabledReason != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            widget.currentLocationDisabledReason!,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
         const SizedBox(height: 10),
         TextField(
           key: const ValueKey('job-location-exact-address'),
           controller: _addressController,
+          onChanged: _manualAddressChanged,
           enabled: _position != null,
           minLines: 1,
           maxLines: 2,

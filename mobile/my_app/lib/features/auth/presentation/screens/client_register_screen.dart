@@ -10,23 +10,33 @@ import '../../../../shared/services/profile_photo_picker.dart';
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_draft_store.dart';
 import '../../../../shared/services/client_theme_controller.dart';
+import '../../../../shared/models/worker_service_selection.dart';
 import 'profile_completion_screen.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
 import '../widgets/phone_number_field.dart';
+import '../widgets/registration_contact_fields.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
-  const ClientRegisterScreen({super.key});
+  const ClientRegisterScreen({super.key, this.contactAvailability});
+  final ContactAvailabilityLookup? contactAvailability;
 
   @override
-  Widget build(BuildContext context) =>
-      const AccountRegistrationScreen(role: 'client');
+  Widget build(BuildContext context) => AccountRegistrationScreen(
+    role: 'client',
+    contactAvailability: contactAvailability,
+  );
 }
 
 class AccountRegistrationScreen extends StatefulWidget {
-  const AccountRegistrationScreen({super.key, required this.role});
+  const AccountRegistrationScreen({
+    super.key,
+    required this.role,
+    this.contactAvailability,
+  });
 
   final String role;
+  final ContactAvailabilityLookup? contactAvailability;
 
   @override
   State<AccountRegistrationScreen> createState() =>
@@ -42,12 +52,19 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   final _password = TextEditingController();
   final _confirmPassword = TextEditingController();
   final _category = TextEditingController();
+  final _services = WorkerServiceSelection();
   bool _acceptedTerms = false;
   bool _loading = false;
   String _countryCode = '+63';
   Uint8List? _profileImageBytes;
 
   Future<void> _register() async {
+    if (widget.role == 'worker' && _services.validationError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(_services.validationError!)));
+      return;
+    }
     if (!_formKey.currentState!.validate() || !_acceptedTerms) {
       if (!_acceptedTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -69,7 +86,9 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       photoBase64: _profileImageBytes == null
           ? ''
           : base64Encode(_profileImageBytes!),
-      skills: _category.text.trim().isEmpty
+      skills: widget.role == 'worker'
+          ? _services.services
+          : _category.text.trim().isEmpty
           ? const []
           : [_category.text.trim()],
     );
@@ -173,6 +192,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     ]) {
       controller.dispose();
     }
+    _services.dispose();
     super.dispose();
   }
 
@@ -201,6 +221,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'client') {
       return ClientThemeScope(
         child: ClientAccountForm(
+          contactAvailability: widget.contactAvailability,
           formKey: _formKey,
           name: _name,
           email: _email,
@@ -222,6 +243,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'worker') {
       return ClientThemeScope(
         child: WorkerAccountForm(
+          contactAvailability: widget.contactAvailability,
           formKey: _formKey,
           name: _name,
           email: _email,
@@ -230,6 +252,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           password: _password,
           confirmPassword: _confirmPassword,
           category: _category,
+          services: _services,
           acceptedTerms: _acceptedTerms,
           onTermsChanged: (value) => setState(() => _acceptedTerms = value),
           loading: _loading,

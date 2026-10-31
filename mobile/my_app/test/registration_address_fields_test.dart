@@ -53,7 +53,10 @@ void main() {
       expect(form.currentState!.validate(), isFalse);
       await fill(tester, 'Province', 'Pampanga');
       expect(form.currentState!.validate(), isTrue);
-      expect(address.text, '123 Example Street, Bulihan, Malolos, Pampanga');
+      expect(
+        address.text,
+        '123 Example Street, Brgy. Bulihan, Malolos, Pampanga',
+      );
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -69,7 +72,10 @@ void main() {
       await fill(tester, 'City / Municipality', 'Malolos');
       await fill(tester, 'Province', 'Bulacan');
       expect(form.currentState!.validate(), isTrue);
-      expect(address.text, '123 Example Street, Bulihan, Malolos, Bulacan');
+      expect(
+        address.text,
+        '123 Example Street, Brgy. Bulihan, Malolos, Bulacan',
+      );
       await tester.pumpWidget(const SizedBox.shrink());
     },
   );
@@ -105,9 +111,12 @@ void main() {
       await fill(tester, 'City / Municipality', ' Malolos ');
       await fill(tester, 'Province', ' Bulacan ');
       expect(form.currentState!.validate(), isTrue);
-      expect(address.text, 'Bulihan, Malolos, Bulacan');
+      expect(address.text, 'Brgy. Bulihan, Malolos, Bulacan');
       await fill(tester, 'Street / House No. (optional)', '123 Example Street');
-      expect(address.text, '123 Example Street, Bulihan, Malolos, Bulacan');
+      expect(
+        address.text,
+        '123 Example Street, Brgy. Bulihan, Malolos, Bulacan',
+      );
       await tester.pumpWidget(const SizedBox.shrink());
       await pump(tester);
       expect(form.currentState!.validate(), isTrue);
@@ -133,9 +142,12 @@ void main() {
       ),
     );
     expect(form.currentState!.validate(), isTrue);
-    expect(address.text, '123 Example Street, Bulihan, Malolos, Bulacan');
+    expect(address.text, '123 Example Street, Brgy. Bulihan, Malolos, Bulacan');
     await fill(tester, 'Barangay', 'Guinhawa');
-    expect(address.text, '123 Example Street, Guinhawa, Malolos, Bulacan');
+    expect(
+      address.text,
+      '123 Example Street, Brgy. Guinhawa, Malolos, Bulacan',
+    );
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -156,7 +168,7 @@ void main() {
     expect(form.currentState!.validate(), isFalse);
     await fill(tester, 'Barangay', 'Bulihan');
     expect(form.currentState!.validate(), isTrue);
-    expect(address.text, 'Bulihan, Malolos, Bulacan');
+    expect(address.text, 'Brgy. Bulihan, Malolos, Bulacan');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

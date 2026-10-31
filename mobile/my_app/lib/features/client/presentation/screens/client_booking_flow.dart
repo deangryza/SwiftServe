@@ -6,6 +6,7 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/models/service_application.dart';
 import '../../../../shared/models/service_request.dart';
+import '../../../../shared/utils/service_schedule.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
 import '../../../../shared/screens/public_profile_screen.dart';
 import '../../../../shared/services/client_theme_controller.dart';
@@ -31,6 +32,7 @@ String bookingStatusLabel(ServiceRequestStatus status) => switch (status) {
   ServiceRequestStatus.ongoing => 'Ongoing',
   ServiceRequestStatus.completed => 'Completed',
   ServiceRequestStatus.cancelled => 'Cancelled',
+  ServiceRequestStatus.expired => 'Expired',
 };
 
 Color _statusColor(ServiceRequestStatus status) => switch (status) {
@@ -39,21 +41,10 @@ Color _statusColor(ServiceRequestStatus status) => switch (status) {
   ServiceRequestStatus.ongoing => AppTheme.yellow,
   ServiceRequestStatus.completed => AppTheme.softYellow,
   ServiceRequestStatus.cancelled => AppTheme.softYellow,
+  ServiceRequestStatus.expired => AppTheme.softYellow,
 };
 
-String _formatDate(DateTime? date) {
-  if (date == null) return 'Flexible';
-  final local = date.toLocal();
-  return '${local.month}/${local.day}/${local.year}';
-}
-
-String _dateRange(ServiceRequest request) {
-  final from = request.scheduleFrom ?? request.schedule;
-  final to = request.scheduleTo ?? from;
-  if (from == null) return 'Flexible';
-  if (to == null || DateUtils.isSameDay(from, to)) return _formatDate(from);
-  return '${_formatDate(from)} – ${_formatDate(to)}';
-}
+String _dateRange(ServiceRequest request) => serviceScheduleLabel(request);
 
 class _BookingPalette {
   _BookingPalette(BuildContext context)
@@ -310,95 +301,105 @@ class _BookingList extends StatelessWidget {
   final _BookingPalette palette;
 
   @override
-  Widget build(BuildContext context) =>
-      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('service_requests')
-            .where('clientId', isEqualTo: clientId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load bookings:\n${snapshot.error}',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: palette.text),
-                ),
-              ),
-            );
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final normalizedQuery = query.trim().toLowerCase();
-          final requests = snapshot.data!.docs
-              .map(ServiceRequest.fromDocument)
-              .where((request) {
-                final isPast =
-                    request.status == ServiceRequestStatus.completed ||
-                    request.status == ServiceRequestStatus.cancelled;
-                return filter == _BookingFilter.past ? isPast : !isPast;
-              })
-              .where((request) {
-                if (normalizedQuery.isEmpty) return true;
-                return request.title.toLowerCase().contains(normalizedQuery) ||
-                    request.category.toLowerCase().contains(normalizedQuery) ||
-                    request.location.toLowerCase().contains(normalizedQuery) ||
-                    bookingStatusLabel(
-                      request.status,
-                    ).toLowerCase().contains(normalizedQuery);
-              })
-              .toList();
-          requests.sort((left, right) {
-            final leftDate =
-                left.createdAt ?? left.scheduleFrom ?? left.schedule;
-            final rightDate =
-                right.createdAt ?? right.scheduleFrom ?? right.schedule;
-            final newestFirst = (rightDate?.millisecondsSinceEpoch ?? 0)
-                .compareTo(leftDate?.millisecondsSinceEpoch ?? 0);
-            return newestFirst != 0 ? newestFirst : right.id.compareTo(left.id);
-          });
-          if (requests.isEmpty) {
-            return Center(
-              child: Text(
-                normalizedQuery.isEmpty
-                    ? filter == _BookingFilter.recent
-                          ? 'No recent bookings.'
-                          : 'No past bookings.'
-                    : 'No matching bookings found.',
-                style: TextStyle(color: palette.muted),
-              ),
-            );
-          }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(18, 34, 18, 24),
-            itemCount: requests.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) => _BookingCard(
-              request: requests[index],
-              palette: palette,
-              onTap: () => Navigator.push(
-                context,
-                clientPageRoute(
-                  ClientWorkersFoundScreen(requestId: requests[index].id),
-                ),
-              ),
-              onViewPost: () => Navigator.push(
-                context,
-                clientPageRoute(
-                  ClientRequestDetailsScreen(requestId: requests[index].id),
-                ),
-              ),
-              onEditPost: () => Navigator.push(
-                context,
-                clientPageRoute(PostRequestScreen(existing: requests[index])),
-              ),
+  Widget build(
+    BuildContext context,
+  ) => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+    stream: FirebaseFirestore.instance
+        .collection('service_requests')
+        .where('clientId', isEqualTo: clientId)
+        .snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.hasError) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Text(
+              'Could not load bookings:\n${snapshot.error}',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: palette.text),
             ),
-          );
-        },
+          ),
+        );
+      }
+      if (!snapshot.hasData) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      final normalizedQuery = query.trim().toLowerCase();
+      final requests = snapshot.data!.docs
+          .map(ServiceRequest.fromDocument)
+          .where((request) {
+            final isPast =
+                request.status == ServiceRequestStatus.completed ||
+                request.status == ServiceRequestStatus.cancelled ||
+                request.status == ServiceRequestStatus.expired;
+            return filter == _BookingFilter.past ? isPast : !isPast;
+          })
+          .where((request) {
+            if (normalizedQuery.isEmpty) return true;
+            return request.title.toLowerCase().contains(normalizedQuery) ||
+                request.category.toLowerCase().contains(normalizedQuery) ||
+                request.location.toLowerCase().contains(normalizedQuery) ||
+                bookingStatusLabel(
+                  request.status,
+                ).toLowerCase().contains(normalizedQuery);
+          })
+          .toList();
+      requests.sort((left, right) {
+        final leftDate = left.createdAt ?? left.scheduleFrom ?? left.schedule;
+        final rightDate =
+            right.createdAt ?? right.scheduleFrom ?? right.schedule;
+        final newestFirst = (rightDate?.millisecondsSinceEpoch ?? 0).compareTo(
+          leftDate?.millisecondsSinceEpoch ?? 0,
+        );
+        return newestFirst != 0 ? newestFirst : right.id.compareTo(left.id);
+      });
+      if (requests.isEmpty) {
+        return Center(
+          child: Text(
+            normalizedQuery.isEmpty
+                ? filter == _BookingFilter.recent
+                      ? 'No recent bookings.'
+                      : 'No past bookings.'
+                : 'No matching bookings found.',
+            style: TextStyle(color: palette.muted),
+          ),
+        );
+      }
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(18, 34, 18, 24),
+        itemCount: requests.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 12),
+        itemBuilder: (context, index) => _BookingCard(
+          request: requests[index],
+          palette: palette,
+          onTap: () => Navigator.push(
+            context,
+            clientPageRoute(
+              requests[index].status == ServiceRequestStatus.expired
+                  ? ClientRequestDetailsScreen(requestId: requests[index].id)
+                  : requests[index].status != ServiceRequestStatus.pending &&
+                        (requests[index].workerId?.trim().isNotEmpty ?? false)
+                  ? ClientBookingDetailsScreen(
+                      requestId: requests[index].id,
+                      workerId: requests[index].workerId!,
+                    )
+                  : ClientWorkersFoundScreen(requestId: requests[index].id),
+            ),
+          ),
+          onViewPost: () => Navigator.push(
+            context,
+            clientPageRoute(
+              ClientRequestDetailsScreen(requestId: requests[index].id),
+            ),
+          ),
+          onEditPost: () => Navigator.push(
+            context,
+            clientPageRoute(PostRequestScreen(existing: requests[index])),
+          ),
+        ),
       );
+    },
+  );
 }
 
 class _BookingCard extends StatelessWidget {

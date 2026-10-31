@@ -3,16 +3,23 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show listEquals;
 
 import '../../../../shared/models/app_user.dart';
+import '../../../../shared/models/worker_service_selection.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
+import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
-import '../../../../shared/widgets/client_rating_summary.dart';
+import '../../../../shared/widgets/account_rating_summary.dart';
 import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../../../../shared/widgets/profile_about_field.dart';
 import '../../../../shared/screens/reviews_screen.dart';
 import '../../../auth/presentation/widgets/registration_address_fields.dart';
+import '../../../auth/presentation/widgets/worker_service_selector.dart';
+import '../../../auth/presentation/screens/worker_account_form.dart'
+    show activeServiceCategories, fallbackServiceCategories;
 import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_sections.dart' show ClientMessagesScreen;
@@ -167,13 +174,11 @@ class _ProfileView extends StatelessWidget {
                                   text: text,
                                   muted: muted,
                                 ),
-                                ClientRatingBuilder(
-                                  clientId: user.uid,
+                                AccountRatingBuilder(
+                                  userId: user.uid,
                                   builder: (context, summary) => _ProfileStat(
                                     value: summary.displayAverage,
-                                    label: summary.reviewCount == 1
-                                        ? '1 rating'
-                                        : '${summary.reviewCount} ratings',
+                                    label: summary.label,
                                     text: text,
                                     muted: muted,
                                     onTap: () => Navigator.push(
@@ -181,7 +186,7 @@ class _ProfileView extends StatelessWidget {
                                       clientPageRoute(
                                         ReviewsScreen(
                                           userId: user.uid,
-                                          reviewsFor: ReviewsFor.client,
+                                          reviewsFor: ReviewsFor.account,
                                         ),
                                       ),
                                     ),
@@ -279,7 +284,7 @@ class _ProfileView extends StatelessWidget {
                           clientPageRoute(
                             ReviewsScreen(
                               userId: user.uid,
-                              reviewsFor: ReviewsFor.client,
+                              reviewsFor: ReviewsFor.account,
                             ),
                           ),
                         ),
@@ -335,10 +340,16 @@ class ClientEditProfileScreen extends StatefulWidget {
 
 class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
   final _addressFormKey = GlobalKey<FormState>();
+  final _servicesFormKey = GlobalKey<FormState>();
+  final _services = WorkerServiceSelection();
+  late final List<String> _initialServices;
+  bool get _isWorker => widget.initialData['role'] == 'worker';
   late final TextEditingController _nameController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
   late final TextEditingController _addressController;
+  late final TextEditingController _aboutController;
+  late final String _initialAbout;
   var _saving = false;
   var _savingPhoto = false;
   late String _photoBase64;
@@ -346,6 +357,13 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
   @override
   void initState() {
     super.initState();
+    final savedSkills = widget.initialData['skills'];
+    final primary = (widget.initialData['category'] ?? '').toString().trim();
+    _services.loadServices([
+      if (savedSkills is List) ...savedSkills.whereType<String>(),
+      if (primary.isNotEmpty) primary,
+    ]);
+    _initialServices = _services.services;
     _nameController = TextEditingController(
       text: (widget.initialData['fullName'] ?? '').toString(),
     );
@@ -360,6 +378,13 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     _addressController = TextEditingController(
       text: (widget.initialData['address'] ?? '').toString(),
     );
+    _initialAbout =
+        (widget.initialData['description'] ??
+                widget.initialData['bio'] ??
+                widget.initialData['about'] ??
+                '')
+            .toString();
+    _aboutController = TextEditingController(text: _initialAbout);
     _photoBase64 = (widget.initialData['photoBase64'] ?? '').toString();
   }
 
@@ -369,6 +394,8 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
+    _aboutController.dispose();
+    _services.dispose();
     super.dispose();
   }
 
@@ -376,7 +403,7 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     if (_savingPhoto) return;
     setState(() => _savingPhoto = true);
     try {
-      final bytes = await pickProfilePhoto();
+      final bytes = await pickProfilePhotoWithConsent(context);
       if (bytes == null || !mounted) return;
       final encoded = base64Encode(bytes);
       final user = FirebaseAuth.instance.currentUser;
@@ -423,36 +450,69 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     final addressChanged =
         _addressController.text.trim() !=
         (widget.initialData['address'] ?? '').toString().trim();
+    final aboutChanged = _aboutController.text.trim() != _initialAbout.trim();
+    final servicesChanged =
+        _isWorker &&
+        (!listEquals(_initialServices, _services.services) ||
+            _services.hasOther);
+    if (servicesChanged) {
+      final valid = _servicesFormKey.currentState?.validate() ?? true;
+      final error = _services.validationError;
+      if (!valid || error != null) {
+        if (error != null) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error)));
+        }
+        return;
+      }
+    }
     if (addressChanged && !_addressFormKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
     final name = _nameController.text.trim();
     if (user == null || name.isEmpty || _saving) return;
     setState(() => _saving = true);
     try {
-      final role = widget.initialData['role'] == 'worker' ? 'worker' : 'client';
-      final timestamp = FieldValue.serverTimestamp();
-      final batch = FirebaseFirestore.instance.batch();
-      batch.update(
-        FirebaseFirestore.instance.collection('users').doc(user.uid),
-        {
-          'fullName': name,
-          'address': _addressController.text.trim(),
-          'updatedAt': timestamp,
-        },
-      );
-      batch.set(
-        FirebaseFirestore.instance.collection('public_profiles').doc(user.uid),
-        {
-          'uid': user.uid,
-          'fullName': name,
-          'role': role,
-          'photoBase64': _photoBase64,
-          // Address belongs in users/{uid}; public location edits are denied.
-          'updatedAt': timestamp,
-        },
-        SetOptions(merge: true),
-      );
-      await batch.commit();
+      if (addressChanged || aboutChanged || servicesChanged) {
+        final token = await user.getIdToken();
+        if (token == null) throw StateError('Your session has expired.');
+        await ApiService().updateProfileDetails(
+          idToken: token,
+          fullName: name,
+          address: addressChanged ? _addressController.text.trim() : null,
+          description: aboutChanged ? _aboutController.text.trim() : null,
+          services: servicesChanged ? _services.services : null,
+        );
+      } else {
+        final role = widget.initialData['role'] == 'worker'
+            ? 'worker'
+            : 'client';
+        final timestamp = FieldValue.serverTimestamp();
+        final batch = FirebaseFirestore.instance.batch();
+        batch.update(
+          FirebaseFirestore.instance.collection('users').doc(user.uid),
+          {
+            'fullName': name,
+            'address': _addressController.text.trim(),
+            'updatedAt': timestamp,
+          },
+        );
+        batch.set(
+          FirebaseFirestore.instance
+              .collection('public_profiles')
+              .doc(user.uid),
+          {
+            'uid': user.uid,
+            'fullName': name,
+            'role': role,
+            'photoBase64': _photoBase64,
+            // Address belongs in users/{uid}; public location edits are denied.
+            'updatedAt': timestamp,
+          },
+          SetOptions(merge: true),
+        );
+        await batch.commit();
+      }
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -577,6 +637,46 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
                           style: TextStyle(color: muted, fontSize: 12),
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      ProfileAboutField(
+                        controller: _aboutController,
+                        enabled: !_saving,
+                        textColor: text,
+                        mutedColor: muted,
+                      ),
+                      if (_isWorker) ...[
+                        const SizedBox(height: 18),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Service Categories',
+                            style: TextStyle(
+                              color: text,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Form(
+                          key: _servicesFormKey,
+                          child: StreamBuilder<List<String>>(
+                            stream: activeServiceCategories(),
+                            initialData: fallbackServiceCategories,
+                            builder: (context, snapshot) =>
+                                WorkerServiceSelector(
+                                  selection: _services,
+                                  categories: {
+                                    ...?snapshot.data,
+                                    ..._initialServices.where(
+                                      (name) => name.toLowerCase() != 'other',
+                                    ),
+                                  }.toList(),
+                                  enabled: !_saving,
+                                  compact: true,
+                                ),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 14),
                       Form(
                         key: _addressFormKey,

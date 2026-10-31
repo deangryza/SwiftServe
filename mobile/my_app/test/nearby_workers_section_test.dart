@@ -96,6 +96,36 @@ void main() {
     },
   );
 
+  for (final entry in {
+    '123 Example Street, Brgy. Ligas, Malolos, Bulacan': 'Brgy. Ligas, Malolos',
+    '123 Example Street, Malolos City, Bulacan': 'Malolos',
+    '123 Example Street': 'Location not provided',
+  }.entries) {
+    testWidgets('worker card reduces residential location to ${entry.value}', (
+      tester,
+    ) async {
+      service.pending = Future.value(
+        WorkerRecommendations([
+          DiscoveredWorker(
+            id: 'private-worker',
+            distanceMeters: 2000,
+            data: {
+              'fullName': 'Private Worker',
+              'verificationStatus': 'verified',
+              'location': entry.key,
+            },
+          ),
+        ], 'Area-based distances.'),
+      );
+      await pump(tester);
+      await tester.pumpAndSettle();
+      expect(find.text(entry.value), findsOneWidget);
+      expect(find.textContaining('Example Street'), findsNothing);
+      expect(find.text('Nearby · ~2 km away'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets(
     'card opens the selected worker; message uses the same worker and existing chat',
     (tester) async {
