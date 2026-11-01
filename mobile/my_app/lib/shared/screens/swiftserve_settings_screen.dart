@@ -107,6 +107,7 @@ class SwiftServeSettingsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 28),
                 _SectionLabel(label: 'Notifications', color: muted),
+                const SizedBox(height: 10),
                 const PushNotificationPreferences(),
                 const SizedBox(height: 28),
                 _SectionLabel(label: 'Account', color: muted),
