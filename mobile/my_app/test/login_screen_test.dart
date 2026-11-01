@@ -1,11 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/auth/presentation/screens/login_screen.dart';
+import 'package:my_app/features/auth/presentation/widgets/policy_consent.dart';
 import 'package:my_app/shared/services/client_theme_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   tearDown(() => ClientThemeController.darkMode.value = false);
+
+  testWidgets('password and Google sign-in require explicit consent', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey('login-email')),
+      'user@example.test',
+    );
+    await tester.enterText(
+      find.byKey(const ValueKey('login-password')),
+      'Example-password123!',
+    );
+    // Firebase is deliberately not initialized: neither action may reach it.
+    tester.widget<FilledButton>(find.byType(FilledButton).first).onPressed!();
+    await tester.pump();
+    expect(find.text(PolicyConsent.requiredMessage), findsWidgets);
+    expect(tester.takeException(), isNull);
+    tester
+        .widget<OutlinedButton>(
+          find.byKey(const ValueKey('google-login-preview')),
+        )
+        .onPressed!();
+    await tester.pump();
+    expect(find.text(PolicyConsent.requiredMessage), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.tap(find.byType(Checkbox));
+    await tester.pump();
+    expect(
+      tester.widget<PolicyConsent>(find.byType(PolicyConsent)).value,
+      isTrue,
+    );
+    expect(
+      tester.widget<PolicyConsent>(find.byType(PolicyConsent)).showError,
+      isFalse,
+    );
+  });
 
   for (final size in [
     const Size(320, 568),

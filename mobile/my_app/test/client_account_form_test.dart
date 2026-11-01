@@ -82,9 +82,11 @@ void main() {
       await fill('Province', 'Bulacan');
       await fill('Password', 'password123');
       await fill('Confirm Password', 'password123');
-      await tester.ensureVisible(find.byType(CheckboxListTile));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('policy-consent-checkbox')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(CheckboxListTile));
+      await tester.tap(find.byKey(const ValueKey('policy-consent-checkbox')));
       await tester.pumpAndSettle();
       await advance();
       expect(find.text('Enter code'), findsOneWidget);

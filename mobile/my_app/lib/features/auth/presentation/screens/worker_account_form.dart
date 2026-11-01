@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import '../widgets/policy_consent.dart';
 import '../../../../shared/theme/app_theme.dart';
 import '../../../../shared/models/worker_service_selection.dart';
 import '../widgets/worker_service_selector.dart';
@@ -172,9 +173,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         }
         if (!widget.acceptedTerms) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please accept the terms and privacy policy.'),
-            ),
+            const SnackBar(content: Text(PolicyConsent.requiredMessage)),
           );
           return;
         }
@@ -535,15 +534,10 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
           ),
         ],
       ),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
+      PolicyConsent(
         value: widget.acceptedTerms,
-        onChanged: (value) => widget.onTermsChanged(value ?? false),
-        title: Text(
-          'I agree to the Terms and Conditions and Privacy Policy.',
-          style: TextStyle(color: _muted, fontSize: 12),
-        ),
+        onChanged: widget.onTermsChanged,
+        enabled: !widget.loading,
       ),
     ],
   );
@@ -815,7 +809,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
               Expanded(
                 child: Form(
                   key: widget.formKey,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
                   child: SingleChildScrollView(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),

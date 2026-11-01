@@ -97,12 +97,18 @@ void main() {
         await tester.enterText(field, entry.value);
         await tester.pumpAndSettle();
       }
-      await tester.ensureVisible(find.byType(CheckboxListTile));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('policy-consent-checkbox')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(CheckboxListTile));
+      await tester.tap(find.byKey(const ValueKey('policy-consent-checkbox')));
       await tester.pumpAndSettle();
       expect(
-        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+        tester
+            .widget<Checkbox>(
+              find.byKey(const ValueKey('policy-consent-checkbox')),
+            )
+            .value,
         isTrue,
       );
       expect(tester.state<FormState>(find.byType(Form)).validate(), isTrue);

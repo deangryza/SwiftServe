@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../widgets/policy_consent.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
@@ -130,9 +131,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         }
         if (!widget.acceptedTerms) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please accept the terms and privacy policy.'),
-            ),
+            const SnackBar(content: Text(PolicyConsent.requiredMessage)),
           );
           return;
         }
@@ -553,15 +552,10 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           ),
         ],
       ),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
+      PolicyConsent(
         value: widget.acceptedTerms,
-        onChanged: (value) => widget.onTermsChanged(value ?? false),
-        title: Text(
-          'I agree to the Terms and Conditions and Privacy Policy.',
-          style: TextStyle(color: _muted, fontSize: 12),
-        ),
+        onChanged: widget.onTermsChanged,
+        enabled: !widget.loading,
       ),
     ],
   );
@@ -770,7 +764,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
               Expanded(
                 child: Form(
                   key: widget.formKey,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
+                  autovalidateMode: AutovalidateMode.onUnfocus,
                   child: SingleChildScrollView(
                     controller: _scrollController,
                     padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),

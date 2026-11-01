@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../widgets/policy_consent.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
@@ -68,9 +69,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (!_formKey.currentState!.validate() || !_acceptedTerms) {
       if (!_acceptedTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please accept the terms and privacy policy.'),
-          ),
+          const SnackBar(content: Text(PolicyConsent.requiredMessage)),
         );
       }
       return;
@@ -557,47 +556,11 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _acceptedTerms,
-                            onChanged: (value) =>
-                                setState(() => _acceptedTerms = value ?? false),
-                            side: const BorderSide(color: AppTheme.line),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              style: TextStyle(
-                                color: Color(0xFF44474C),
-                                fontSize: 14,
-                                height: 20 / 14,
-                              ),
-                              children: [
-                                TextSpan(text: 'I agree to the '),
-                                TextSpan(
-                                  text: 'Terms and Conditions',
-                                  style: TextStyle(color: AppTheme.ink),
-                                ),
-                                TextSpan(text: ' and '),
-                                TextSpan(
-                                  text: 'Privacy Policy.',
-                                  style: TextStyle(color: AppTheme.ink),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                    PolicyConsent(
+                      value: _acceptedTerms,
+                      onChanged: (value) =>
+                          setState(() => _acceptedTerms = value),
+                      enabled: !_loading,
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
