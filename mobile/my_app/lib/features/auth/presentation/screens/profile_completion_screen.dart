@@ -1,3 +1,5 @@
+import '../widgets/registration_birthday_field.dart';
+import '../../../../shared/utils/registration_birthday.dart';
 import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -15,6 +17,7 @@ class ProfileCompletionScreen extends StatefulWidget {
 }
 
 class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
+  final _birthday = TextEditingController();
   ProfileDraft? _draft;
   bool _loading = true;
   String? _error;
@@ -30,6 +33,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     if (!mounted) return;
     setState(() {
       _draft = draft;
+      _birthday.text = draft?.dateOfBirth ?? '';
       _loading = false;
     });
   }
@@ -38,14 +42,26 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     final user = FirebaseAuth.instance.currentUser;
     final draft = _draft;
     if (user == null || draft == null) return;
+    final birthdayError = RegistrationBirthday.validate(_birthday.text);
+    if (birthdayError != null) {
+      setState(() => _error = birthdayError);
+      return;
+    }
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
+      await ProfileDraftStore().save(
+        ProfileDraft.fromJson({
+          ...draft.toJson(),
+          'dateOfBirth': _birthday.text,
+        }),
+      );
       final token = await user.getIdToken(true);
       await ApiService().createUserProfile(
         idToken: token!,
+        dateOfBirth: _birthday.text,
         fullName: draft.fullName,
         email: draft.email,
         phoneNumber: draft.phoneNumber,
@@ -75,6 +91,12 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    _birthday.dispose();
+    super.dispose();
+  }
+
   Future<void> _signOut() async {
     await ExpiryPushService.instance.beforeSignOut();
     await FirebaseAuth.instance.signOut();
@@ -84,41 +106,48 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('Complete profile')),
     body: Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: _loading
-            ? const CircularProgressIndicator()
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.cloud_off_outlined, size: 52),
-                  const SizedBox(height: 16),
-                  Text(
-                    _draft == null
-                        ? 'No saved profile draft was found. Sign out and register again.'
-                        : 'Your account exists, but the SwiftServe profile has not been saved yet.',
-                    textAlign: TextAlign.center,
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 12),
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: _loading
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.cloud_off_outlined, size: 52),
+                    const SizedBox(height: 16),
                     Text(
-                      _error!,
+                      _draft == null
+                          ? 'No saved profile draft was found. Sign out and register again.'
+                          : 'Your account exists, but the SwiftServe profile has not been saved yet.',
                       textAlign: TextAlign.center,
-                      style: const TextStyle(color: AppTheme.ink),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _error!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: AppTheme.ink),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    if (_draft != null)
+                      RegistrationBirthdayField(
+                        controller: _birthday,
+                        enabled: !_loading,
+                      ),
+                    if (_draft != null)
+                      FilledButton(
+                        onPressed: _retry,
+                        child: const Text('Retry profile setup'),
+                      ),
+                    TextButton(
+                      onPressed: _signOut,
+                      child: const Text('Sign out'),
                     ),
                   ],
-                  const SizedBox(height: 20),
-                  if (_draft != null)
-                    FilledButton(
-                      onPressed: _retry,
-                      child: const Text('Retry profile setup'),
-                    ),
-                  TextButton(
-                    onPressed: _signOut,
-                    child: const Text('Sign out'),
-                  ),
-                ],
-              ),
+                ),
+        ),
       ),
     ),
   );

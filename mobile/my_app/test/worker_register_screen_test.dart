@@ -1,3 +1,5 @@
+import 'helpers/registration_steps.dart';
+import 'package:my_app/features/auth/presentation/widgets/registration_birthday_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/auth/presentation/screens/worker_register_screen.dart';
@@ -51,12 +53,9 @@ void main() {
     await tester.enterText(fields.at(1), 'Worker');
     await _tapNext(tester);
 
-    expect(find.byType(TextFormField), findsNWidgets(8));
+    expect(find.byType(TextFormField), findsNWidgets(4));
     expect(find.text('Email Address'), findsOneWidget);
     expect(find.text('Phone Number'), findsOneWidget);
-    expect(find.text('Barangay'), findsOneWidget);
-    expect(find.text('City / Municipality'), findsOneWidget);
-    expect(find.text('Province'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
     expect(find.text('Confirm Password'), findsOneWidget);
   });
@@ -85,10 +84,6 @@ void main() {
       await tester.enterText(fields.at(0), 'alex@example.com');
       await tester.enterText(fields.at(1), '09171234567');
       for (final entry in {
-        'Street / House No. (optional)': '123 Service Lane',
-        'Barangay': 'Bulihan',
-        'City / Municipality': 'Malolos',
-        'Province': 'Bulacan',
         'worker-Password': 'password',
         'worker-Confirm Password': 'password',
       }.entries) {
@@ -140,7 +135,7 @@ void main() {
       await _tapNext(tester);
       expect(find.text('Face Recognition'), findsOneWidget);
       await _tapNext(tester);
-      expect(find.text('Verification in Progress'), findsOneWidget);
+      expect(find.text('Verification after registration'), findsOneWidget);
       expect(find.text('Identity Check'), findsOneWidget);
       expect(find.text('Certificates'), findsOneWidget);
     },
@@ -206,11 +201,21 @@ void main() {
 }
 
 Future<void> _tapNext(WidgetTester tester) async {
+  fillAdultBirthday(tester);
   final button = find.byKey(const ValueKey('worker-registration-next'));
   await tester.ensureVisible(button);
   await tester.pumpAndSettle();
   await tester.tap(button);
   await tester.pumpAndSettle();
+  await completePersonalDetails(tester, button);
 }
 
 Future<bool> _available(String kind, String value) async => true;
+
+void fillAdultBirthday(WidgetTester tester) {
+  for (final field in tester.widgetList<RegistrationBirthdayField>(
+    find.byType(RegistrationBirthdayField),
+  )) {
+    if (field.controller.text.isEmpty) field.controller.text = '2000-01-01';
+  }
+}

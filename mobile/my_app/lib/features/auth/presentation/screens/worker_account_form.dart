@@ -1,3 +1,4 @@
+import '../widgets/registration_birthday_field.dart';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -54,6 +55,7 @@ class WorkerAccountForm extends StatefulWidget {
     required this.profileImage,
     required this.onPickImage,
     required this.onRegister,
+    this.birthday,
     this.countryCode = '+63',
     this.onCountryCodeChanged,
     this.federatedAccount = false,
@@ -63,6 +65,7 @@ class WorkerAccountForm extends StatefulWidget {
     this.services,
   });
 
+  final TextEditingController? birthday;
   final GlobalKey<FormState> formKey;
   final TextEditingController name;
   final TextEditingController email;
@@ -91,6 +94,7 @@ class WorkerAccountForm extends StatefulWidget {
 
 class _WorkerAccountFormState extends State<WorkerAccountForm> {
   static const _yellow = AppTheme.yellow;
+  final _localBirthday = TextEditingController();
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
@@ -136,6 +140,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
 
   @override
   void dispose() {
+    _localBirthday.dispose();
     _firstName.dispose();
     _lastName.dispose();
     _scrollController.dispose();
@@ -161,6 +166,8 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         if (!widget.formKey.currentState!.validate()) return;
         widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
       } else if (_page == 1) {
+        if (!widget.formKey.currentState!.validate()) return;
+      } else if (_page == 2) {
         final available =
             await _contactKey.currentState?.checkAvailability() ?? false;
         if (!mounted) return;
@@ -177,7 +184,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
           );
           return;
         }
-      } else if (_page == 2) {
+      } else if (_page == 3) {
         final valid = widget.formKey.currentState!.validate();
         final error = _services.validationError;
         if (!valid || error != null) {
@@ -190,7 +197,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         }
       }
 
-      if (_page == 6) {
+      if (_page == 7) {
         widget.onRegister();
       } else {
         _goTo(_page + 1);
@@ -245,9 +252,9 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
 
   Widget _header() {
     final active = switch (_page) {
-      <= 2 => 0,
-      <= 4 => 1,
-      5 => 2,
+      <= 3 => 0,
+      <= 5 => 1,
+      6 => 2,
       _ => 3,
     };
     return SizedBox(
@@ -472,6 +479,25 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     ],
   );
 
+  Widget _birthdayLocationPage() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      RegistrationBirthdayField(
+        controller: widget.birthday ?? _localBirthday,
+        enabled: !widget.loading,
+      ),
+      RegistrationAddressFields(
+        address: widget.address,
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted,
+        borderColor: _border,
+        focusColor: _yellow,
+      ),
+    ],
+  );
+
   Widget _credentialsPage() => Column(
     children: [
       RegistrationContactFields(
@@ -491,15 +517,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         federatedAccount: widget.federatedAccount,
         lookup: widget.contactAvailability,
       ),
-      RegistrationAddressFields(
-        address: widget.address,
-        enabled: !widget.loading,
-        fieldColor: _field,
-        textColor: _text,
-        mutedColor: _muted,
-        borderColor: _border,
-        focusColor: _yellow,
-      ),
+
       if (!widget.federatedAccount) ...[
         _input(
           'Password',
@@ -668,7 +686,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Your documents are encrypted and only used for identity verification.',
+                  'Capture and face comparison are available after account creation in Settings > Verification checks.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: AppTheme.muted, fontSize: 11),
                 ),
@@ -692,7 +710,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       ),
       const SizedBox(height: 7),
       Text(
-        'Scan your face to verify your identity',
+        'Preview only. Open Verification checks in Settings after registration. Face matching does not approve worker access.',
         style: TextStyle(color: _muted),
       ),
       const SizedBox(height: 58),
@@ -705,7 +723,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        'Verification in Progress',
+        'Verification after registration',
         style: TextStyle(
           color: _text,
           fontSize: 22,
@@ -714,7 +732,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       ),
       const SizedBox(height: 8),
       Text(
-        "Our admin team is reviewing your documents. This typically takes 24-48 hours. You'll receive a notification as soon as your account is verified.",
+        'Finish creating your account, then open Settings > Verification checks. No identity check has been completed by these preview pages.',
         style: TextStyle(color: _muted, height: 1.5),
       ),
       const SizedBox(height: 28),
@@ -752,7 +770,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                   const SizedBox(height: 12),
                   Text(title, style: TextStyle(color: _text)),
                   Text(
-                    'COMPLETED OCT 24',
+                    'AFTER ACCOUNT CREATION',
                     style: TextStyle(color: _muted, fontSize: 9),
                   ),
                 ],
@@ -764,11 +782,12 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
 
   Widget _pageContent() => switch (_page) {
     0 => _accountPage(),
-    1 => _credentialsPage(),
-    2 => _servicesPage(),
-    3 => _otpPage(),
-    4 => _idPage(),
-    5 => _facePage(),
+    1 => _birthdayLocationPage(),
+    2 => _credentialsPage(),
+    3 => _servicesPage(),
+    4 => _otpPage(),
+    5 => _idPage(),
+    6 => _facePage(),
     _ => _reviewPage(),
   };
 
@@ -818,7 +837,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                       children: [
                         _pageContent(),
                         const SizedBox(height: 12),
-                        if (_page == 3)
+                        if (_page == 4)
                           Align(
                             alignment: Alignment.centerRight,
                             child: SizedBox.square(
@@ -855,14 +874,14 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
                                       strokeWidth: 2,
                                     ),
                                   )
-                                : Text(_page == 5 ? 'Start scan' : 'Next'),
+                                : Text(_page == 6 ? 'Start scan' : 'Next'),
                           ),
-                        if (_page == 4 || _page == 5)
+                        if (_page == 5 || _page == 6)
                           TextButton(
                             onPressed: () => _goTo(_page + 1),
                             child: const Text('Skip for now'),
                           ),
-                        if (_page == 2 || _page == 6)
+                        if (_page == 3 || _page == 7)
                           TextButton(
                             onPressed: () {},
                             child: const Text('Help & Support'),

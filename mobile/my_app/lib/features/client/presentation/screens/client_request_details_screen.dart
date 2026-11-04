@@ -384,16 +384,6 @@ class ClientRequestDetailsContent extends StatelessWidget {
                             'This post is unavailable. Choose a new date and time to repost.',
                           ),
                         ),
-                        if (canRepost)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: FilledButton.icon(
-                              key: const ValueKey('repost-job'),
-                              onPressed: saving ? null : onRepost,
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('Repost Job'),
-                            ),
-                          ),
                         const SizedBox(height: 16),
                       ],
                       if (request.workerId != null)
@@ -470,6 +460,19 @@ class ClientRequestDetailsContent extends StatelessWidget {
                     ],
                   ),
                 ),
+                if (canRepost)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        key: const ValueKey('repost-job'),
+                        onPressed: saving ? null : onRepost,
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Repost Job'),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

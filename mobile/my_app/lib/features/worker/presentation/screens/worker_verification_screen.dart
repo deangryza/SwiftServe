@@ -1,6 +1,8 @@
 import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:crypto/crypto.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -9,10 +11,13 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/models/app_user.dart';
 import '../../../../shared/repositories/verification_repository.dart';
+import '../../../../shared/repositories/document_review_repository.dart';
 import '../../../../shared/repositories/profile_repository.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../models/worker_verification_ui_state.dart';
 import 'face_capture_screens.dart';
+import '../../../../shared/models/verification_evidence.dart';
+import '../../../../shared/widgets/verification_evidence_panel.dart';
 
 typedef VerificationCaptureLauncher =
     Future<File?> Function(BuildContext context);
@@ -36,6 +41,7 @@ class WorkerVerificationScreen extends StatefulWidget {
     this.selfieCaptureLauncher,
     this.deleteFile,
     this.signOut,
+    this.documentReview,
   });
 
   final AppUser profile;
@@ -49,6 +55,7 @@ class WorkerVerificationScreen extends StatefulWidget {
   final VerificationCaptureLauncher? selfieCaptureLauncher;
   final VerificationFileDeleter? deleteFile;
   final Future<void> Function()? signOut;
+  final DocumentReviewGateway? documentReview;
 
   @override
   State<WorkerVerificationScreen> createState() =>
@@ -76,7 +83,25 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   AppUser? _liveProfile;
 
   bool _submitting = false;
+  String _processingMessage = 'Processing your verification request…';
   bool _submissionComplete = false;
+  bool _consent = false;
+  String _qrStatus = 'DEMO NOT SCANNED';
+  Map<String, dynamic> _evidence = {};
+  late final DocumentReviewGateway _documentGateway;
+  Map<String, dynamic> _documentReview = {};
+  bool _documentMatches = false;
+  bool get _requester => widget.profile.role == UserRole.client;
+  Widget _checks() => VerificationEvidencePanel(
+    evidence: VerificationEvidence(
+      data: _evidence,
+      requester: _requester,
+      legacyAccess:
+          (_liveProfile ?? widget.profile).verificationStatus ==
+          VerificationStatus.verified,
+    ),
+    qr: _qrStatus,
+  );
   double? _submittedConfidence;
   bool _submittedVerified = false;
   String? _stepMessage;
@@ -85,12 +110,36 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    _documentGateway = widget.documentReview ?? DocumentReviewRepository();
     if (widget.statusStream == null || widget.submitter == null) {
       _repository = VerificationRepository();
     }
     _statusStream =
-        widget.statusStream ?? _repository!.watchStatus(widget.profile.id);
-    _submitter = widget.submitter ?? _repository!.submit;
+        widget.statusStream ??
+        (_requester
+            ? Stream.value(null)
+            : _repository!.watch(widget.profile.id).map((doc) {
+                _evidence = doc.data() ?? {};
+                return doc.exists
+                    ? VerificationStatus.fromWire(doc.data()?['status'])
+                    : null;
+              }));
+    _submitter =
+        widget.submitter ??
+        ({
+          required idType,
+          required idNumber,
+          required governmentId,
+          required facePhoto,
+        }) => _repository!.submit(
+          idType: idType,
+          idNumber: idNumber,
+          governmentId: governmentId,
+          facePhoto: facePhoto,
+          comparisonOnly: _requester,
+          documentSessionId: _documentReview['sessionId'],
+          documentAttemptId: _documentReview['attemptId'],
+        );
     final profiles =
         widget.profileStream ??
         (Firebase.apps.isNotEmpty &&
@@ -112,6 +161,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
   @override
   void dispose() {
+    _documentGateway.close();
     _profileUpdates?.cancel();
     final files = <File?>[_draft.document, _draft.selfie];
     _draft.document = null;
@@ -159,6 +209,15 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                   snapshot.data == null) {
                 return const Center(child: CircularProgressIndicator());
               }
+              if (snapshot.hasError) {
+                return _VerificationStatusView(
+                  icon: Icons.cloud_off_outlined,
+                  title: 'Checks could not be loaded',
+                  description:
+                      'Your account access has not changed. Go back and try again.',
+                  accentColor: AppTheme.ink,
+                );
+              }
 
               final state = WorkerVerificationUiState.resolve(
                 profileStatus:
@@ -174,43 +233,57 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Widget _buildContent(WorkerVerificationUiState state) {
-    if (state.isVerified) {
-      return const _VerificationStatusView(
+    if (state.isVerified && !_requester) {
+      return _VerificationStatusView(
         key: ValueKey('verification_verified_status'),
         icon: Icons.verified_outlined,
-        title: 'Verification complete',
-        description: 'Your identity is verified. You can now accept jobs.',
+        title: 'Worker access retained',
+        description:
+            'Existing worker access does not establish official PSA authentication.',
         accentColor: AppTheme.ink,
+        action: _checks(),
       );
     }
 
     if (_submissionComplete) {
       final similarity = _formatPercent(_submittedConfidence);
-      if (_submittedVerified) {
+      if (_submittedVerified && !_requester) {
         return _VerificationStatusView(
           key: const ValueKey('verification_submission_verified'),
           icon: Icons.verified_outlined,
-          title: 'Verified',
+          title: 'Worker approval recorded',
           description: similarity == null
-              ? 'Your selfie matched your ID. You can now accept jobs.'
+              ? 'The backend reported worker approval. Face matching alone does not establish official identity.'
               : 'Your selfie matched your ID with $similarity similarity. '
-                    'You can now accept jobs.',
-          accentColor: Colors.green,
+                    'Worker approval is a separate backend decision.',
+          accentColor: AppTheme.ink,
+          action: _checks(),
         );
       }
-      return const _VerificationStatusView(
+      return _VerificationStatusView(
         key: ValueKey('verification_submission_complete'),
         icon: Icons.schedule_send_outlined,
-        title: 'Under review',
+        title: _requester
+            ? 'Face comparison complete'
+            : 'Worker approval pending',
         description:
-            'Under review — an admin will check your photos. You can return '
-            'here to check the review status.',
-        accentColor: Colors.blue,
+            'Face and DEMO QR results cannot approve an account. Official government authentication and trusted server liveness remain unavailable.',
+        accentColor: AppTheme.ink,
+        action: Column(
+          children: [
+            _checks(),
+            if (_requester)
+              TextButton(
+                onPressed: _startFreshWizard,
+                child: const Text('Run another face check'),
+              ),
+          ],
+        ),
       );
     }
 
-    if (state.isAwaitingReview) {
-      return const _VerificationStatusView(
+    if (state.isAwaitingReview && !_requester) {
+      return _VerificationStatusView(
         key: ValueKey('verification_pending_status'),
         icon: Icons.hourglass_top_rounded,
         title: 'Verification under review',
@@ -218,6 +291,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             'Your documents were submitted successfully. We will '
             'notify you when the review is complete.',
         accentColor: AppTheme.ink,
+        action: _checks(),
       );
     }
 
@@ -305,12 +379,32 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                     'open and is not saved across app restarts.',
               ),
               const SizedBox(height: 24),
+              _checks(),
+              DemoQrCheck(
+                onResult: (value) => setState(() => _qrStatus = value),
+              ),
+              CheckboxListTile(
+                key: const ValueKey('verification-consent'),
+                contentPadding: EdgeInsets.zero,
+                value: _consent,
+                onChanged: (value) => setState(() => _consent = value == true),
+                title: const Text(
+                  'I consent to private document suitability review and face comparison.',
+                ),
+                subtitle: Text(
+                  _requester
+                      ? 'Requester face checks are processed in memory and are not saved as worker verification. DEMO QR data stays on this screen.'
+                      : 'Worker photos use the existing private review storage and deletion process. Pending retention still needs review before production. No PSA service is contacted.',
+                ),
+              ),
               FilledButton(
                 key: const ValueKey('verification_start_button'),
-                onPressed: () => setState(() {
-                  _draft.started = true;
-                  _draft.step = _VerificationStep.idDetails;
-                }),
+                onPressed: !_consent
+                    ? null
+                    : () => setState(() {
+                        _draft.started = true;
+                        _draft.step = _VerificationStep.idDetails;
+                      }),
                 child: const Text('Start verification'),
               ),
             ],
@@ -386,6 +480,15 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
           const Text(
             'Enter the details exactly as they appear on your government ID.',
           ),
+          if (!_consent)
+            CheckboxListTile(
+              key: const ValueKey('verification-consent'),
+              value: _consent,
+              onChanged: (value) => setState(() => _consent = value == true),
+              title: const Text(
+                'I consent to private document suitability review and face comparison. No PSA authentication is performed.',
+              ),
+            ),
           const SizedBox(height: 24),
           DropdownButtonFormField<String>(
             key: const ValueKey('verification_id_type'),
@@ -440,6 +543,103 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     );
   }
 
+  Widget _documentPanel() {
+    final status = _documentMatches
+        ? _documentReview['status']
+        : 'DOCUMENT_PENDING';
+    final label = switch (status) {
+      'DOCUMENT_ACCEPTED' => 'Document accepted for further verification',
+      'DOCUMENT_REJECTED' => 'Document rejected — upload a replacement',
+      'DOCUMENT_UNREADABLE' => 'Document unreadable — upload another image',
+      'DOCUMENT_REVIEW_REQUIRED' =>
+        'Document submitted — awaiting document review',
+      _ => 'Document not submitted for review',
+    };
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            const Text(
+              'Suitability review is not government authentication or worker approval.',
+            ),
+            if (_documentReview['reason'] is String &&
+                _documentReview['reason'] != '')
+              Text(_documentReview['reason']),
+            TextButton(
+              onPressed: _submitting ? null : _refreshDocument,
+              child: const Text('Refresh document review'),
+            ),
+            if (['DOCUMENT_REJECTED', 'DOCUMENT_UNREADABLE'].contains(status))
+              TextButton(
+                onPressed: _submitting
+                    ? null
+                    : () => setState(
+                        () => _draft.step = _VerificationStep.document,
+                      ),
+                child: const Text('Replace document'),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _refreshDocument() async {
+    if (_submitting || !_consent) return;
+    setState(() {
+      _submitting = true;
+      _processingMessage = 'Refreshing document review…';
+    });
+    try {
+      final result = await _documentGateway.get();
+      if (!mounted) return;
+      bool? bytesMatch;
+      if (_draft.document != null && result['imageDigest'] is String) {
+        bytesMatch =
+            sha256.convert(await _draft.document!.readAsBytes()).toString() ==
+                result['imageDigest'] &&
+            _draft.idType == result['declaredType'];
+        if (!mounted) return;
+      }
+      // Never associate a new local photo with an older reviewed attempt.
+      if (_draft.document == null && result['attemptId'] != null) {
+        final restored = await _documentGateway.restore(result);
+        if (!mounted) {
+          await restored.delete();
+          return;
+        }
+        setState(() {
+          _draft.document = restored;
+          _documentMatches = true;
+          _documentReview = result;
+          _draft.idType = result['declaredType'] ?? _draft.idType;
+        });
+      }
+      setState(() {
+        if (bytesMatch != null) {
+          _documentMatches = bytesMatch;
+        } else if (_documentReview['attemptId'] != null &&
+            _documentReview['attemptId'] != result['attemptId'] &&
+            _draft.document != null) {
+          _documentMatches = false;
+        }
+        _documentReview = result;
+      });
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _stepMessage =
+              'Could not refresh document review. Check your connection and try again.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
+
   Widget _buildDocumentStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -456,6 +656,19 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
           'frame and tilt the card slightly if you see glare.',
         ),
         const SizedBox(height: 20),
+        _documentPanel(),
+        if (_documentMatches &&
+            _documentReview['status'] == 'DOCUMENT_ACCEPTED')
+          FilledButton(
+            onPressed: _submitting
+                ? null
+                : () => setState(
+                    () => _draft.step = _draft.selfie == null
+                        ? _VerificationStep.selfie
+                        : _VerificationStep.review,
+                  ),
+            child: const Text('Continue with reviewed document'),
+          ),
         if (_draft.document != null) ...[
           _PhotoPreview(
             file: _draft.document!,
@@ -469,6 +682,11 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
           child: Text(
             _draft.document == null ? 'Open ID camera' : 'Capture ID again',
           ),
+        ),
+        TextButton.icon(
+          onPressed: _submitting ? null : _uploadDocument,
+          icon: const Icon(Icons.upload_file_outlined),
+          label: const Text('Upload digital ID image (JPEG / PNG)'),
         ),
         TextButton(
           onPressed: _submitting ? null : _goBackOneStep,
@@ -574,6 +792,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
           'submitting your verification.',
         ),
         const SizedBox(height: 20),
+        _documentPanel(),
         _ReviewPhoto(
           title: 'Government ID',
           file: _draft.document,
@@ -632,6 +851,10 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                 )
               : const Text('Submit verification'),
         ),
+        if (_submitting) ...[
+          const LinearProgressIndicator(),
+          Text(_processingMessage),
+        ],
         TextButton(
           onPressed: _submitting ? null : _goBackOneStep,
           child: const Text('Back'),
@@ -641,12 +864,21 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   void _continueFromIdDetails() {
+    if (!_consent) {
+      setState(() => _stepMessage = 'Consent is required before capture.');
+      return;
+    }
     if (!(_idDetailsFormKey.currentState?.validate() ?? false)) return;
     setState(() {
       _draft.idNumber = _idNumberController.text.trim();
+      if (_documentReview['declaredType'] != null &&
+          _documentReview['declaredType'] != _draft.idType) {
+        _documentMatches = false;
+      }
       _stepMessage = null;
       _draft.step = _VerificationStep.document;
     });
+    if (widget.documentReview == null) unawaited(_refreshDocument());
   }
 
   void _goBackOneStep() {
@@ -668,6 +900,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     final previous = _draft.document;
     setState(() {
       _draft.document = captured;
+      _documentMatches = false;
       _stepMessage = null;
       _mismatchSimilarity = null;
       if (advance) {
@@ -685,6 +918,58 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     return Navigator.of(context).push<File>(
       MaterialPageRoute(builder: (_) => const DocumentCaptureScreen()),
     );
+  }
+
+  Future<void> _uploadDocument() async {
+    setState(() => _submitting = true);
+    try {
+      final selected = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+      );
+      if (selected == null) return;
+      if (await selected.length() > 5 * 1024 * 1024) {
+        throw const FormatException('Image too large');
+      }
+      final bytes = await selected
+          .openRead(0, 8)
+          .expand((chunk) => chunk)
+          .toList();
+      final png =
+          bytes.length == 8 && bytes.join(',') == '137,80,78,71,13,10,26,10';
+      final jpeg =
+          bytes.length >= 3 &&
+          bytes[0] == 255 &&
+          bytes[1] == 216 &&
+          bytes[2] == 255;
+      if (!png && !jpeg) {
+        throw const FormatException('JPEG/PNG required');
+      }
+      final ownedCopy = await File(selected.path).copy(
+        '${Directory.systemTemp.path}/swiftserve-id-${DateTime.now().microsecondsSinceEpoch}.${png ? 'png' : 'jpg'}',
+      );
+      if (!mounted) {
+        await ownedCopy.delete();
+        return;
+      }
+      final previous = _draft.document;
+      setState(() {
+        _draft.document = ownedCopy;
+        _documentMatches = false;
+        _draft.step = _draft.selfie == null
+            ? _VerificationStep.selfie
+            : _VerificationStep.review;
+      });
+      if (previous != null) await _deleteTemporaryFile(previous);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _stepMessage =
+              'Choose a JPEG/PNG image no larger than 5 MB. The backend also validates and processes it.',
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
   }
 
   Future<void> _captureSelfie({required bool advance}) async {
@@ -710,6 +995,14 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Future<void> _submit() async {
+    // A second tap can arrive before the disabled button is rebuilt.
+    if (_submitting) return;
+    if (!_consent) {
+      setState(
+        () => _stepMessage = 'Consent is required before processing images.',
+      );
+      return;
+    }
     final document = _draft.document;
     final selfie = _draft.selfie;
     if (document == null || selfie == null || _draft.idNumber.trim().isEmpty) {
@@ -721,10 +1014,41 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
     setState(() {
       _submitting = true;
+      _processingMessage = 'Preparing verification…';
       _stepMessage = null;
       _mismatchSimilarity = null;
     });
     try {
+      if (!_documentMatches ||
+          _documentReview['status'] != 'DOCUMENT_ACCEPTED') {
+        if (!_documentMatches) {
+          setState(() => _processingMessage = 'Uploading document for review…');
+          final result = await _documentGateway.submit(
+            document,
+            _draft.idType,
+            _documentReview,
+          );
+          if (!mounted) return;
+          setState(() {
+            _documentReview = result;
+            _documentMatches = true;
+          });
+        }
+        if (_documentReview['status'] != 'DOCUMENT_ACCEPTED') {
+          setState(() {
+            _submitting = false;
+            _stepMessage =
+                _documentReview['status'] == 'DOCUMENT_REVIEW_REQUIRED'
+                ? 'Document submitted. Awaiting document review. This does not establish government authenticity.'
+                : 'Document not accepted. Upload a replacement and submit it for review.';
+          });
+          return;
+        }
+      }
+      setState(
+        () => _processingMessage =
+            'Uploading images and processing face comparison…',
+      );
       final result = await _submitter(
         idType: _draft.idType,
         idNumber: _draft.idNumber.trim(),
@@ -738,8 +1062,30 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
         _submissionComplete = true;
         _submittedConfidence = result.similarity ?? result.confidence;
         _submittedVerified = result.isVerified;
+        _evidence = {
+          ..._evidence,
+          ...result.evidence,
+          if (result.evidence['faceResult'] is Map)
+            'face': result.evidence['faceResult'],
+          if (!result.evidence.containsKey('faceResult'))
+            'face': {
+              'status': result.band == 'strong' ? 'MATCH' : 'BORDERLINE',
+            },
+        };
         _draft.reset();
         _idNumberController.clear();
+      });
+    } on DocumentReviewException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _stepMessage = error.message;
+        if ([
+          'DOCUMENT_UNREADABLE',
+          'INVALID_DOCUMENT_UPLOAD',
+        ].contains(error.code)) {
+          _draft.step = _VerificationStep.document;
+        }
       });
     } on FaceVerificationException catch (error) {
       if (!mounted) return;
@@ -752,7 +1098,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             _draft.step = _VerificationStep.review;
             _mismatchSimilarity = error.similarity ?? 0;
           case FaceVerificationFailure.noFace ||
-                  FaceVerificationFailure.multipleFaces
+                  FaceVerificationFailure.multipleFaces ||
+                  FaceVerificationFailure.quality
               when error.image != null:
             final retakeId = error.image == VerificationImage.document;
             _draft.step = retakeId

@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "admin_audit_logs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "actorId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "service_requests",
       "queryScope": "COLLECTION",
       "fields": [

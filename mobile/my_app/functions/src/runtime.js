@@ -31,8 +31,8 @@ function validateTarget(db, env = process.env) {
 function enabled(env, name) {
   return env[name] === "true";
 }
-async function gate(tx, db, field) {
-  const settings = await tx.get(db.collection(CONTROL).doc("settings"));
+async function gate(tx, db, field, settingsDocument = "settings") {
+  const settings = await tx.get(db.collection(CONTROL).doc(settingsDocument));
   if (settings.data()?.[field] !== true)
     throw new Error(`Runtime gate closed: ${field}`);
 }
@@ -53,9 +53,13 @@ async function sweep({
   maxDocuments = 1000,
   shouldStop = () => false,
   inspect = inspectAndExpire,
+  settingsDocument = "settings",
 }) {
   if (!enabled(env, "EXPIRED_JOB_CLEANUP_ENABLED"))
     return { status: "disabled" };
+  if (!["settings", "localComputerSettings"].includes(settingsDocument)) {
+    throw new Error("Unknown expiration settings document");
+  }
   validateTarget(db, env);
   // Durable preview writes operational metadata, never jobs/notifications/outbox.
   if (!enabled(env, "EXPIRY_METADATA_WRITES_ENABLED"))
@@ -66,7 +70,7 @@ async function sweep({
   const owner = randomUUID();
   const started = now();
   const claim = await db.runTransaction(async (tx) => {
-    await gate(tx, db, field);
+    await gate(tx, db, field, settingsDocument);
     const data = (await tx.get(ref)).data() || {};
     if (data.leaseUntil?.toMillis() > now()) return null;
     if (data.version != null && data.version !== 1)
@@ -95,7 +99,7 @@ async function sweep({
   let affected = 0;
   let renewedAt = started;
   const guard = async (tx) => {
-    await gate(tx, db, field);
+    await gate(tx, db, field, settingsDocument);
     assertLease((await tx.get(ref)).data(), owner, claim.fence, now());
   };
   async function progress(

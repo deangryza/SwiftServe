@@ -15,6 +15,8 @@ class WorkerVerificationUiState {
     return WorkerVerificationUiState._(
       status: canAcceptJobs
           ? VerificationStatus.verified
+          : submissionStatus == VerificationStatus.verified
+          ? VerificationStatus.underReview
           : submissionStatus ?? profileStatus,
       hasSubmission: submissionStatus != null,
       canAcceptJobs: canAcceptJobs,
@@ -38,14 +40,14 @@ class WorkerVerificationUiState {
       status == VerificationStatus.resubmissionRequired;
 
   String get statusLabel {
-    if (isVerified) return 'Verified';
+    if (isVerified) return 'Worker access retained';
     if (!hasSubmission) return 'Not verified';
     return switch (status) {
       VerificationStatus.pending => 'Verification pending',
       VerificationStatus.underReview => 'Under review',
       VerificationStatus.rejected => 'Verification rejected',
       VerificationStatus.resubmissionRequired => 'Resubmission required',
-      VerificationStatus.verified => 'Verified',
+      VerificationStatus.verified => 'Worker access retained',
     };
   }
 
@@ -65,7 +67,9 @@ class WorkerVerificationUiState {
   }
 
   String get description {
-    if (isVerified) return 'Your identity has been approved.';
+    if (isVerified) {
+      return 'Existing worker access is retained. This is not proof of official PSA authentication.';
+    }
     if (!hasSubmission) {
       return 'Submit your identity documents before accepting jobs.';
     }
@@ -76,7 +80,8 @@ class WorkerVerificationUiState {
         'Your submission was rejected. Submit updated documents to try again.',
       VerificationStatus.resubmissionRequired =>
         'An administrator requested updated verification documents.',
-      VerificationStatus.verified => 'Your identity has been approved.',
+      VerificationStatus.verified =>
+        'Worker access is recorded separately from official government authentication.',
     };
   }
 }

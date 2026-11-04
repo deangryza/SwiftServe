@@ -27,8 +27,16 @@ service cloud.firestore {
     }
     function verifiedWorker() {
       return signedIn()
-        && currentUser().role == 'worker'
-        && currentUser().verificationStatus == 'verified';
+        && eligibleWorkerId(request.auth.uid);
+    }
+    // Backend-owned compatibility status; Phase 3 rechecks it when hiring too.
+    // Legacy verified workers remain eligible without fabricating new evidence.
+    function eligibleWorkerId(uid) {
+      let worker = get(/databases/$(database)/documents/users/$(uid)).data;
+      return worker.role == 'worker'
+        && worker.verificationStatus == 'verified'
+        && !(worker.get('accountStatus', 'active') in ['suspended', 'disabled', 'inactive'])
+        && !(worker.get('status', 'active') in ['suspended', 'disabled', 'inactive']);
     }
     function validOptionalString(data, field, maxLength) {
       return !(field in data)
@@ -402,7 +410,12 @@ service cloud.firestore {
         && !('updatedAt' in request.resource.data)
         && !('errandStage' in request.resource.data)
         && validPlacement(requestId, request.resource.data);
-      allow update: if validServiceRequest(request.resource.data) && (
+      // Reject ineligible hiring before the larger document/transition checks.
+      allow update: if (
+        resource.data.status != 'pending'
+        || request.resource.data.status != 'accepted'
+        || eligibleWorkerId(request.resource.data.workerId)
+      ) && validServiceRequest(request.resource.data) && (
         (
           // The client edits their post while nobody has been hired yet.
           self(resource.data.clientId)
@@ -529,6 +542,7 @@ service cloud.firestore {
           && (
             (
               request.resource.data.status == 'accepted'
+              && eligibleWorkerId(workerId)
               && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.status == 'accepted'
               && getAfter(/databases/$(database)/documents/service_requests/$(requestId)).data.workerId == workerId
             ) || (

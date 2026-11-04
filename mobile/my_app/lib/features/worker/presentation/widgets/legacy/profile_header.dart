@@ -39,7 +39,7 @@ class ProfileHeader extends StatelessWidget {
             ),
             Text(
               verificationLabel ??
-                  (verified ? 'Verified' : 'Verification pending'),
+                  (verified ? 'Worker access recorded' : 'Verification pending'),
               style: TextStyle(color: verified ? Colors.green : Colors.orange),
             ),
             const SizedBox(height: 14),

@@ -80,6 +80,28 @@ app.use(express.json());
 app.use('/api/users', require('../src/routes/userRoutes'));
 const photo = createCanvas(8, 8).toBuffer('image/png').toString('base64');
 
+test('client and worker registration reject missing, invalid and underage birthdays without writes', async () => {
+  const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  for (const role of ['client', 'worker']) {
+    for (const [dateOfBirth, status] of [[undefined, 400], ['2007-02-29', 400], ['2099-01-01', 400], [today, 403]]) {
+      const uid = `birthday-${role}-${String(dateOfBirth)}`;
+      const response = await request(app).post('/api/users/profile').set('Authorization', `Bearer ${uid}`)
+        .send({ fullName: 'Synthetic User', email: 'synthetic@example.test', phoneNumber: '+639178888888', role, dateOfBirth });
+      assert.equal(response.status, status);
+      if (status === 403) assert.equal(response.body.message, require('../src/services/registrationBirthday').INELIGIBLE);
+      assert.equal(records[uid], undefined);
+      assert.equal(publicProfiles[uid], undefined);
+      assert.equal(workerProfiles[uid], undefined);
+    }
+    const uid = `adult-${role}`;
+    await request(app).post('/api/users/profile').set('Authorization', `Bearer ${uid}`)
+      .send({ fullName: 'Synthetic Adult', email: 'adult@example.test', phoneNumber: role === 'client' ? '+639178888881' : '+639178888882', role, dateOfBirth: '2000-02-29' }).expect(201);
+    assert.equal(records[uid].dateOfBirth, '2000-02-29');
+    assert.equal(publicProfiles[uid].dateOfBirth, undefined);
+    assert.equal(workerProfiles[uid]?.dateOfBirth, undefined);
+  }
+});
+
 test('worker service edits replace removed categories across all profiles and preserve credibility', async () => {
   records.serviceEditor = { role: 'worker', roles: ['client', 'worker'], skills: ['Electrical'], category: 'Electrical', address: 'Private address' };
   publicProfiles.serviceEditor = { skills: ['Electrical'], rating: 4.7, reviewCount: 9, description: 'Existing About' };
@@ -154,7 +176,7 @@ test('invalid service edits cannot remove all categories or save unresolved Othe
 test('worker registration preserves every resolved service in private and public profiles', async () => {
   const skills = ['Electrical', 'Repair', 'Pet grooming'];
   await request(app).post('/api/users/profile').set('Authorization', 'Bearer multiServiceWorker')
-    .send({ fullName: 'Multi Service', email: 'multi@example.com', phoneNumber: '+639175555551',
+    .send({ dateOfBirth: '2000-01-01', fullName: 'Multi Service', email: 'multi@example.com', phoneNumber: '+639175555551',
       role: 'worker', address: 'Brgy. Ligas, Malolos, Bulacan', category: skills[0], skills }).expect(201);
   for (const data of [records.multiServiceWorker, publicProfiles.multiServiceWorker, workerProfiles.multiServiceWorker]) {
     assert.deepEqual(data.skills, skills);
@@ -287,7 +309,7 @@ for (const [index, role] of ['client', 'worker'].entries()) {
     const uid = `privacy-${role}`;
     const address = '123 Example Street, Brgy. Ligas, Malolos, Bulacan';
     await request(app).post('/api/users/profile').set('Authorization', `Bearer ${uid}`)
-      .send({ fullName: 'Privacy User', email: 'privacy@example.com', phoneNumber: `+63917666666${index + 1}`,
+      .send({ dateOfBirth: '2000-01-01', fullName: 'Privacy User', email: 'privacy@example.com', phoneNumber: `+63917666666${index + 1}`,
         role, address, location: '456 Do Not Publish Road' }).expect(201);
     assert.equal(records[uid].address, address);
     assert.equal(publicProfiles[uid].location, 'Brgy. Ligas, Malolos');
@@ -360,7 +382,7 @@ test('identity status survives adding worker access and repeated role changes', 
 
 test('registration persists a usable thumbnail with the actual name', async () => {
   await request(app).post('/api/users/profile').set('Authorization', 'Bearer alice')
-    .send({ fullName: 'Alice Santos', email: 'alice@example.com', phoneNumber: '+639171111111', role: 'client', photoBase64: photo }).expect(201);
+    .send({ dateOfBirth: '2000-01-01', fullName: 'Alice Santos', email: 'alice@example.com', phoneNumber: '+639171111111', role: 'client', photoBase64: photo }).expect(201);
   assert.equal(records.alice.fullName, 'Alice Santos');
   assert.equal(Buffer.from(records.alice.photoBase64, 'base64')[0], 0xff);
   assert.equal(publicProfiles.alice.fullName, 'Alice Santos');
@@ -388,7 +410,7 @@ test('photo updates affect only the authenticated profile and preserve its detai
 test('invalid and oversized images are rejected before writing a profile', async () => {
   for (const photoBase64 of ['not an image', 'A'.repeat(65540), Buffer.from('fake').toString('base64')]) {
     await request(app).post('/api/users/profile').set('Authorization', 'Bearer invalid')
-      .send({ fullName: 'Invalid', email: 'invalid@example.com', phoneNumber: '+639172222222', role: 'client', photoBase64 }).expect(400);
+      .send({ dateOfBirth: '2000-01-01', fullName: 'Invalid', email: 'invalid@example.com', phoneNumber: '+639172222222', role: 'client', photoBase64 }).expect(400);
   }
   assert.equal(records.invalid, undefined);
 });
@@ -396,7 +418,7 @@ test('invalid and oversized images are rejected before writing a profile', async
 test('a phone number can belong to only one account', async () => {
   const first = await request(app).post('/api/users/profile')
     .set('Authorization', 'Bearer phone-owner')
-    .send({
+    .send({ dateOfBirth: '2000-01-01',
       fullName: 'Phone Owner',
       email: 'owner@example.com',
       phoneNumber: '+63 917 333 3333',
@@ -406,7 +428,7 @@ test('a phone number can belong to only one account', async () => {
 
   const duplicate = await request(app).post('/api/users/profile')
     .set('Authorization', 'Bearer other-user')
-    .send({
+    .send({ dateOfBirth: '2000-01-01',
       fullName: 'Other User',
       email: 'other@example.com',
       phoneNumber: '+639173333333',
@@ -418,7 +440,7 @@ test('a phone number can belong to only one account', async () => {
 
   const retry = await request(app).post('/api/users/profile')
     .set('Authorization', 'Bearer phone-owner')
-    .send({
+    .send({ dateOfBirth: '2000-01-01',
       fullName: 'Phone Owner',
       email: 'owner@example.com',
       phoneNumber: '+639173333333',
@@ -431,7 +453,7 @@ test('profile creation rejects missing or invalid phone numbers', async () => {
   for (const phoneNumber of ['', '09171234567', '+123']) {
     const response = await request(app).post('/api/users/profile')
       .set('Authorization', `Bearer invalid-phone-${phoneNumber}`)
-      .send({
+      .send({ dateOfBirth: '2000-01-01',
         fullName: 'Invalid Phone',
         email: 'invalid-phone@example.com',
         phoneNumber,
@@ -444,7 +466,7 @@ test('profile creation rejects missing or invalid phone numbers', async () => {
 
 test('registration records the starting role in roles', async () => {
   await request(app).post('/api/users/profile').set('Authorization', 'Bearer starter')
-    .send({ fullName: 'Starter', email: 'starter@example.com', phoneNumber: '+639174444444', role: 'client' }).expect(201);
+    .send({ dateOfBirth: '2000-01-01', fullName: 'Starter', email: 'starter@example.com', phoneNumber: '+639174444444', role: 'client' }).expect(201);
   assert.deepEqual(records.starter.roles, ['client']);
   assert.deepEqual(publicProfiles.starter.roles, ['client']);
 });

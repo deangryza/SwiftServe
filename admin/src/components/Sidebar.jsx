@@ -1,4 +1,5 @@
 import { auth } from '../lib/firebase';
+import { useAdminAccess } from '../lib/AdminAccessContext';
 import { NavLink, useLocation } from 'react-router-dom'
 import {
   CalendarCheck,
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { to: '/dashboard/bookings', label: 'Booking management', icon: CalendarCheck },
   { to: '/dashboard/reports', label: 'Reports & complaints', icon: FileWarning },
   { to: '/dashboard/categories', label: 'Service categories', icon: LayoutGrid },
+  { to: '/dashboard/administrators', label: 'Admin Management', icon: ShieldCheck },
   { to: '/dashboard/profile', label: 'Profile settings', icon: UserCircle },
 ]
 
@@ -43,6 +45,7 @@ function routeIsActive(pathname, item) {
 }
 
 export default function Sidebar() {
+  const access = useAdminAccess();
   const { pathname } = useLocation()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -59,7 +62,7 @@ export default function Sidebar() {
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {NAV_ITEMS.map((item) => {
+              {NAV_ITEMS.filter(item => access.canOpen(item.to)).map((item) => {
                 const Icon = item.icon
                 const isActive = routeIsActive(pathname, item)
                 return (
@@ -95,12 +98,12 @@ export default function Sidebar() {
       <SidebarSeparator />
       <SidebarFooter className="p-3">
         <div className="flex items-center gap-3 rounded-xl bg-white/[0.07] p-2.5">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-xs font-semibold text-white">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary-500 text-xs font-semibold text-primary-foreground">
             {(auth.currentUser?.displayName || auth.currentUser?.email || 'A').slice(0, 2).toUpperCase()}
           </span>
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-white">{auth.currentUser?.displayName || auth.currentUser?.email}</p>
-            <p className="truncate text-xs text-sidebar-foreground/55">Administrator</p>
+            <p className="truncate text-xs text-sidebar-foreground/55">{access.access?.role || 'Administrator'}</p>
           </div>
           <span className="ml-auto size-2 rounded-full bg-success-400" aria-label="Online" />
         </div>

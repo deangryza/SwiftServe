@@ -8,6 +8,31 @@ import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../../domain/liveness_tracker.dart';
+import '../../domain/capture_quality.dart';
+
+Future<void> _validateFinalPhoto(File file, FaceDetector detector) =>
+    CaptureQuality.validate(file, (photo) async {
+      final faces = await detector.processImage(
+        InputImage.fromFilePath(photo.path),
+      );
+      return faces
+          .map(
+            (face) => CaptureFace(face.boundingBox, [
+              for (final type in [
+                FaceLandmarkType.leftEye,
+                FaceLandmarkType.rightEye,
+                FaceLandmarkType.noseBase,
+                FaceLandmarkType.bottomMouth,
+              ])
+                if (face.landmarks[type] != null)
+                  Offset(
+                    face.landmarks[type]!.position.x.toDouble(),
+                    face.landmarks[type]!.position.y.toDouble(),
+                  ),
+            ]),
+          )
+          .toList();
+    });
 
 class DocumentCaptureScreen extends StatefulWidget {
   const DocumentCaptureScreen({super.key});
@@ -26,7 +51,10 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen> {
   void initState() {
     super.initState();
     _detector = FaceDetector(
-      options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
+      options: FaceDetectorOptions(
+        performanceMode: FaceDetectorMode.accurate,
+        enableLandmarks: true,
+      ),
     );
     _initialize();
   }
@@ -61,21 +89,17 @@ class _DocumentCaptureScreenState extends State<DocumentCaptureScreen> {
       _error = null;
     });
     try {
-      final capture = await controller.takePicture();
-      final faces = await _detector.processImage(
-        InputImage.fromFilePath(capture.path),
+      final photo = await captureValidatedPhoto(
+        capture: () async => File((await controller.takePicture()).path),
+        validate: (file) => _validateFinalPhoto(file, _detector),
+        isActive: () =>
+            mounted &&
+            controller.value.isInitialized &&
+            WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
       );
-      if (faces.length != 1) {
-        await File(capture.path).delete().catchError((_) => File(capture.path));
-        if (!mounted) return;
-        setState(
-          () => _error = faces.isEmpty
-              ? 'No face found on the ID. Retake it in good light without blur or glare.'
-              : 'More than one face was found. Frame only the ID document.',
-        );
-        return;
-      }
-      if (mounted) Navigator.pop(context, File(capture.path));
+      if (mounted) Navigator.pop(context, photo);
+    } on CaptureQualityException catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } catch (error) {
       if (mounted) setState(() => _error = 'Could not capture the ID: $error');
     } finally {
@@ -115,17 +139,25 @@ class SelfieLivenessScreen extends StatefulWidget {
 class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
   CameraController? _controller;
   late final FaceDetector _detector;
+  late final FaceDetector _finalDetector;
   late LivenessTracker _tracker;
   Timer? _timer;
   bool _processing = false;
   bool _capturing = false;
   bool _timedOut = false;
+  bool _retakePhoto = false;
   String? _error;
   String? _guidance;
 
   @override
   void initState() {
     super.initState();
+    _finalDetector = FaceDetector(
+      options: FaceDetectorOptions(
+        performanceMode: FaceDetectorMode.accurate,
+        enableLandmarks: true,
+      ),
+    );
     _detector = FaceDetector(
       options: FaceDetectorOptions(
         enableClassification: true,
@@ -175,6 +207,7 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     setState(() {
       _tracker = LivenessTracker(_randomChallenge());
       _timedOut = false;
+      _retakePhoto = false;
       _error = null;
       _guidance = null;
     });
@@ -315,11 +348,31 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
         await controller.stopImageStream();
       }
       await Future<void>.delayed(const Duration(milliseconds: 250));
-      final capture = await controller.takePicture();
-      if (mounted) Navigator.pop(context, File(capture.path));
+      final photo = await captureValidatedPhoto(
+        capture: () async => File((await controller.takePicture()).path),
+        validate: (file) => _validateFinalPhoto(file, _finalDetector),
+        isActive: () =>
+            mounted &&
+            controller.value.isInitialized &&
+            WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
+      );
+      if (mounted) Navigator.pop(context, photo);
+    } on CaptureQualityException catch (error) {
+      if (mounted) {
+        setState(() {
+          _error = error.message;
+          _timedOut = true;
+          _retakePhoto = true;
+        });
+      }
+      _capturing = false;
     } catch (error) {
       if (mounted) {
-        setState(() => _error = 'Could not capture the selfie: $error');
+        setState(() {
+          _error = 'Could not check the captured selfie. Retake the selfie.';
+          _timedOut = true;
+          _retakePhoto = true;
+        });
       }
       _capturing = false;
     }
@@ -330,6 +383,7 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     _timer?.cancel();
     _controller?.dispose();
     _detector.close();
+    _finalDetector.close();
     super.dispose();
   }
 
@@ -338,14 +392,18 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     title: 'Live selfie check',
     controller: _controller,
     error: _error,
-    instructions: _timedOut
+    instructions: _capturing
+        ? 'Checking the captured selfie…'
+        : _timedOut
         ? 'The challenge timed out. Keep one face centered and try again.'
         : [_tracker.prompt, ?_guidance].join('\n'),
     action: _timedOut
         ? FilledButton.icon(
             onPressed: _startChallenge,
             icon: const Icon(Icons.refresh),
-            label: const Text('Try another challenge'),
+            label: Text(
+              _retakePhoto ? 'Retake selfie' : 'Try another challenge',
+            ),
           )
         : const LinearProgressIndicator(),
   );

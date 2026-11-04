@@ -14,6 +14,8 @@ import WorkerVerificationTable from "../../components/verification/WorkerVerific
 import WorkerVerificationModal from "../../components/verification/WorkerVerificationModal";
 import { VERIFICATION_STATUS } from "../../data/workerVerification";
 import { apiRequest } from "../../lib/api";
+import NationalIdMockReviews from '../../components/verification/NationalIdMockReviews';
+import DocumentSuitabilityReviews from '../../components/verification/DocumentSuitabilityReviews';
 
 const SUMMARY_CONFIG = [
   { key: "total", label: "Total Submissions", icon: ClipboardList, color: "blue" },
@@ -26,7 +28,7 @@ const SUMMARY_CONFIG = [
   },
   {
     key: VERIFICATION_STATUS.VERIFIED,
-    label: "Verified",
+    label: "Worker access recorded",
     icon: CheckCircle2,
     color: "green",
   },
@@ -148,6 +150,8 @@ export default function WorkerVerification() {
 
   return (
     <div>
+      <NationalIdMockReviews />
+      <DocumentSuitabilityReviews />
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-800">

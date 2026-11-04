@@ -8,16 +8,16 @@ export default {
     extend: {
       colors: {
         primary: {
-          50: '#eff6ff',
-          100: '#dbeafe',
-          200: '#bfdbfe',
-          300: '#93c5fd',
-          400: '#60a5fa',
-          500: '#3b82f6',
-          600: '#2563EB',
-          700: '#1d4ed8',
-          800: '#1e40af',
-          900: '#1e3a8a',
+          50: '#fff9e6',
+          100: '#fff3cc',
+          200: '#ffe89a',
+          300: '#ffdc70',
+          400: '#ffd34f',
+          500: '#ffc72c',
+          600: '#ffc72c',
+          700: '#665019',
+          800: '#242424',
+          900: '#242424',
         },
       },
       fontFamily: {
@@ -25,7 +25,7 @@ export default {
       },
       boxShadow: {
         card: '0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)',
-        soft: '0 20px 60px -15px rgba(37, 99, 235, 0.25)',
+        soft: '0 20px 60px -15px rgba(36, 36, 36, 0.12)',
       },
       borderRadius: {
         xl: '0.875rem',

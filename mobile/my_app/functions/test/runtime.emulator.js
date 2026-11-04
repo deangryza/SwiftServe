@@ -98,6 +98,24 @@ describe("Firebase expiration and push persistence", { skip: !host }, () => {
     );
     assert.equal((await db.collection(OUTBOX).get()).size, 1);
   });
+  test("computer-only gate expires jobs without activating the cloud gate and supports emergency stop", async () => {
+    await db.doc(`${CONTROL}/settings`).set({ expirationEnabled: false, pushEnabled: false });
+    await db.doc(`${CONTROL}/localComputerSettings`).set({ expirationEnabled: true });
+    await job('computer-first').set(pending());
+    await assert.rejects(sweep(options()), /Runtime gate closed/);
+    const result = await sweep(options({ settingsDocument: 'localComputerSettings' }));
+    assert.equal(result.status, 'complete');
+    assert.equal(result.affected, 1);
+    assert.equal((await job('computer-first').get()).data().status, 'expired');
+    assert.equal((await db.doc('notifications/jobExpired_computer-first').get()).data().recipientId, 'client');
+    assert.equal((await db.doc(`${CONTROL}/settings`).get()).data().expirationEnabled, false);
+    await db.doc(`${CONTROL}/localComputerSettings`).set({ expirationEnabled: false });
+    await job('computer-second').set(pending());
+    await assert.rejects(sweep(options({ settingsDocument: 'localComputerSettings' })), /Runtime gate closed/);
+    assert.equal((await job('computer-second').get()).data().status, 'pending');
+    assert.equal((await db.doc('notifications/jobExpired_computer-second').get()).exists, false);
+    await assert.rejects(sweep(options({ settingsDocument: '../unsafe' })), /Unknown expiration settings/);
+  });
   test("durable dry run writes metadata only; metadata gate prevents even leases", async () => {
     await job("a").set(pending());
     assert.equal(

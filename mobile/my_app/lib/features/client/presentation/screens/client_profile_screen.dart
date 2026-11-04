@@ -769,7 +769,7 @@ class _VerificationBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final verified = status == 'verified';
     final label = switch (status) {
-      'verified' => 'Verified',
+      'verified' => 'Existing account status',
       'under_review' => 'Under review',
       'rejected' => 'Needs review',
       'resubmission_required' => 'Action required',

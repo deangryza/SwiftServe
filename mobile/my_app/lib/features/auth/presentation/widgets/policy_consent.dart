@@ -1,9 +1,10 @@
+import 'policy_dialog.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../shared/theme/app_theme.dart';
 
-/// Shared consent UI. Policy summaries require product-owner review for release.
+/// Shared controlled consent state for the inline checkbox and policy popup.
 class PolicyConsent extends StatefulWidget {
   const PolicyConsent({
     super.key,
@@ -29,46 +30,43 @@ class _PolicyConsentState extends State<PolicyConsent> {
   late final _terms = TapGestureRecognizer()..onTap = () => _open(true);
   late final _security = TapGestureRecognizer()..onTap = () => _open(false);
 
+  final _consent = ValueNotifier<(bool, bool)>((false, true));
+
+  @override
+  void initState() {
+    super.initState();
+    _consent.value = (widget.value, widget.enabled);
+  }
+
+  @override
+  void didUpdateWidget(covariant PolicyConsent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_consent.value != (widget.value, widget.enabled)) {
+      // The popup is a separate route, not a descendant of this build. Notify
+      // it after the frame rather than rebuilding another route during build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _consent.value = (widget.value, widget.enabled);
+      });
+    }
+  }
+
+  void _change(bool value) {
+    if (!mounted || !widget.enabled) return;
+    _consent.value = (value, widget.enabled);
+    widget.onChanged(value);
+  }
+
   void _open(bool terms) {
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(terms ? 'Terms and Conditions' : 'Security Policy'),
-        content: SingleChildScrollView(
-          child: Text(
-            terms
-                ? 'SwiftServe connects clients and workers for service requests. '
-                      'Provide accurate account and job information, communicate '
-                      'respectfully, and only accept work you can perform. Do not '
-                      'impersonate others, misuse their information, or use the app '
-                      'for unlawful activity. Review the service details and '
-                      'schedule before applying for or accepting a job.'
-                : 'Keep your password and sign-in codes private. Do not share '
-                      'identity documents or sensitive personal information in '
-                      'public profiles or chat messages. Your public profile, '
-                      'including your About information and services, can be seen '
-                      'by other users. Review the information you publish. '
-                      'Manage photo, location, and notification permissions in '
-                      'your device settings.',
-            style: const TextStyle(height: 1.5),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(
-              foregroundColor: AppTheme.ink,
-              backgroundColor: AppTheme.yellow,
-            ),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
+      builder: (context) =>
+          PolicyDialog(terms: terms, consent: _consent, onChanged: _change),
     );
   }
 
   @override
   void dispose() {
+    _consent.dispose();
     _terms.dispose();
     _security.dispose();
     super.dispose();
@@ -94,7 +92,7 @@ class _PolicyConsentState extends State<PolicyConsent> {
               key: const ValueKey('policy-consent-checkbox'),
               value: widget.value,
               onChanged: widget.enabled
-                  ? (value) => widget.onChanged(value ?? false)
+                  ? (value) => _change(value ?? false)
                   : null,
               activeColor: AppTheme.yellow,
               checkColor: AppTheme.ink,

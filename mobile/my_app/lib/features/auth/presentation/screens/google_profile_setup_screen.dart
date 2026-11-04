@@ -1,3 +1,4 @@
+import '../../../../shared/utils/registration_birthday.dart';
 import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -25,6 +26,7 @@ class GoogleProfileSetupScreen extends StatefulWidget {
 
 class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   final _form = GlobalKey<FormState>();
+  final _birthday = TextEditingController();
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
@@ -50,6 +52,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   @override
   void dispose() {
     for (final controller in [
+      _birthday,
       _name,
       _email,
       _phone,
@@ -131,9 +134,17 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    final birthdayError = RegistrationBirthday.validate(_birthday.text);
+    if (birthdayError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(birthdayError)));
+      return;
+    }
     setState(() => _saving = true);
     final category = _role == 'worker' ? _category.text.trim() : '';
     final draft = ProfileDraft(
+      dateOfBirth: _birthday.text,
       fullName: _name.text.trim(),
       email: user.email ?? _email.text.trim(),
       phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
@@ -150,6 +161,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
       final token = await user.getIdToken();
       await ApiService().createUserProfile(
         idToken: token!,
+        dateOfBirth: draft.dateOfBirth,
         fullName: draft.fullName,
         email: draft.email,
         phoneNumber: draft.phoneNumber,
@@ -213,6 +225,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
         ? ClientAccountForm(
             contactAvailability: _contactAvailability,
             key: const ValueKey('google-client-account-flow'),
+            birthday: _birthday,
             formKey: _form,
             name: _name,
             email: _email,
@@ -235,6 +248,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
         : WorkerAccountForm(
             contactAvailability: _contactAvailability,
             key: const ValueKey('google-worker-account-flow'),
+            birthday: _birthday,
             formKey: _form,
             name: _name,
             email: _email,

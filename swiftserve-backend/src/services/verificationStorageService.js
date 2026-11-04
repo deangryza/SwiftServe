@@ -80,7 +80,7 @@ const sendLocalFile = async (res, relativePath, { uploadsDir, contentType } = {}
     return false;
   }
   res.setHeader('Content-Type', contentType || 'application/octet-stream');
-  res.setHeader('Cache-Control', 'private, max-age=60');
+  res.setHeader('Cache-Control', 'private, no-store, max-age=0');
   await new Promise((resolve, reject) => {
     res.sendFile(absolute, (error) => (error ? reject(error) : resolve()));
   });

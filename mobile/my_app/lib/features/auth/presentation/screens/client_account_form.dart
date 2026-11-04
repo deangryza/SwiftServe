@@ -1,3 +1,4 @@
+import '../widgets/registration_birthday_field.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -27,6 +28,7 @@ class ClientAccountForm extends StatefulWidget {
     required this.profileImage,
     required this.onPickImage,
     required this.onRegister,
+    this.birthday,
     this.countryCode = '+63',
     this.onCountryCodeChanged,
     this.federatedAccount = false,
@@ -35,6 +37,7 @@ class ClientAccountForm extends StatefulWidget {
     this.contactAvailability,
   });
 
+  final TextEditingController? birthday;
   final GlobalKey<FormState> formKey;
   final TextEditingController name;
   final TextEditingController email;
@@ -61,6 +64,7 @@ class ClientAccountForm extends StatefulWidget {
 
 class _ClientAccountFormState extends State<ClientAccountForm> {
   static const _yellow = AppTheme.yellow;
+  final _localBirthday = TextEditingController();
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
@@ -96,6 +100,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
 
   @override
   void dispose() {
+    _localBirthday.dispose();
     _firstName.dispose();
     _lastName.dispose();
     _scrollController.dispose();
@@ -119,6 +124,8 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         if (!widget.formKey.currentState!.validate()) return;
         widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
       } else if (_page == 1) {
+        if (!widget.formKey.currentState!.validate()) return;
+      } else if (_page == 2) {
         final available =
             await _contactKey.currentState?.checkAvailability() ?? false;
         if (!mounted) return;
@@ -136,7 +143,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           return;
         }
       }
-      if (_page == 5) {
+      if (_page == 6) {
         widget.onRegister();
       } else {
         _goTo(_page + 1);
@@ -260,8 +267,8 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   );
 
   Widget _header() {
-    const progress = [0.18, 0.30, 0.50, 0.70, 0.78, 1.0];
-    final active = _page < 2 ? 0 : (_page < 5 ? 1 : 2);
+    const progress = [0.18, 0.24, 0.30, 0.50, 0.70, 0.78, 1.0];
+    final active = _page < 3 ? 0 : (_page < 6 ? 1 : 2);
     return SizedBox(
       height: 124,
       child: Stack(
@@ -486,7 +493,27 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
       const SizedBox(height: 18),
       _nameField('First Name', _firstName),
       _nameField('Last Name', _lastName),
+
       const SizedBox(height: 22),
+    ],
+  );
+
+  Widget _birthdayLocationPage() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      RegistrationBirthdayField(
+        controller: widget.birthday ?? _localBirthday,
+        enabled: !widget.loading,
+      ),
+      RegistrationAddressFields(
+        address: widget.address,
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted,
+        borderColor: _border,
+        focusColor: _yellow,
+      ),
     ],
   );
 
@@ -509,15 +536,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         federatedAccount: widget.federatedAccount,
         lookup: widget.contactAvailability,
       ),
-      RegistrationAddressFields(
-        address: widget.address,
-        enabled: !widget.loading,
-        fieldColor: _field,
-        textColor: _text,
-        mutedColor: _muted,
-        borderColor: _border,
-        focusColor: _yellow,
-      ),
+
       if (!widget.federatedAccount) ...[
         _inputField(
           'Password',
@@ -646,7 +665,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
             ),
           ),
         Text(
-          'Your documents are encrypted and only used for identity verification.',
+          'Capture and face comparison are available after account creation in Settings > Verification checks.',
           textAlign: TextAlign.center,
           style: TextStyle(color: _muted, fontSize: 11),
         ),
@@ -666,7 +685,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
       ),
       const SizedBox(height: 7),
       Text(
-        'Scan your face to verify your identity',
+        'Preview only. Open Verification checks in Settings after registration. Face matching does not prove ID authenticity.',
         style: TextStyle(color: _muted),
       ),
       const SizedBox(height: 60),
@@ -679,7 +698,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        'Verification in Progress',
+        'Verification after registration',
         style: TextStyle(
           color: _text,
           fontSize: 22,
@@ -688,7 +707,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
       ),
       const SizedBox(height: 8),
       Text(
-        "Our admin team is reviewing your documents. This typically takes 24–48 hours. You'll receive a notification as soon as your account is verified.",
+        'Finish creating your account, then open Settings > Verification checks. No identity check has been completed by these preview pages.',
         style: TextStyle(color: _muted, height: 1.5),
       ),
       const SizedBox(height: 30),
@@ -708,7 +727,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
             const SizedBox(height: 14),
             Text('Identity Check', style: TextStyle(color: _text)),
             Text(
-              'COMPLETED OCT 24',
+              'AFTER ACCOUNT CREATION',
               style: TextStyle(color: _muted, fontSize: 10),
             ),
           ],
@@ -720,10 +739,11 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
 
   Widget _pageContent() => switch (_page) {
     0 => _accountPage(),
-    1 => _credentialsPage(),
-    2 => _otpPage(),
-    3 => _idPage(),
-    4 => _facePage(),
+    1 => _birthdayLocationPage(),
+    2 => _credentialsPage(),
+    3 => _otpPage(),
+    4 => _idPage(),
+    5 => _facePage(),
     _ => _reviewPage(),
   };
 
@@ -792,14 +812,14 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
                                   ),
                                 )
                               : Text(
-                                  _page == 4
+                                  _page == 5
                                       ? 'Start scan'
-                                      : _page == 5
+                                      : _page == 6
                                       ? 'Go to Dashboard'
                                       : 'Next',
                                 ),
                         ),
-                        if (_page == 3 || _page == 4)
+                        if (_page == 4 || _page == 5)
                           TextButton(
                             onPressed: () => _goTo(_page + 1),
                             child: const Text('Skip for now'),

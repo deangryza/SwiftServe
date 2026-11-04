@@ -9,6 +9,7 @@ import '../services/client_theme_controller.dart';
 import '../theme/app_theme.dart';
 import '../widgets/action_confirmation_dialog.dart';
 import '../widgets/push_notification_preferences.dart';
+import '../../features/worker/presentation/screens/worker_verification_screen.dart';
 
 /// Shared settings presentation for the client and worker experiences.
 class SwiftServeSettingsScreen extends StatelessWidget {
@@ -121,6 +122,26 @@ class SwiftServeSettingsScreen extends StatelessWidget {
                   clipBehavior: Clip.antiAlias,
                   child: Column(
                     children: [
+                      if (profile != null &&
+                          profile!.role != UserRole.admin) ...[
+                        ListTile(
+                          key: const ValueKey('settings-verification'),
+                          leading: Icon(Icons.fact_check_outlined, color: text),
+                          title: const Text('Verification checks'),
+                          subtitle: const Text(
+                            'Face matching, demo QR and approval status',
+                          ),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  WorkerVerificationScreen(profile: profile!),
+                            ),
+                          ),
+                        ),
+                        Divider(height: 1, color: border),
+                      ],
                       if (profile != null &&
                           profile!.role != UserRole.admin) ...[
                         _RoleSwitchTile(

@@ -9,6 +9,7 @@ export default function UserTable({
   onReject,
   onSuspend,
   onReactivate,
+  canManage = () => false,
 }) {
   if (users.length === 0) {
     return (
@@ -101,7 +102,7 @@ export default function UserTable({
                       <Eye className="h-4 w-4" />
                     </ActionButton>
 
-                    {user.status === "Pending" && (
+                    {canManage(user) && user.status === "Pending" && (
                       <>
                         <ActionButton
                           title="Approve"
@@ -121,7 +122,7 @@ export default function UserTable({
                       </>
                     )}
 
-                    {["Approved", "Active", "Verified"].includes(user.status) && (
+                    {canManage(user) && ["Approved", "Active", "Verified"].includes(user.status) && (
                       <ActionButton
                         title="Suspend"
                         onClick={() => onSuspend(user)}
@@ -131,7 +132,7 @@ export default function UserTable({
                       </ActionButton>
                     )}
 
-                    {user.status === "Suspended" && (
+                    {canManage(user) && user.status === "Suspended" && (
                       <ActionButton
                         title="Reactivate"
                         onClick={() => onReactivate(user)}

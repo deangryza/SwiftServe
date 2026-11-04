@@ -1,3 +1,5 @@
+import 'helpers/registration_steps.dart';
+import 'package:my_app/features/auth/presentation/widgets/registration_birthday_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/auth/presentation/screens/client_register_screen.dart';
@@ -28,12 +30,14 @@ void main() {
         await tester.pump();
         expect(find.text('This field is required.'), findsNothing);
         await tester.enterText(find.byType(TextFormField).at(1), 'User');
+        fillAdultBirthday(tester);
         final next = find.byKey(
           ValueKey('${worker ? 'worker' : 'client'}-registration-next'),
         );
         await tester.ensureVisible(next);
         await tester.tap(next);
         await tester.pumpAndSettle();
+        await completePersonalDetails(tester, next);
         final prefix = worker ? 'worker-' : '';
         final email = find.byKey(ValueKey('${prefix}Email Address'));
         final phone = find.byKey(ValueKey('${prefix}Phone Number'));
@@ -64,7 +68,7 @@ void main() {
         await tester.tap(next);
         await tester.pumpAndSettle();
         expect(find.text('Phone number is required.'), findsOneWidget);
-        expect(find.text('Barangay is required.'), findsOneWidget);
+        expect(find.byKey(const ValueKey('Barangay')), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );
@@ -84,6 +88,7 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        fillAdultBirthday(tester);
         final next = find.byKey(
           ValueKey('${worker ? 'worker' : 'client'}-registration-next'),
         );
@@ -101,13 +106,11 @@ void main() {
         await tester.ensureVisible(next);
         await tester.tap(next);
         await tester.pumpAndSettle();
+        await completePersonalDetails(tester, next);
         final prefix = worker ? 'worker-' : '';
         for (final entry in {
           '${prefix}Email Address': 'used@example.com',
           '${prefix}Phone Number': '9171234567',
-          'Barangay': 'Ligas',
-          'City / Municipality': 'Malolos',
-          'Province': 'Bulacan',
           '${prefix}Password': 'password',
           '${prefix}Confirm Password': 'password',
         }.entries) {
@@ -152,5 +155,13 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+  }
+}
+
+void fillAdultBirthday(WidgetTester tester) {
+  for (final field in tester.widgetList<RegistrationBirthdayField>(
+    find.byType(RegistrationBirthdayField),
+  )) {
+    if (field.controller.text.isEmpty) field.controller.text = '2000-01-01';
   }
 }

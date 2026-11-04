@@ -1,3 +1,4 @@
+import '../../../../shared/utils/registration_birthday.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 
@@ -46,6 +47,7 @@ class AccountRegistrationScreen extends StatefulWidget {
 
 class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _birthday = TextEditingController();
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
@@ -74,8 +76,16 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       }
       return;
     }
+    final birthdayError = RegistrationBirthday.validate(_birthday.text);
+    if (birthdayError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(birthdayError)));
+      return;
+    }
     setState(() => _loading = true);
     final draft = ProfileDraft(
+      dateOfBirth: _birthday.text,
       fullName: _name.text.trim(),
       email: _email.text.trim(),
       phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
@@ -113,6 +123,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       final token = await credential.user!.getIdToken();
       await ApiService().createUserProfile(
         idToken: token!,
+        dateOfBirth: draft.dateOfBirth,
         fullName: draft.fullName,
         email: draft.email,
         phoneNumber: draft.phoneNumber,
@@ -181,6 +192,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   @override
   void dispose() {
     for (final controller in [
+      _birthday,
       _name,
       _email,
       _phone,
@@ -221,6 +233,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       return ClientThemeScope(
         child: ClientAccountForm(
           contactAvailability: widget.contactAvailability,
+          birthday: _birthday,
           formKey: _formKey,
           name: _name,
           email: _email,
@@ -243,6 +256,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       return ClientThemeScope(
         child: WorkerAccountForm(
           contactAvailability: widget.contactAvailability,
+          birthday: _birthday,
           formKey: _formKey,
           name: _name,
           email: _email,

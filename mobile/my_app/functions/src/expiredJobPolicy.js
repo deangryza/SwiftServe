@@ -52,7 +52,7 @@ function createPolicy({ FieldPath, FieldValue, Timestamp }) {
     // and intentional midnight selections until explicit time metadata exists.
     if (wall.getUTCHours() === 0 && wall.getUTCMinutes() === 0)
       return "ambiguous_midnight";
-    if (data.scheduleFrom.toMillis() >= asOf.toMillis()) return "not_expired";
+    if (data.scheduleFrom.toMillis() > asOf.toMillis()) return "not_expired";
     return null;
   }
 
@@ -122,7 +122,10 @@ function createPolicy({ FieldPath, FieldValue, Timestamp }) {
             requestId: reference.id,
             type: "jobExpired",
             title: "Job Post Expired",
-            body: `Your job post "${String(latest.data().title || "Untitled request").slice(0, 80)}" has expired because the requested service time has passed and no worker applied. The post is now unavailable. You can review the details and repost it with a new date and time.`,
+            body: `Your job post "${String(latest.data().title || "Untitled request").slice(0, 80)}", scheduled for ${new Intl.DateTimeFormat("en-US", {
+              timeZone: "Asia/Manila", year: "numeric", month: "long", day: "numeric",
+              hour: "numeric", minute: "2-digit", hour12: true,
+            }).format(latest.data().scheduleFrom.toDate())} PHT, has expired because no worker applied before the service deadline. Open the original job details to repost with a new future date and time.`,
             read: false,
             createdAt: FieldValue.serverTimestamp(),
           });
@@ -201,7 +204,7 @@ function createPolicy({ FieldPath, FieldValue, Timestamp }) {
           const data = candidate.data();
           if (
             data.scheduleFrom instanceof Timestamp &&
-            data.scheduleFrom.toMillis() < asOf.toMillis()
+            data.scheduleFrom.toMillis() <= asOf.toMillis()
           ) {
             result.expiredExamined++;
           }

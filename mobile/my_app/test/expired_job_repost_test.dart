@@ -319,6 +319,7 @@ void main() {
     'missing',
     'pending',
     'past',
+    'unchanged expired schedule',
   ]) {
     test('repost rejects $scenario before writing', () async {
       final db = _Firestore();
@@ -336,7 +337,11 @@ void main() {
               : scenario == 'signed out'
               ? null
               : 'client',
-          date: scenario == 'past' ? DateTime(2020) : null,
+          date: scenario == 'past'
+              ? DateTime(2020)
+              : scenario == 'unchanged expired schedule'
+              ? oldJob().scheduleFrom
+              : null,
         ),
         throwsA(anyOf(isA<StateError>(), isA<ArgumentError>())),
       );
@@ -371,6 +376,7 @@ void main() {
         final button = find.byKey(const ValueKey('repost-job'));
         expect(button, viewer == 'client' ? findsOneWidget : findsNothing);
         if (viewer == 'client') {
+          expect(tester.getRect(button).bottom, greaterThan(500));
           await tester.tap(button);
           expect(tapped, 1);
         }

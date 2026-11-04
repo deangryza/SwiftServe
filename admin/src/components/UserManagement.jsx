@@ -1,6 +1,7 @@
 import useAdminData from '../lib/useAdminData';
 import DataState from '../components/DataState';
 import { apiRequest } from '../lib/api';
+import { useAdminAccess } from '../lib/AdminAccessContext';
 import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
@@ -51,11 +52,18 @@ const SUMMARY_CONFIG = [
 ];
 
 export default function UserManagement() {
+  const access = useAdminAccess();
+  const canManage = user => access.can('users.manage') || (user.roles || [user.role]).some(role => access.can(`${role === 'Worker' ? 'workers' : 'clients'}.manage`));
   const { data: userList, setData: setUserList, loading, error } = useAdminData('users');
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [selectedUser, setSelectedUser] = useState(null);
+  const saveName = async fullName => {
+    const { item } = await apiRequest('/api/admin/users/' + encodeURIComponent(selectedUser.id), { method: 'PATCH', body: JSON.stringify({ fullName }) });
+    setUserList(previous => previous.map(user => user.id === item.id ? item : user));
+    setSelectedUser(item);
+  };
 
   // ----------------------------------------
   // SUMMARY COUNTS
@@ -245,12 +253,14 @@ export default function UserManagement() {
         onApprove={handleApprove}
         onReject={handleReject}
         onSuspend={handleSuspend}
+        canManage={canManage}
         onReactivate={handleReactivate}
       />
 
       {/* USER DETAILS MODAL */}
       <UserDetailsModal
         user={selectedUser}
+        onSaveName={access.can('users.edit') ? saveName : undefined}
         onClose={() => setSelectedUser(null)}
       />
     </div>

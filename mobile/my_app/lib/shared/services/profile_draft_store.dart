@@ -9,11 +9,13 @@ class ProfileDraft {
     required this.phoneNumber,
     required this.address,
     required this.role,
+    this.dateOfBirth = '',
     this.category = '',
     this.skills = const [],
     this.photoBase64 = '',
   });
 
+  final String dateOfBirth;
   final String fullName;
   final String email;
   final String phoneNumber;
@@ -24,6 +26,7 @@ class ProfileDraft {
   final String photoBase64;
 
   Map<String, dynamic> toJson() => {
+    'dateOfBirth': dateOfBirth,
     'fullName': fullName,
     'email': email,
     'phoneNumber': phoneNumber,
@@ -35,6 +38,7 @@ class ProfileDraft {
   };
 
   factory ProfileDraft.fromJson(Map<String, dynamic> json) => ProfileDraft(
+    dateOfBirth: (json['dateOfBirth'] ?? '').toString(),
     fullName: (json['fullName'] ?? '').toString(),
     email: (json['email'] ?? '').toString(),
     phoneNumber: (json['phoneNumber'] ?? '').toString(),

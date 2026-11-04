@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "856393660184",
+    "project_id": "swiftserve-staging-2026",
+    "storage_bucket": "swiftserve-staging-2026.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:856393660184:android:5ab53b8630b20d3e47d06d",
+        "android_client_info": {
+          "package_name": "com.example.my_app.staging"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "856393660184-daeq9kjnvefaic915hcb43s2vanq7idd.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.my_app.staging",
+            "certificate_hash": "f9a588e938523ac87e46a098647b7768810b6e1e"
+          }
+        },
+        {
+          "client_id": "856393660184-duutdbnk17fvfnuajubomtvvfqdafljg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDhQTTVBJ_AvB263cD_sH78waezNgXjLvY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "856393660184-duutdbnk17fvfnuajubomtvvfqdafljg.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

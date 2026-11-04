@@ -18,12 +18,15 @@ import {
 } from "lucide-react";
 import { VERIFICATION_STATUS } from "../../data/workerVerification";
 import { apiRequestBinary } from "../../lib/api";
+import { protectedImagePath, usesProtectedImages } from '../../lib/verificationImages';
+import { useAdminAccess } from '../../lib/AdminAccessContext';
+import { canApproveEvidence, canReviewEvidence, verificationRows, verificationBlockers } from '../../lib/verificationEvidence';
 
 // TODO(billing): local image links are backend routes needing the admin token,
 // so they open via an authenticated fetch into a blob URL. GCS signed URLs
 // keep plain anchors. Simplify to anchors only when VERIFICATION_STORAGE=gcs.
 async function openProtectedDocument(url) {
-  const path = url.startsWith("http") ? new URL(url).pathname : url;
+  const path = protectedImagePath(url);
   const blob = await apiRequestBinary(path);
   window.open(URL.createObjectURL(blob), "_blank", "noopener");
 }
@@ -55,6 +58,7 @@ function InfoRow({ icon: Icon, label, value }) {
 }
 
 export default function WorkerVerificationModal({ request, onClose, onUpdate }) {
+  const { can } = useAdminAccess();
   const [adminNotes, setAdminNotes] = useState(request?.adminNotes ?? "");
   const [saving, setSaving] = useState(false);
   const [openingDocument, setOpeningDocument] = useState(false);
@@ -66,10 +70,14 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
   }, [request]);
 
   if (!request) return null;
+  const canManage = can('verification.manage');
+  const reviewable = canReviewEvidence(request, canManage);
+  const approvalReady = canApproveEvidence(request, canManage);
 
   const today = new Date().toISOString().slice(0, 10);
 
   const applyAction = async (nextStatus, toastMessage) => {
+    if (!reviewable || (nextStatus === VERIFICATION_STATUS.VERIFIED && !approvalReady)) return;
     setSaving(true);
     try {
       await onUpdate(request.verificationId, { status: nextStatus, adminNotes });
@@ -95,7 +103,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
     );
 
   const handleOpenDocument = async (url) => {
-    if (request.storageBackend !== "local") return;
+    if (!usesProtectedImages(request.storageBackend)) return;
     setOpeningDocument(true);
     try {
       await openProtectedDocument(url);
@@ -143,14 +151,13 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
           <div className="space-y-6 px-4 py-5 sm:px-6">
             {request.autoVerified && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                Auto-verified by face match ({formatPercent(request.faceMatchConfidence, 1)}).
-                You can still reject or request resubmission.
+                Legacy face-match approval ({formatPercent(request.faceMatchConfidence, 1)}). This is not official PSA authentication.
+                This historical record is retained; reopening it requires a separately approved transition.
               </div>
             )}
             {request.faceReviewFlag === "borderline" && (
               <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                Borderline face match — compare the ID and selfie carefully before
-                approving.
+                Borderline face match requires further evidence or recapture. Government authentication and trusted liveness remain mandatory.
               </div>
             )}
             {request.faceVerificationProvider === "bypassed" && (
@@ -178,7 +185,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
               <section>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Submitted Documents</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {request.governmentIdUrl && request.storageBackend === "local" ? (
+                  {request.governmentIdUrl && usesProtectedImages(request.storageBackend) ? (
                     <button
                       type="button"
                       onClick={() => handleOpenDocument(request.governmentIdUrl)}
@@ -190,7 +197,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                   ) : (
                     request.governmentIdUrl && <a href={request.governmentIdUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open government ID</a>
                   )}
-                  {request.facePhotoUrl && request.storageBackend === "local" ? (
+                  {request.facePhotoUrl && usesProtectedImages(request.storageBackend) ? (
                     <button
                       type="button"
                       onClick={() => handleOpenDocument(request.facePhotoUrl)}
@@ -208,6 +215,14 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
 
             {/* Verification Information */}
             <section>
+              <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4" aria-label="Separate verification checks">
+                <h3 className="font-semibold text-gray-900">Independent verification checks</h3>
+                <dl className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {verificationRows(request).map(([label, value]) => <div key={label}><dt className="text-sm text-gray-600">{label}</dt><dd className="break-words text-sm font-semibold text-gray-900">{value}</dd></div>)}
+                </dl>
+                <ul className="mt-4 list-disc space-y-1 pl-5 text-sm text-gray-700">{verificationBlockers(request).map((reason, index) => <li key={index}>{reason}</li>)}</ul>
+                {!approvalReady && <p className="mt-3 text-sm font-medium">Approval is unavailable until all mandatory backend checks pass. Legacy records remain protected.</p>}
+              </div>
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
                 Verification Information
               </h3>
@@ -231,7 +246,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                 />
                 <InfoRow
                   icon={ScanFace}
-                  label="Face Verification"
+                  label="Face Comparison"
                   value={
                     request.faceVerificationProvider === "bypassed"
                       ? "Bypassed — manual review"
@@ -250,7 +265,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                   label="Thresholds"
                   value={request.faceAutoVerifyMin == null
                     ? `Review ≥ ${formatPercent(request.faceMatchThreshold)}`
-                    : `Auto-verify ≥ ${formatPercent(request.faceAutoVerifyMin)} · Review ≥ ${formatPercent(request.faceMatchThreshold)}`}
+                    : `Strong face band ≥ ${formatPercent(request.faceAutoVerifyMin)} · Review band ≥ ${formatPercent(request.faceMatchThreshold)}`}
                 />
                 <InfoRow
                   icon={ClipboardCheck}
@@ -289,6 +304,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                 </label>
                 <textarea
                   value={adminNotes}
+                  disabled={!reviewable || saving}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   rows={3}
                   placeholder="Add notes about this verification review..."
@@ -310,7 +326,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
             <button
               type="button"
               onClick={handleResubmission}
-              disabled={saving}
+              disabled={saving || !reviewable}
               className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-orange-200 text-sm text-orange-600 hover:bg-orange-50 transition-colors"
             >
               <RotateCcw size={15} />
@@ -319,7 +335,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
             <button
               type="button"
               onClick={handleReject}
-              disabled={saving}
+              disabled={saving || !reviewable}
               className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 text-sm text-white hover:bg-red-700 transition-colors"
             >
               <XCircle size={15} />
@@ -328,8 +344,8 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
             <button
               type="button"
               onClick={handleVerify}
-              disabled={saving}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-green-600 text-sm text-white hover:bg-green-700 transition-colors"
+              disabled={saving || !approvalReady}
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-300 text-sm text-gray-900 hover:bg-amber-400 disabled:opacity-50 transition-colors"
             >
               <CheckCircle2 size={15} />
               Verify Worker

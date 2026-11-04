@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kDebugMode;
 
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/google_profile_setup_screen.dart';
@@ -11,6 +12,8 @@ import '../shared/models/app_user.dart';
 import '../shared/services/expiry_push_service.dart';
 import '../shared/repositories/profile_repository.dart';
 import '../shared/services/client_theme_controller.dart';
+import '../shared/services/national_id_mock_client.dart';
+import '../features/auth/presentation/screens/national_id_mock_screen.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -22,6 +25,7 @@ class AuthGate extends StatefulWidget {
 class _AuthGateState extends State<AuthGate> {
   late final Stream<User?> _authChanges;
   late bool _hasSignedIn;
+  String? _mockContinuedUid;
 
   @override
   void initState() {
@@ -40,6 +44,7 @@ class _AuthGateState extends State<AuthGate> {
         }
         final firebaseUser = authSnapshot.data;
         if (firebaseUser == null) {
+          _mockContinuedUid = null;
           return _hasSignedIn
               ? const LoginScreen()
               : const SwiftServeOnboardingScreen();
@@ -67,6 +72,18 @@ class _AuthGateState extends State<AuthGate> {
             WidgetsBinding.instance.addPostFrameCallback((_) {
               if (mounted) ExpiryPushService.instance.profileReady(profile.id);
             });
+            if (kDebugMode &&
+                NationalIdMockClient.buildEnabled &&
+                profile.role != UserRole.admin &&
+                _mockContinuedUid != profile.id) {
+              return ClientThemeScope(
+                child: NationalIdMockScreen(
+                  key: ValueKey('identity-mock-${profile.id}'),
+                  onContinue: () =>
+                      setState(() => _mockContinuedUid = profile.id),
+                ),
+              );
+            }
             if (profile.role == UserRole.worker) {
               return WorkerHomeScreen(
                 key: ValueKey('${profile.id}-worker'),
