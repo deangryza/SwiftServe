@@ -91,6 +91,16 @@ test('unreadable and unsupported uploads fail without an accepted record',async(
   }
   assert.equal(records.has('document_suitability/worker'),false);
 });
+
+test('National ID above 5 MB is preserved for review; 20 MB bound and other ID limits remain enforced',async()=>{
+  const small=image('large synthetic ID');
+  const file={...small,buffer:Buffer.concat([small.buffer,Buffer.alloc(6*1024*1024)])};
+  const record=await submit(file);
+  assert.equal(record.status,'DOCUMENT_REVIEW_REQUIRED');
+  assert.equal(record.imageDigest,require('node:crypto').createHash('sha256').update(file.buffer).digest('hex'));
+  await assert.rejects(service.submit('worker',{idType:'Passport'},file),e=>e.code==='INVALID_DOCUMENT_UPLOAD');
+  await assert.rejects(submit({...small,buffer:Buffer.alloc(20*1024*1024+1)}),e=>e.code==='INVALID_DOCUMENT_UPLOAD');
+});
 test('acceptance binds exact image, owner, session and attempt without government or worker writes',async()=>{
   const file=image('id'), record=await submit(file);
   await service.review('worker',{uid:'reviewer'},decision(record));

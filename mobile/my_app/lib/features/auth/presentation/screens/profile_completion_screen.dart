@@ -7,6 +7,9 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_draft_store.dart';
+import '../../data/firebase_registration_otp.dart';
+import '../../domain/registration_otp_gateway.dart';
+import '../widgets/registration_otp_screen.dart';
 
 class ProfileCompletionScreen extends StatefulWidget {
   const ProfileCompletionScreen({super.key});
@@ -52,6 +55,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
       _error = null;
     });
     try {
+      if (draft.phoneVerificationUid.isNotEmpty &&
+          !await _verifyRecoveredPhone(draft)) {
+        return;
+      }
       await ProfileDraftStore().save(
         ProfileDraft.fromJson({
           ...draft.toJson(),
@@ -75,6 +82,8 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
+    } on RegistrationOtpException catch (error) {
+      if (mounted) setState(() => _error = error.message);
     } on ApiException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } on ApiConnectionException catch (error) {
@@ -89,6 +98,73 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<bool> _verifyRecoveredPhone(ProfileDraft draft) async {
+    final auth = FirebaseAuth.instance;
+    final project = auth.app.options.projectId;
+    RegistrationSmsConfig.validate(
+      enabled: RegistrationSmsConfig.enabled,
+      project: project,
+      host: RegistrationSmsConfig.emulatorHost,
+    );
+    if (draft.phoneVerificationUid != auth.currentUser?.uid ||
+        draft.phoneVerificationProject != project) {
+      throw const RegistrationOtpException(
+        'This recovery draft belongs to another account or Firebase project. No profile was saved.',
+      );
+    }
+    await auth.currentUser!.reload();
+    if (auth.currentUser?.phoneNumber == draft.phoneNumber) return true;
+    if (!mounted) return false;
+    final gateway = FirebaseRegistrationOtp(
+      auth: auth,
+      project: project,
+      prepareAccount: () async {
+        final user = auth.currentUser;
+        if (user == null || user.uid != draft.phoneVerificationUid) {
+          throw const RegistrationOtpException(
+            'Your signed-in account changed.',
+          );
+        }
+        return user;
+      },
+    );
+    String? result;
+    try {
+      result = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (context) => RegistrationOtpScreen(
+            phone: draft.phoneNumber,
+            gateway: gateway,
+            verifyButtonKey: const ValueKey('recovery-otp-verify'),
+            onVerified: () => Navigator.pop(context, 'verified'),
+            onEditPhone: () => Navigator.pop(context, 'edit'),
+            onBack: () => Navigator.pop(context, 'back'),
+          ),
+        ),
+      );
+    } finally {
+      gateway.dispose();
+    }
+    if (result == 'edit' && mounted) {
+      final number = await showDialog<String>(
+        context: context,
+        builder: (_) => _RecoveryPhoneDialog(phone: draft.phoneNumber),
+      );
+      if (number != null) {
+        final updated = ProfileDraft.fromJson({
+          ...draft.toJson(),
+          'phoneNumber': number,
+        });
+        await ProfileDraftStore().save(updated);
+        if (mounted) setState(() => _draft = updated);
+      }
+      return false;
+    }
+    return result == 'verified' &&
+        auth.currentUser?.uid == draft.phoneVerificationUid &&
+        auth.currentUser?.phoneNumber == draft.phoneNumber;
   }
 
   @override
@@ -150,5 +226,56 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         ),
       ),
     ),
+  );
+}
+
+class _RecoveryPhoneDialog extends StatefulWidget {
+  const _RecoveryPhoneDialog({required this.phone});
+  final String phone;
+  @override
+  State<_RecoveryPhoneDialog> createState() => _RecoveryPhoneDialogState();
+}
+
+class _RecoveryPhoneDialogState extends State<_RecoveryPhoneDialog> {
+  late final _controller = TextEditingController(text: widget.phone);
+  final _form = GlobalKey<FormState>();
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    title: const Text('Edit mobile number'),
+    content: Form(
+      key: _form,
+      child: TextFormField(
+        controller: _controller,
+        keyboardType: TextInputType.phone,
+        decoration: const InputDecoration(
+          labelText: 'Mobile number',
+          hintText: '+639171234567',
+        ),
+        validator: (value) =>
+            RegExp(r'^\+[1-9]\d{7,14}$').hasMatch(value?.trim() ?? '')
+            ? null
+            : 'Include + and your country code.',
+      ),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(
+        onPressed: () {
+          if (_form.currentState!.validate()) {
+            Navigator.pop(context, _controller.text.trim());
+          }
+        },
+        child: const Text('Save number'),
+      ),
+    ],
   );
 }

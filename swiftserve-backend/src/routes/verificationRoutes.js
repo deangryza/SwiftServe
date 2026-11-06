@@ -19,7 +19,7 @@ const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: process.env.SWIFTSERVE_NETLIFY_PILOT === 'true' ? 1536 * 1024 : 5 * 1024 * 1024, files: 2, fields: 4 },
+  limits: { fileSize: process.env.SWIFTSERVE_NETLIFY_PILOT === 'true' ? 1536 * 1024 : 20 * 1024 * 1024, files: 2, fields: 4 },
   fileFilter: (_req, file, callback) => {
     if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
       const error = new Error('Only JPEG and PNG images are supported.');
@@ -95,6 +95,10 @@ const createVerificationRouter = ({
           code: 'INVALID_UPLOAD',
           message: 'ID type, ID number, document, and selfie are required.',
         });
+      }
+      const maxBytes = (idType === 'National ID' ? 20 : 5) * 1024 * 1024;
+      if (document.buffer.length > maxBytes || selfie.buffer.length > 5 * 1024 * 1024) {
+        return res.status(413).json({ code: 'IMAGE_TOO_LARGE', message: 'National ID images may be up to 20 MB; other images must be 5 MB or smaller.' });
       }
       if (!hasExpectedSignature(document) || !hasExpectedSignature(selfie)) {
         return res.status(415).json({

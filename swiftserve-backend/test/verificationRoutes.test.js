@@ -37,6 +37,24 @@ const addValidPair = (builder) => builder
   .attach('document', Buffer.from([0xff, 0xd8, 0xff, 0, 0, 0, 0, 0]), { filename: 'id.jpg', contentType: 'image/jpeg' })
   .attach('selfie', Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), { filename: 'selfie.png', contentType: 'image/png' });
 
+test('National ID above 5 MB reaches the existing comparator unchanged and oversized selfies remain rejected', async () => {
+  const document = Buffer.alloc(6 * 1024 * 1024);
+  document.set([0xff,0xd8,0xff]);
+  let calls=0;
+  const app=createApp(async value=>{
+    calls++;
+    assert.ok(value.document.buffer.equals(document));
+    return {match:true,band:'strong',similarity:90,confidence:90,distance:0.4,status:'pending'};
+  });
+  const pair=(selfie)=>request(app).post('/api/verify')
+    .field('idType','National ID').field('idNumber','synthetic')
+    .attach('document',document,{filename:'id.jpg',contentType:'image/jpeg'})
+    .attach('selfie',selfie,{filename:'selfie.jpg',contentType:'image/jpeg'});
+  await pair(Buffer.from([0xff,0xd8,0xff,0,0,0,0,0])).expect(201);
+  await pair(document).expect(413);
+  assert.equal(calls,1);
+});
+
 test('returns the distance contract and clears buffers after a passing comparison', async () => {
   let files;
   const response = await addValidPair(request(createApp(async (value) => {

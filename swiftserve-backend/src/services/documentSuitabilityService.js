@@ -60,7 +60,7 @@ function createDocumentService({ db, uploadsDir, audit }) {
       await account(uid);
       if (!isLocalStorage() || process.env.SWIFTSERVE_NETLIFY_PILOT === 'true') throw fail('DOCUMENT_LOCAL_STORAGE_REQUIRED', 503);
       if (!TYPES.includes(fields.idType) || !file) throw fail('INVALID_DOCUMENT_UPLOAD', 400);
-      if (!Buffer.isBuffer(file.buffer) || !file.buffer.length || file.buffer.length > 5 * 1024 * 1024) throw fail('INVALID_DOCUMENT_UPLOAD', 400);
+      if (!Buffer.isBuffer(file.buffer) || !file.buffer.length || file.buffer.length > (fields.idType === 'National ID' ? 20 : 5) * 1024 * 1024) throw fail('INVALID_DOCUMENT_UPLOAD', 400);
       const png = file.mimetype === 'image/png' && file.buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]));
       const jpeg = file.mimetype === 'image/jpeg' && file.buffer[0] === 255 && file.buffer[1] === 216 && file.buffer[2] === 255;
       if (!png && !jpeg) throw fail('INVALID_DOCUMENT_UPLOAD', 415);

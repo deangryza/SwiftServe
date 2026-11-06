@@ -16,6 +16,7 @@ import '../../../../shared/repositories/profile_repository.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 import '../models/worker_verification_ui_state.dart';
 import 'face_capture_screens.dart';
+import 'national_id_capture_screen.dart';
 import '../../../../shared/models/verification_evidence.dart';
 import '../../../../shared/widgets/verification_evidence_panel.dart';
 
@@ -42,9 +43,15 @@ class WorkerVerificationScreen extends StatefulWidget {
     this.deleteFile,
     this.signOut,
     this.documentReview,
+    this.initialDocument,
+    this.initialSelfie,
   });
 
   final AppUser profile;
+
+  /// Ownership of registration temporary copies transfers to this screen.
+  final File? initialDocument;
+  final File? initialSelfie;
 
   /// Optional seams keep the production repository and cameras unchanged while
   /// allowing the onboarding coordinator to be exercised in widget tests.
@@ -110,6 +117,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   @override
   void initState() {
     super.initState();
+    _draft.document = widget.initialDocument;
+    _draft.selfie = widget.initialSelfie;
     _documentGateway = widget.documentReview ?? DocumentReviewRepository();
     if (widget.statusStream == null || widget.submitter == null) {
       _repository = VerificationRepository();
@@ -675,6 +684,18 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             semanticLabel: 'Captured government ID',
           ),
           const SizedBox(height: 16),
+          if (!_documentMatches)
+            OutlinedButton(
+              key: const ValueKey('verification_use_selected_id'),
+              onPressed: _submitting
+                  ? null
+                  : () => setState(() {
+                      _draft.step = _draft.selfie == null
+                          ? _VerificationStep.selfie
+                          : _VerificationStep.review;
+                    }),
+              child: const Text('Continue with selected ID'),
+            ),
         ],
         FilledButton(
           key: const ValueKey('verification_capture_id'),
@@ -896,7 +917,11 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   Future<void> _captureDocument({required bool advance}) async {
     final launcher = widget.documentCaptureLauncher ?? _openDocumentCamera;
     final captured = await launcher(context);
-    if (!mounted || captured == null) return;
+    if (captured == null) return;
+    if (!mounted) {
+      await _deleteTemporaryFile(captured);
+      return;
+    }
     final previous = _draft.document;
     setState(() {
       _draft.document = captured;
@@ -916,11 +941,40 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
 
   Future<File?> _openDocumentCamera(BuildContext context) {
     return Navigator.of(context).push<File>(
-      MaterialPageRoute(builder: (_) => const DocumentCaptureScreen()),
+      MaterialPageRoute(
+        builder: (_) => _draft.idType == 'National ID'
+            ? const NationalIdCaptureScreen()
+            : const DocumentCaptureScreen(),
+      ),
     );
   }
 
   Future<void> _uploadDocument() async {
+    if (_submitting) return;
+    if (_draft.idType == 'National ID') {
+      final captured = await Navigator.of(context).push<File>(
+        MaterialPageRoute(
+          builder: (_) => const NationalIdCaptureScreen(openGallery: true),
+        ),
+      );
+      if (captured == null) return;
+      if (!mounted) {
+        await _deleteTemporaryFile(captured);
+        return;
+      }
+      final previous = _draft.document;
+      setState(() {
+        _draft.document = captured;
+        _documentMatches = false;
+        _stepMessage = null;
+        _draft.step = _draft.selfie == null
+            ? _VerificationStep.selfie
+            : _VerificationStep.review;
+      });
+      if (previous != null) await _deleteTemporaryFile(previous);
+      return;
+    }
+    if (!await requestIdGalleryConsent(context) || !mounted) return;
     setState(() => _submitting = true);
     try {
       final selected = await ImagePicker().pickImage(

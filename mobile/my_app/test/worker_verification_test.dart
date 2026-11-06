@@ -202,6 +202,70 @@ void main() {
       expect(find.text('Photograph your government ID'), findsNothing);
     });
 
+    for (final role in [UserRole.client, UserRole.worker]) {
+      for (final accepted in [false, true]) {
+        testWidgets(
+          '$role registration photos reach review without recapture; accepted=$accepted',
+          (tester) async {
+            final review = FakeDocumentReview(
+              status: accepted
+                  ? 'DOCUMENT_ACCEPTED'
+                  : 'DOCUMENT_REVIEW_REQUIRED',
+            );
+            var comparisons = 0;
+            await _pumpVerification(
+              tester,
+              role: role,
+              initialDocument: document,
+              initialSelfie: selfie,
+              documentCapture: (_) async =>
+                  throw StateError('Must reuse accepted registration image'),
+              documentReview: review,
+              submitter:
+                  ({
+                    required idType,
+                    required idNumber,
+                    required governmentId,
+                    required facePhoto,
+                  }) async {
+                    comparisons++;
+                    expect(governmentId.path, document.path);
+                    expect(facePhoto.path, selfie.path);
+                    expect(idType, 'National ID');
+                    return const FaceVerificationResult(status: 'pending');
+                  },
+            );
+            await _tapVisible(
+              tester,
+              find.byKey(const ValueKey('verification_start_button')),
+            );
+            await tester.enterText(
+              find.byKey(const ValueKey('verification_id_number')),
+              'synthetic-number',
+            );
+            await _tapVisible(
+              tester,
+              find.byKey(const ValueKey('verification_continue')),
+            );
+            await _tapVisible(
+              tester,
+              find.byKey(const ValueKey('verification_use_selected_id')),
+            );
+            await _submit(tester);
+            expect(review.uploads, 1);
+            expect(comparisons, accepted ? 1 : 0);
+            if (!accepted) {
+              expect(
+                find.textContaining('Awaiting document review'),
+                findsOneWidget,
+              );
+            }
+            await tester.pumpWidget(const SizedBox.shrink());
+          },
+        );
+      }
+    }
+
     testWidgets('captures auto-advance and review masks the ID number', (
       tester,
     ) async {
@@ -757,6 +821,9 @@ Future<void> _pumpVerification(
   Future<void> Function()? signOut,
   double textScale = 1,
   FakeDocumentReview? documentReview,
+  UserRole role = UserRole.worker,
+  File? initialDocument,
+  File? initialSelfie,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -769,7 +836,15 @@ Future<void> _pumpVerification(
       home: WorkerVerificationScreen(
         documentReview: documentReview ?? FakeDocumentReview(),
         key: ValueKey('$profileStatus-$submissionStatus'),
-        profile: _worker(profileStatus),
+        profile: AppUser(
+          id: 'worker-1',
+          fullName: 'Synthetic User',
+          email: 'synthetic@example.test',
+          role: role,
+          verificationStatus: profileStatus,
+        ),
+        initialDocument: initialDocument,
+        initialSelfie: initialSelfie,
         statusStream: Stream<VerificationStatus?>.value(submissionStatus),
         documentCaptureLauncher: documentCapture,
         selfieCaptureLauncher: selfieCapture ?? (_) async => null,

@@ -13,6 +13,8 @@ class ProfileDraft {
     this.category = '',
     this.skills = const [],
     this.photoBase64 = '',
+    this.phoneVerificationUid = '',
+    this.phoneVerificationProject = '',
   });
 
   final String dateOfBirth;
@@ -24,6 +26,7 @@ class ProfileDraft {
   final String category;
   final List<String> skills;
   final String photoBase64;
+  final String phoneVerificationUid, phoneVerificationProject;
 
   Map<String, dynamic> toJson() => {
     'dateOfBirth': dateOfBirth,
@@ -35,6 +38,10 @@ class ProfileDraft {
     'category': category,
     'skills': skills,
     'photoBase64': photoBase64,
+    if (phoneVerificationUid.isNotEmpty)
+      'phoneVerificationUid': phoneVerificationUid,
+    if (phoneVerificationProject.isNotEmpty)
+      'phoneVerificationProject': phoneVerificationProject,
   };
 
   factory ProfileDraft.fromJson(Map<String, dynamic> json) => ProfileDraft(
@@ -47,6 +54,9 @@ class ProfileDraft {
     category: (json['category'] ?? '').toString(),
     skills: List<String>.from(json['skills'] ?? const []),
     photoBase64: (json['photoBase64'] ?? '').toString(),
+    phoneVerificationUid: (json['phoneVerificationUid'] ?? '').toString(),
+    phoneVerificationProject: (json['phoneVerificationProject'] ?? '')
+        .toString(),
   );
 }
 

@@ -1,3 +1,8 @@
+import '../../domain/registration_identity_draft.dart';
+import '../../../../shared/models/app_user.dart';
+import '../../../worker/presentation/screens/worker_verification_screen.dart';
+import '../../data/firebase_registration_otp.dart';
+import '../../domain/registration_otp_gateway.dart';
 import '../../../../shared/utils/registration_birthday.dart';
 import 'dart:typed_data';
 import 'dart:convert';
@@ -56,10 +61,114 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   final _confirmPassword = TextEditingController();
   final _category = TextEditingController();
   final _services = WorkerServiceSelection();
+  final _identity = RegistrationIdentityDraft();
   bool _acceptedTerms = false;
   bool _loading = false;
   String _countryCode = '+63';
   Uint8List? _profileImageBytes;
+  RegistrationSmsAccount? _smsAccount;
+  FirebaseRegistrationOtp? _otp;
+
+  @override
+  void initState() {
+    super.initState();
+    if (RegistrationSmsConfig.enabled) {
+      final auth = FirebaseAuth.instance;
+      final project = auth.app.options.projectId;
+      _smsAccount = RegistrationSmsAccount(auth: auth, project: project);
+      _otp = FirebaseRegistrationOtp(
+        auth: auth,
+        project: project,
+        prepareAccount: () async {
+          final birthdayError = RegistrationBirthday.validate(_birthday.text);
+          if (birthdayError != null || !_acceptedTerms) {
+            throw RegistrationOtpException(
+              birthdayError ?? PolicyConsent.requiredMessage,
+            );
+          }
+          await ApiService().checkReachable();
+          final user = await _smsAccount!.prepare(
+            _registrationDraft(),
+            _password.text,
+          );
+          if (mounted) setState(() {});
+          return user;
+        },
+      );
+    }
+  }
+
+  Future<bool> _smsAvailability(String kind, String value) {
+    if (kind == 'email' &&
+        _smsAccount?.ownedUid != null &&
+        FirebaseAuth.instance.currentUser?.uid == _smsAccount!.ownedUid &&
+        value.toLowerCase() == _smsAccount!.reservedEmail?.toLowerCase()) {
+      return Future.value(true);
+    }
+    return (widget.contactAvailability ??
+        ApiService().registrationContactAvailable)(kind, value);
+  }
+
+  Future<void> _leaveSmsRegistration() async {
+    if (_smsAccount?.ownedUid != null) {
+      final confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cancel registration?'),
+              content: const Text(
+                'This removes only the unfinished test account created for this registration.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Keep editing'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Cancel registration'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed) return;
+      try {
+        _otp?.invalidate();
+        await _smsAccount!.cancel();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not cancel the unfinished account. Your recovery draft was retained. Retry before leaving.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (mounted) Navigator.maybePop(context);
+  }
+
+  ProfileDraft _registrationDraft() => ProfileDraft(
+    dateOfBirth: _birthday.text,
+    fullName: _name.text.trim(),
+    email: _email.text.trim(),
+    phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
+    address: _address.text.trim(),
+    role: widget.role,
+    category: _category.text.trim(),
+    photoBase64: _profileImageBytes == null
+        ? ''
+        : base64Encode(_profileImageBytes!),
+    skills: widget.role == 'worker'
+        ? _services.services
+        : _category.text.trim().isEmpty
+        ? const []
+        : [_category.text.trim()],
+  );
 
   Future<void> _register() async {
     if (widget.role == 'worker' && _services.validationError != null) {
@@ -84,23 +193,11 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       return;
     }
     setState(() => _loading = true);
-    final draft = ProfileDraft(
-      dateOfBirth: _birthday.text,
-      fullName: _name.text.trim(),
-      email: _email.text.trim(),
-      phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
-      address: _address.text.trim(),
-      role: widget.role,
-      category: _category.text.trim(),
-      photoBase64: _profileImageBytes == null
-          ? ''
-          : base64Encode(_profileImageBytes!),
-      skills: widget.role == 'worker'
-          ? _services.services
-          : _category.text.trim().isEmpty
-          ? const []
-          : [_category.text.trim()],
-    );
+    var draft = _registrationDraft();
+    if (_smsAccount?.ownedUid != null &&
+        FirebaseAuth.instance.currentUser != null) {
+      draft = _smsAccount!.bind(draft, FirebaseAuth.instance.currentUser!);
+    }
     try {
       await ApiService().checkReachable();
     } on ApiConnectionException catch (error) {
@@ -114,13 +211,19 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     }
     UserCredential? credential;
     try {
-      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: draft.email,
-        password: _password.text,
-      );
-      await credential.user?.updateDisplayName(draft.fullName);
+      User user;
+      if (_otp != null) {
+        user = await _otp!.requireVerified(draft.phoneNumber);
+      } else {
+        credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: draft.email,
+          password: _password.text,
+        );
+        user = credential.user!;
+      }
+      await user.updateDisplayName(draft.fullName);
       await ProfileDraftStore().save(draft);
-      final token = await credential.user!.getIdToken();
+      final token = await user.getIdToken(true);
       await ApiService().createUserProfile(
         idToken: token!,
         dateOfBirth: draft.dateOfBirth,
@@ -133,8 +236,40 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         skills: draft.skills,
         photoBase64: draft.photoBase64,
       );
+      _smsAccount?.commit();
       await ProfileDraftStore().clear();
+      if (mounted && _identity.hasId) {
+        final files = await _identity.takeForVerification();
+        if (mounted && files != null) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => WorkerVerificationScreen(
+                profile: AppUser(
+                  id: user.uid,
+                  fullName: draft.fullName,
+                  email: draft.email,
+                  role: draft.role == 'worker'
+                      ? UserRole.worker
+                      : UserRole.client,
+                  verificationStatus: VerificationStatus.pending,
+                ),
+                initialDocument: files.document,
+                initialSelfie: files.selfie,
+              ),
+            ),
+          );
+        } else if (files != null) {
+          await RegistrationIdentityDraft.deleteTemporary(files.document);
+          await RegistrationIdentityDraft.deleteTemporary(files.selfie);
+        }
+      }
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } on RegistrationOtpException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -146,8 +281,10 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       if (!mounted) return;
       if (error.code == 'PHONE_NUMBER_IN_USE') {
         try {
-          await credential?.user?.delete();
-          await ProfileDraftStore().clear();
+          if (_otp == null) {
+            await credential?.user?.delete();
+            await ProfileDraftStore().clear();
+          }
         } catch (_) {}
         if (!mounted) return;
         ScaffoldMessenger.of(
@@ -203,6 +340,8 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     ]) {
       controller.dispose();
     }
+    _identity.dispose();
+    _otp?.dispose();
     _services.dispose();
     super.dispose();
   }
@@ -232,7 +371,13 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'client') {
       return ClientThemeScope(
         child: ClientAccountForm(
-          contactAvailability: widget.contactAvailability,
+          otpGateway: _otp,
+          identityDraft: _identity,
+          credentialsLocked: _smsAccount?.ownedUid != null,
+          onExit: _otp == null ? null : _leaveSmsRegistration,
+          contactAvailability: _otp == null
+              ? widget.contactAvailability
+              : _smsAvailability,
           birthday: _birthday,
           formKey: _formKey,
           name: _name,
@@ -255,7 +400,13 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'worker') {
       return ClientThemeScope(
         child: WorkerAccountForm(
-          contactAvailability: widget.contactAvailability,
+          otpGateway: _otp,
+          identityDraft: _identity,
+          credentialsLocked: _smsAccount?.ownedUid != null,
+          onExit: _otp == null ? null : _leaveSmsRegistration,
+          contactAvailability: _otp == null
+              ? widget.contactAvailability
+              : _smsAvailability,
           birthday: _birthday,
           formKey: _formKey,
           name: _name,

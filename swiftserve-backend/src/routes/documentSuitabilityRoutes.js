@@ -30,7 +30,7 @@ const image = uid => safe(async (req, res) => {
   if (!await sendLocalFile(res, record.imagePath, { contentType: record.contentType })) res.sendStatus(404);
 });
 user.get('/image', safe(async (req, res) => { await service.account(req.user.uid); return image(r => r.user.uid)(req, res); }));
-const upload = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: 5 * 1024 * 1024, fields: 3, fieldSize: 128 },
+const upload = multer({ storage: multer.memoryStorage(), limits: { files: 1, fileSize: 20 * 1024 * 1024, fields: 3, fieldSize: 128 },
   fileFilter: (_req, file, cb) => cb(null, ['image/jpeg','image/png'].includes(file.mimetype)) }).single('document');
 user.post('/', (req, res, next) => upload(req, res, error => error ? res.status(400).json({ code: 'INVALID_DOCUMENT_UPLOAD' }) : next()), safe(async (req, res) => {
   try {

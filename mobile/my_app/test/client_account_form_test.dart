@@ -91,15 +91,29 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('policy-consent-checkbox')));
       await tester.pumpAndSettle();
       await advance();
-      expect(find.text('Enter code'), findsOneWidget);
+      expect(find.text('Enter One-Time-Password'), findsOneWidget);
       await advance();
-      expect(find.text('Front Side'), findsOneWidget);
+      expect(find.text('Front side'), findsOneWidget);
       for (var i = 0; i < 2; i++) {
         final skip = find.text('Skip for now');
         await tester.ensureVisible(skip);
         await tester.pumpAndSettle();
         await tester.tap(skip);
         await tester.pumpAndSettle();
+        if (i == 0) {
+          // Skipping ID must offer a way back instead of a dead selfie button.
+          final addId = find.text('Add ID photos first');
+          await tester.ensureVisible(addId);
+          await tester.pumpAndSettle();
+          await tester.tap(addId);
+          await tester.pumpAndSettle();
+          expect(find.text('Front side'), findsOneWidget);
+          final skipAgain = find.text('Skip for now');
+          await tester.ensureVisible(skipAgain);
+          await tester.pumpAndSettle();
+          await tester.tap(skipAgain);
+          await tester.pumpAndSettle();
+        }
         expect(tester.takeException(), isNull);
       }
       expect(find.text('Verification after registration'), findsOneWidget);

@@ -30,6 +30,7 @@ class RegistrationContactFields extends StatefulWidget {
     required this.borderColor,
     required this.focusColor,
     this.federatedAccount = false,
+    this.emailReadOnly = false,
     this.lookup,
     this.emailKey = const ValueKey('Email Address'),
     this.phoneKey = const ValueKey('Phone Number'),
@@ -41,6 +42,7 @@ class RegistrationContactFields extends StatefulWidget {
   final bool enabled;
   final Color fieldColor, textColor, mutedColor, borderColor, focusColor;
   final bool federatedAccount;
+  final bool emailReadOnly;
   final ContactAvailabilityLookup? lookup;
   final Key emailKey, phoneKey;
 
@@ -236,7 +238,7 @@ class RegistrationContactFieldsState extends State<RegistrationContactFields> {
           key: widget.emailKey,
           controller: widget.email,
           enabled: widget.enabled,
-          readOnly: widget.federatedAccount,
+          readOnly: widget.federatedAccount || widget.emailReadOnly,
           keyboardType: TextInputType.emailAddress,
           autofillHints: const [AutofillHints.email],
           forceErrorText: _checks['email']!.error,
