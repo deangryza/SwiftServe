@@ -21,6 +21,8 @@ class PhoneCountry {
   final String? requiredPrefix;
 }
 
+// Sign-up verifies phones by SMS through a Philippine provider (IPROG SMS),
+// so only Philippine mobile numbers are offered.
 const phoneCountries = <PhoneCountry>[
   PhoneCountry(
     isoCode: 'PH',
@@ -30,62 +32,6 @@ const phoneCountries = <PhoneCountry>[
     minimumLength: 10,
     maximumLength: 10,
     requiredPrefix: '9',
-  ),
-  PhoneCountry(
-    isoCode: 'US',
-    name: 'United States / Canada',
-    dialCode: '+1',
-    example: '202 555 0123',
-    minimumLength: 10,
-    maximumLength: 10,
-  ),
-  PhoneCountry(
-    isoCode: 'GB',
-    name: 'United Kingdom',
-    dialCode: '+44',
-    example: '7700 900123',
-    minimumLength: 10,
-    maximumLength: 10,
-  ),
-  PhoneCountry(
-    isoCode: 'AU',
-    name: 'Australia',
-    dialCode: '+61',
-    example: '412 345 678',
-    minimumLength: 9,
-    maximumLength: 9,
-  ),
-  PhoneCountry(
-    isoCode: 'SG',
-    name: 'Singapore',
-    dialCode: '+65',
-    example: '8123 4567',
-    minimumLength: 8,
-    maximumLength: 8,
-  ),
-  PhoneCountry(
-    isoCode: 'JP',
-    name: 'Japan',
-    dialCode: '+81',
-    example: '90 1234 5678',
-    minimumLength: 10,
-    maximumLength: 10,
-  ),
-  PhoneCountry(
-    isoCode: 'KR',
-    name: 'South Korea',
-    dialCode: '+82',
-    example: '10 1234 5678',
-    minimumLength: 9,
-    maximumLength: 10,
-  ),
-  PhoneCountry(
-    isoCode: 'IN',
-    name: 'India',
-    dialCode: '+91',
-    example: '98765 43210',
-    minimumLength: 10,
-    maximumLength: 10,
   ),
 ];
 

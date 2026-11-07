@@ -17,6 +17,7 @@ import '../../../../shared/services/profile_photo_picker.dart';
 import '../../../../shared/models/worker_service_selection.dart';
 import '../widgets/phone_number_field.dart';
 import '../../data/firebase_registration_otp.dart';
+import '../../data/iprog_registration_otp.dart';
 import '../../domain/registration_otp_gateway.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
@@ -47,6 +48,12 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   bool _accepted = false;
   Uint8List? _profileImageBytes;
   FirebaseRegistrationOtp? _otp;
+
+  /// Live SMS codes (IPROG SMS via the backend) when the emulator-only
+  /// Firebase SMS flow is off, i.e. in the real app.
+  final IprogRegistrationOtp? _iprogOtp = RegistrationSmsConfig.enabled
+      ? null
+      : IprogRegistrationOtp();
 
   @override
   void initState() {
@@ -91,6 +98,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   void dispose() {
     _identity.dispose();
     _otp?.dispose();
+    _iprogOtp?.dispose();
     for (final controller in [
       _birthday,
       _name,
@@ -181,9 +189,19 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
       ).showSnackBar(SnackBar(content: Text(birthdayError)));
       return;
     }
+    final phone = normalizePhoneNumber(_countryCode, _phone.text);
+    if (_iprogOtp != null && !_iprogOtp.verifiedFor(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verify your mobile number with the SMS code first.'),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     final category = _role == 'worker' ? _category.text.trim() : '';
     final draft = ProfileDraft(
+      phoneVerificationToken: _iprogOtp?.tokenFor(phone),
       phoneVerificationUid: _otp == null ? '' : user.uid,
       phoneVerificationProject: _otp == null
           ? ''
@@ -215,6 +233,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
         category: draft.category,
         skills: draft.skills,
         photoBase64: draft.photoBase64,
+        phoneVerificationToken: draft.phoneVerificationToken,
       );
       await user.updateDisplayName(draft.fullName);
       await ProfileDraftStore().clear();
@@ -296,7 +315,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     void changeCountry(String value) => setState(() => _countryCode = value);
     final form = _role == 'client'
         ? ClientAccountForm(
-            otpGateway: _otp,
+            otpGateway: _otp ?? _iprogOtp,
             identityDraft: _identity,
             contactAvailability: _contactAvailability,
             key: const ValueKey('google-client-account-flow'),
@@ -321,7 +340,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             onExit: _signOut,
           )
         : WorkerAccountForm(
-            otpGateway: _otp,
+            otpGateway: _otp ?? _iprogOtp,
             identityDraft: _identity,
             contactAvailability: _contactAvailability,
             key: const ValueKey('google-worker-account-flow'),

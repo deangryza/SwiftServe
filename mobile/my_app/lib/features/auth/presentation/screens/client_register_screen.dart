@@ -2,6 +2,7 @@ import '../../domain/registration_identity_draft.dart';
 import '../../../../shared/models/app_user.dart';
 import '../../../worker/presentation/screens/worker_verification_screen.dart';
 import '../../data/firebase_registration_otp.dart';
+import '../../data/iprog_registration_otp.dart';
 import '../../domain/registration_otp_gateway.dart';
 import '../../../../shared/utils/registration_birthday.dart';
 import 'dart:typed_data';
@@ -25,13 +26,19 @@ import '../widgets/phone_number_field.dart';
 import '../widgets/registration_contact_fields.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
-  const ClientRegisterScreen({super.key, this.contactAvailability});
+  const ClientRegisterScreen({
+    super.key,
+    this.contactAvailability,
+    this.smsGateway,
+  });
   final ContactAvailabilityLookup? contactAvailability;
+  final IprogRegistrationOtp? smsGateway;
 
   @override
   Widget build(BuildContext context) => AccountRegistrationScreen(
     role: 'client',
     contactAvailability: contactAvailability,
+    smsGateway: smsGateway,
   );
 }
 
@@ -40,10 +47,14 @@ class AccountRegistrationScreen extends StatefulWidget {
     super.key,
     required this.role,
     this.contactAvailability,
+    this.smsGateway,
   });
 
   final String role;
   final ContactAvailabilityLookup? contactAvailability;
+
+  /// Live SMS codes (IPROG SMS via the backend). Tests can inject one.
+  final IprogRegistrationOtp? smsGateway;
 
   @override
   State<AccountRegistrationScreen> createState() =>
@@ -68,6 +79,11 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   Uint8List? _profileImageBytes;
   RegistrationSmsAccount? _smsAccount;
   FirebaseRegistrationOtp? _otp;
+
+  /// Used whenever the emulator-only Firebase SMS flow is off (the real app).
+  late final IprogRegistrationOtp? _iprogOtp = RegistrationSmsConfig.enabled
+      ? null
+      : (widget.smsGateway ?? IprogRegistrationOtp());
 
   @override
   void initState() {
@@ -168,6 +184,9 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         : _category.text.trim().isEmpty
         ? const []
         : [_category.text.trim()],
+    phoneVerificationToken: _iprogOtp?.tokenFor(
+      normalizePhoneNumber(_countryCode, _phone.text),
+    ),
   );
 
   Future<void> _register() async {
@@ -190,6 +209,15 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(birthdayError)));
+      return;
+    }
+    final phone = normalizePhoneNumber(_countryCode, _phone.text);
+    if (_iprogOtp != null && !_iprogOtp.verifiedFor(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verify your mobile number with the SMS code first.'),
+        ),
+      );
       return;
     }
     setState(() => _loading = true);
@@ -235,6 +263,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         category: draft.category,
         skills: draft.skills,
         photoBase64: draft.photoBase64,
+        phoneVerificationToken: draft.phoneVerificationToken,
       );
       _smsAccount?.commit();
       await ProfileDraftStore().clear();
@@ -342,6 +371,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     }
     _identity.dispose();
     _otp?.dispose();
+    if (widget.smsGateway == null) _iprogOtp?.dispose();
     _services.dispose();
     super.dispose();
   }
@@ -371,7 +401,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'client') {
       return ClientThemeScope(
         child: ClientAccountForm(
-          otpGateway: _otp,
+          otpGateway: _otp ?? _iprogOtp,
           identityDraft: _identity,
           credentialsLocked: _smsAccount?.ownedUid != null,
           onExit: _otp == null ? null : _leaveSmsRegistration,
@@ -400,7 +430,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'worker') {
       return ClientThemeScope(
         child: WorkerAccountForm(
-          otpGateway: _otp,
+          otpGateway: _otp ?? _iprogOtp,
           identityDraft: _identity,
           credentialsLocked: _smsAccount?.ownedUid != null,
           onExit: _otp == null ? null : _leaveSmsRegistration,

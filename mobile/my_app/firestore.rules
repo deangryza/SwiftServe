@@ -38,6 +38,10 @@ service cloud.firestore {
         && !(worker.get('accountStatus', 'active') in ['suspended', 'disabled', 'inactive'])
         && !(worker.get('status', 'active') in ['suspended', 'disabled', 'inactive']);
     }
+    // Any account (client or worker) whose identity an admin has verified.
+    function verifiedAccount() {
+      return signedIn() && currentUser().verificationStatus == 'verified';
+    }
     function validOptionalString(data, field, maxLength) {
       return !(field in data)
         || (data[field] is string && data[field].size() <= maxLength);
@@ -402,7 +406,9 @@ service cloud.firestore {
 
     match /service_requests/{requestId} {
       allow read: if signedIn();
-      allow create: if signedIn()
+      // Only verified accounts may post jobs; edits to existing posts are
+      // governed by the update rule below.
+      allow create: if verifiedAccount()
         && validServiceRequest(request.resource.data)
         && request.resource.data.clientId == request.auth.uid
         && request.resource.data.status == 'pending'
@@ -706,7 +712,8 @@ service cloud.firestore {
           !('type' in request.resource.data)
           || request.resource.data.type in [
             'workerApplication', 'applicationAccepted', 'requestAccepted',
-            'reviewReceived'
+            'reviewReceived', 'jobStarted', 'jobCompleted',
+            'errandStageUpdated', 'bookingCancelled', 'applicationRejected'
           ]
         )
         && request.resource.data.createdAt == request.time
@@ -720,6 +727,18 @@ service cloud.firestore {
               == get(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId
             && request.resource.data.recipientId
               == getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId
+          ) || (
+            // The assigned worker updates the client (start, complete, errand
+            // stages), including workers who accepted directly without applying.
+            request.auth.uid
+              == getAfter(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.workerId
+            && request.resource.data.recipientId
+              == get(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId
+          ) || (
+            // The client tells an applicant they were not selected.
+            request.auth.uid
+              == get(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)).data.clientId
+            && exists(/databases/$(database)/documents/service_requests/$(request.resource.data.requestId)/applications/$(request.resource.data.recipientId))
           )
         );
     }

@@ -4,6 +4,9 @@ const express = require('express');
 const request = require('supertest');
 const { createCanvas } = require('canvas');
 
+// Phone OTP enforcement is covered in otp.test.js; these tests cover the rest.
+process.env.PHONE_OTP_REQUIRED = 'false';
+
 const records = {};
 const phoneClaims = {};
 const publicProfiles = {};

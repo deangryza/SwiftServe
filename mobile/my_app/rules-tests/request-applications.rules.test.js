@@ -56,9 +56,10 @@ beforeEach(async () => {
   await environment.clearFirestore();
   await environment.withSecurityRulesDisabled(async (context) => {
     const db = context.firestore();
+    // Posting jobs requires a verified account; client-2 stays unverified.
     await setDoc(doc(db, 'users/client-1'), {
       role: 'client',
-      verificationStatus: 'pending',
+      verificationStatus: 'verified',
     });
     await setDoc(doc(db, 'users/client-2'), {
       role: 'client',
@@ -407,6 +408,32 @@ test('client atomically creates a request with public and private locations', as
 
   await assertSucceeds(batch.commit());
 });
+
+for (const status of ['pending', 'not_required', 'rejected', undefined]) {
+  test(`client with verificationStatus ${status ?? '(missing)'} cannot post a request`, async () => {
+    await environment.withSecurityRulesDisabled(async (context) => {
+      await setDoc(doc(context.firestore(), 'users/client-2'), {
+        role: 'client',
+        ...(status === undefined ? {} : { verificationStatus: status }),
+      });
+    });
+    const client = environment.authenticatedContext('client-2').firestore();
+    const batch = writeBatch(client);
+    batch.set(doc(client, 'service_requests/unverified-request'), {
+      ...requestData,
+      clientId: 'client-2',
+      areaPosition: new GeoPoint(14.84, 120.81),
+      createdAt: serverTimestamp(),
+    });
+    batch.set(doc(client, 'service_requests/unverified-request/private/location'), {
+      position: new GeoPoint(14.8441, 120.8119),
+      address: '123 Example Street, Malolos, Bulacan',
+      createdAt: serverTimestamp(),
+    });
+
+    await assertFails(batch.commit());
+  });
+}
 
 test('new requests require both a public coordinate and private location', async () => {
   const client = environment.authenticatedContext('client-1').firestore();

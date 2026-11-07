@@ -8,6 +8,7 @@ import '../../../../shared/theme/app_theme.dart';
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_draft_store.dart';
 import '../../data/firebase_registration_otp.dart';
+import '../../data/iprog_registration_otp.dart';
 import '../../domain/registration_otp_gateway.dart';
 import '../widgets/registration_otp_screen.dart';
 
@@ -43,8 +44,13 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
 
   Future<void> _retry() async {
     final user = FirebaseAuth.instance.currentUser;
-    final draft = _draft;
+    var draft = _draft;
     if (user == null || draft == null) return;
+    if (!RegistrationSmsConfig.enabled &&
+        draft.phoneVerificationToken == null) {
+      draft = await _verifyWithSms(draft);
+      if (draft == null) return;
+    }
     final birthdayError = RegistrationBirthday.validate(_birthday.text);
     if (birthdayError != null) {
       setState(() => _error = birthdayError);
@@ -77,6 +83,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         category: draft.category,
         skills: draft.skills,
         photoBase64: draft.photoBase64,
+        phoneVerificationToken: draft.phoneVerificationToken,
       );
       await ProfileDraftStore().clear();
       if (mounted) {
@@ -85,6 +92,12 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     } on RegistrationOtpException catch (error) {
       if (mounted) setState(() => _error = error.message);
     } on ApiException catch (error) {
+      if (error.code == 'PHONE_VERIFICATION_REQUIRED') {
+        // The saved SMS proof expired; the next retry asks for a new code.
+        final cleared = draft.withPhoneVerificationToken(null);
+        await ProfileDraftStore().save(cleared);
+        _draft = cleared;
+      }
       if (mounted) setState(() => _error = error.message);
     } on ApiConnectionException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -97,6 +110,33 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
       }
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  /// Live SMS (IPROG via the backend): asks for a code and saves the proof.
+  Future<ProfileDraft?> _verifyWithSms(ProfileDraft draft) async {
+    final gateway = IprogRegistrationOtp();
+    try {
+      final result = await Navigator.of(context).push<String>(
+        MaterialPageRoute(
+          builder: (context) => RegistrationOtpScreen(
+            phone: draft.phoneNumber,
+            gateway: gateway,
+            verifyButtonKey: const ValueKey('recovery-sms-verify'),
+            onVerified: () => Navigator.pop(context, 'verified'),
+            onEditPhone: () => Navigator.pop(context, 'edit'),
+            onBack: () => Navigator.pop(context, 'back'),
+          ),
+        ),
+      );
+      final token = gateway.tokenFor(draft.phoneNumber);
+      if (result != 'verified' || token == null) return null;
+      final updated = draft.withPhoneVerificationToken(token);
+      await ProfileDraftStore().save(updated);
+      _draft = updated;
+      return updated;
+    } finally {
+      gateway.dispose();
     }
   }
 

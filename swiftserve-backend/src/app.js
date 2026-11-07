@@ -67,6 +67,8 @@ app.use('/api/admin/administrators', require('./routes/adminManagementRoutes'));
 app.use('/api/admin', require('./routes/adminDataRoutes'));
 app.use('/api/routes', require('./routes/routeRoutes'));
 app.use('/api/sos', require('./routes/sosRoutes'));
+app.use('/api/push', require('./routes/pushRoutes'));
+app.use('/api/otp', require('./routes/otpRoutes'));
 app.use('/api', verificationRoutes());
 const documentSuitability = require('./routes/documentSuitabilityRoutes');
 app.use('/api/verification/document', documentSuitability.user);

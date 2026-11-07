@@ -53,6 +53,26 @@ Route<T> clientTabPageRoute<T>(
   );
 }
 
+/// Present above the client tab pages when they are hosted by the shared
+/// client tab shell. Tab screens use it to hide their own bottom bar and
+/// swipe handling, and to switch tabs without pushing new routes.
+class ClientTabShellScope extends InheritedWidget {
+  const ClientTabShellScope({
+    super.key,
+    required this.selectTab,
+    required super.child,
+  });
+
+  final ValueChanged<int> selectTab;
+
+  static ClientTabShellScope? maybeOf(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<ClientTabShellScope>();
+
+  @override
+  bool updateShouldNotify(ClientTabShellScope oldWidget) =>
+      selectTab != oldWidget.selectTab;
+}
+
 class ClientTabSwipeRegion extends StatefulWidget {
   const ClientTabSwipeRegion({
     super.key,

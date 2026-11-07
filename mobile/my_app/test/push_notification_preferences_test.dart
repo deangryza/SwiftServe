@@ -60,7 +60,8 @@ void main() {
         for (final tile in tester.widgetList<SwitchListTile>(
           find.byType(SwitchListTile),
         )) {
-          expect(tile.onChanged, isNull); // Build safety flag remains off.
+          // Push is on by default, so the switches can be changed.
+          expect(tile.onChanged, isNotNull);
         }
         final system = find.text('System notification settings');
         await tester.ensureVisible(system);
@@ -70,7 +71,7 @@ void main() {
         expect(systemSettingsOpened, isTrue);
         expect(
           find.textContaining('unavailable in this version'),
-          findsOneWidget,
+          findsNothing,
         );
         expect(tester.takeException(), isNull);
       },

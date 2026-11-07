@@ -8,11 +8,13 @@ void main() {
     expect(normalizePhoneNumber('+63', '9171234567'), '+639171234567');
   });
 
-  test('validates the selected country phone length', () {
+  test('validates the Philippine phone length', () {
     expect(validatePhoneNumber('09171234567', '+63'), isNull);
     expect(validatePhoneNumber('12345', '+63'), isNotNull);
-    expect(validatePhoneNumber('2025550123', '+1'), isNull);
-    expect(validatePhoneNumber('20255501', '+1'), isNotNull);
+  });
+
+  test('only Philippine numbers are offered (SMS codes are PH-only)', () {
+    expect(phoneCountries.map((country) => country.dialCode), ['+63']);
   });
 
   test('Philippine mobile numbers must start with 9', () {

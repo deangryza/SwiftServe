@@ -29,8 +29,13 @@ NotificationAudience? notificationAudience(
     case 'workerApplication':
     case 'requestAccepted':
     case 'jobExpired':
+    case 'jobStarted':
+    case 'jobCompleted':
+    case 'errandStageUpdated':
       return NotificationAudience.client;
     case 'applicationAccepted':
+    case 'applicationRejected':
+    case 'bookingCancelled':
       return NotificationAudience.worker;
   }
   // Legacy reviews/updates have no unambiguous type. Only a saved job

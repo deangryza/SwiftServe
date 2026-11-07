@@ -15,6 +15,7 @@ class ProfileDraft {
     this.photoBase64 = '',
     this.phoneVerificationUid = '',
     this.phoneVerificationProject = '',
+    this.phoneVerificationToken,
   });
 
   final String dateOfBirth;
@@ -27,6 +28,25 @@ class ProfileDraft {
   final List<String> skills;
   final String photoBase64;
   final String phoneVerificationUid, phoneVerificationProject;
+
+  /// Proof from the live SMS code step (IPROG SMS via the backend) that
+  /// [phoneNumber] belongs to the user.
+  final String? phoneVerificationToken;
+
+  ProfileDraft withPhoneVerificationToken(String? token) => ProfileDraft(
+    dateOfBirth: dateOfBirth,
+    fullName: fullName,
+    email: email,
+    phoneNumber: phoneNumber,
+    address: address,
+    role: role,
+    category: category,
+    skills: skills,
+    photoBase64: photoBase64,
+    phoneVerificationUid: phoneVerificationUid,
+    phoneVerificationProject: phoneVerificationProject,
+    phoneVerificationToken: token,
+  );
 
   Map<String, dynamic> toJson() => {
     'dateOfBirth': dateOfBirth,
@@ -42,6 +62,7 @@ class ProfileDraft {
       'phoneVerificationUid': phoneVerificationUid,
     if (phoneVerificationProject.isNotEmpty)
       'phoneVerificationProject': phoneVerificationProject,
+    'phoneVerificationToken': ?phoneVerificationToken,
   };
 
   factory ProfileDraft.fromJson(Map<String, dynamic> json) => ProfileDraft(
@@ -57,6 +78,7 @@ class ProfileDraft {
     phoneVerificationUid: (json['phoneVerificationUid'] ?? '').toString(),
     phoneVerificationProject: (json['phoneVerificationProject'] ?? '')
         .toString(),
+    phoneVerificationToken: json['phoneVerificationToken'] as String?,
   );
 }
 

@@ -79,6 +79,47 @@ class _ClientBookingsScreenState extends State<ClientBookingsScreen> {
   Widget build(BuildContext context) {
     final palette = _BookingPalette(context);
     final uid = FirebaseAuth.instance.currentUser?.uid;
+    final inShell = ClientTabShellScope.maybeOf(context) != null;
+    final scaffold = Scaffold(
+      backgroundColor: palette.background,
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: Column(
+              children: [
+                _BookingsHeader(
+                  controller: _searchController,
+                  palette: palette,
+                  filter: _filter,
+                  onChanged: (_) => setState(() {}),
+                  onFilterChanged: (filter) => setState(() => _filter = filter),
+                ),
+                Expanded(
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: palette.background,
+                      borderRadius: BorderRadius.zero,
+                    ),
+                    child: uid == null
+                        ? const Center(child: Text('Please log in again.'))
+                        : _BookingList(
+                            clientId: uid,
+                            query: _searchController.text,
+                            filter: _filter,
+                            palette: palette,
+                          ),
+                  ),
+                ),
+                if (!inShell) _BookingsBottomNav(palette: palette),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (inShell) return scaffold;
     return ClientTabSwipeRegion(
       currentIndex: 1,
       onSwipeToIndex: (index) {
@@ -95,46 +136,7 @@ class _ClientBookingsScreenState extends State<ClientBookingsScreen> {
           );
         }
       },
-      child: Scaffold(
-        backgroundColor: palette.background,
-        body: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 430),
-              child: Column(
-                children: [
-                  _BookingsHeader(
-                    controller: _searchController,
-                    palette: palette,
-                    filter: _filter,
-                    onChanged: (_) => setState(() {}),
-                    onFilterChanged: (filter) =>
-                        setState(() => _filter = filter),
-                  ),
-                  Expanded(
-                    child: Container(
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        color: palette.background,
-                        borderRadius: BorderRadius.zero,
-                      ),
-                      child: uid == null
-                          ? const Center(child: Text('Please log in again.'))
-                          : _BookingList(
-                              clientId: uid,
-                              query: _searchController.text,
-                              filter: _filter,
-                              palette: palette,
-                            ),
-                    ),
-                  ),
-                  _BookingsBottomNav(palette: palette),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: scaffold,
     );
   }
 }
@@ -1041,13 +1043,7 @@ class _ClientBookingDetailsScreenState
     if (!confirmed || _saving) return;
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('service_requests')
-          .doc(request.id)
-          .update({
-            'status': ServiceRequestStatus.cancelled.name,
-            'cancelledAt': FieldValue.serverTimestamp(),
-          });
+      await ServiceRequestRepository().cancel(request: request);
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,

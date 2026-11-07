@@ -45,7 +45,7 @@ int conversationUnreadCount(
   }).length;
 }
 
-class ConversationUnreadBadge extends StatelessWidget {
+class ConversationUnreadBadge extends StatefulWidget {
   const ConversationUnreadBadge({
     super.key,
     required this.userId,
@@ -58,25 +58,55 @@ class ConversationUnreadBadge extends StatelessWidget {
   final UserRole role;
 
   @override
+  State<ConversationUnreadBadge> createState() =>
+      _ConversationUnreadBadgeState();
+}
+
+class _ConversationUnreadBadgeState extends State<ConversationUnreadBadge> {
+  // Cached so parent rebuilds (e.g. switching tabs) don't resubscribe to
+  // Firestore and briefly reset the badge.
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _stream;
+
+  @override
+  void initState() {
+    super.initState();
+    _stream = _createStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant ConversationUnreadBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userId != widget.userId) _stream = _createStream();
+  }
+
+  Stream<QuerySnapshot<Map<String, dynamic>>>? _createStream() {
+    final userId = widget.userId;
+    if (userId == null || userId.isEmpty || Firebase.apps.isEmpty) return null;
+    return FirebaseFirestore.instance
+        .collection('conversations')
+        .where('participantIds', arrayContains: userId)
+        .snapshots();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (userId == null || userId!.isEmpty || Firebase.apps.isEmpty) {
-      return child;
-    }
+    final stream = _stream;
+    if (stream == null) return widget.child;
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      key: ValueKey('conversation-badge-$userId-${role.name}'),
-      stream: FirebaseFirestore.instance
-          .collection('conversations')
-          .where('participantIds', arrayContains: userId)
-          .snapshots(),
+      stream: stream,
       builder: (context, snapshot) {
         final count = snapshot.hasData
-            ? conversationUnreadCount(snapshot.data!.docs, userId!, role: role)
+            ? conversationUnreadCount(
+                snapshot.data!.docs,
+                widget.userId!,
+                role: widget.role,
+              )
             : 0;
         return Badge(
           isLabelVisible: count > 0,
           backgroundColor: AppTheme.ink,
           smallSize: 8,
-          child: child,
+          child: widget.child,
         );
       },
     );

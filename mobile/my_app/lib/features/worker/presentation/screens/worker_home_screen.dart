@@ -73,78 +73,113 @@ class WorkerHomeScreen extends StatefulWidget {
 class _WorkerHomeScreenState extends State<WorkerHomeScreen> {
   final VerificationRepository _verificationRepository =
       VerificationRepository();
-  int _index = 0;
+  // The selected tab lives in a notifier so switching tabs only rebuilds the
+  // body and the nav items, not the Scaffold/bottom bar subtree.
+  final ValueNotifier<int> _index = ValueNotifier<int>(0);
   int _tabDirection = 1;
+  late Stream<VerificationStatus?> _verificationStream;
 
-  void _selectTab(int index) {
-    if (index == _index || index < 0 || index > 3) return;
-    setState(() {
-      _tabDirection = index > _index ? 1 : -1;
-      _index = index;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _verificationStream = _verificationRepository.watchStatus(
+      widget.profile.id,
+    );
   }
 
   @override
-  Widget build(BuildContext context) => StreamBuilder<VerificationStatus?>(
-    stream: _verificationRepository.watchStatus(widget.profile.id),
-    builder: (context, verificationSnapshot) {
-      final verificationState = WorkerVerificationUiState.resolve(
-        profileStatus: widget.profile.verificationStatus,
-        submissionStatus: verificationSnapshot.data,
+  void didUpdateWidget(covariant WorkerHomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.profile.id != widget.profile.id) {
+      _verificationStream = _verificationRepository.watchStatus(
+        widget.profile.id,
       );
-      final pages = [
-        _WorkerDashboard(
-          worker: widget.profile,
-          verificationState: verificationState,
-        ),
-        _WorkerJobs(worker: widget.profile),
-        _WorkerMessages(worker: widget.profile, onBack: () => _selectTab(0)),
-        _WorkerProfile(
-          worker: widget.profile,
-          verificationState: verificationState,
-        ),
-      ];
-      return _WorkerTabSwipeRegion(
-        currentIndex: _index,
-        onSwipeToIndex: _selectTab,
-        child: Scaffold(
-          backgroundColor: _WorkerPalette.of(context).background,
-          body: AnimatedSwitcher(
-            duration: const Duration(milliseconds: 260),
-            reverseDuration: const Duration(milliseconds: 220),
-            switchInCurve: Curves.easeOutCubic,
-            switchOutCurve: Curves.easeInCubic,
-            transitionBuilder: (child, animation) {
-              final childIndex = (child.key as ValueKey<int>?)?.value ?? _index;
-              final incoming = childIndex == _index;
-              final horizontalOffset = incoming
-                  ? _tabDirection * 0.08
-                  : _tabDirection * -0.04;
-              return FadeTransition(
-                key: ValueKey('worker-tab-transition-$childIndex'),
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: Offset(horizontalOffset, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
+    }
+  }
+
+  @override
+  void dispose() {
+    _index.dispose();
+    super.dispose();
+  }
+
+  void _selectTab(int index) {
+    final current = _index.value;
+    if (index == current || index < 0 || index > 3) return;
+    _tabDirection = index > current ? 1 : -1;
+    _index.value = index;
+  }
+
+  @override
+  Widget build(BuildContext context) => _WorkerTabSwipeRegion(
+    currentIndex: () => _index.value,
+    onSwipeToIndex: _selectTab,
+    child: Scaffold(
+      backgroundColor: _WorkerPalette.of(context).background,
+      body: StreamBuilder<VerificationStatus?>(
+        stream: _verificationStream,
+        builder: (context, verificationSnapshot) {
+          final verificationState = WorkerVerificationUiState.resolve(
+            profileStatus: widget.profile.verificationStatus,
+            submissionStatus: verificationSnapshot.data,
+          );
+          return ValueListenableBuilder<int>(
+            valueListenable: _index,
+            builder: (context, index, _) {
+              final page = switch (index) {
+                0 => _WorkerDashboard(
+                  worker: widget.profile,
+                  verificationState: verificationState,
                 ),
+                1 => _WorkerJobs(worker: widget.profile),
+                2 => _WorkerMessages(
+                  worker: widget.profile,
+                  onBack: () => _selectTab(0),
+                ),
+                _ => _WorkerProfile(
+                  worker: widget.profile,
+                  verificationState: verificationState,
+                ),
+              };
+              return AnimatedSwitcher(
+                duration: const Duration(milliseconds: 260),
+                reverseDuration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                transitionBuilder: (child, animation) {
+                  final childIndex =
+                      (child.key as ValueKey<int>?)?.value ?? index;
+                  final incoming = childIndex == index;
+                  final horizontalOffset = incoming
+                      ? _tabDirection * 0.08
+                      : _tabDirection * -0.04;
+                  return FadeTransition(
+                    key: ValueKey('worker-tab-transition-$childIndex'),
+                    opacity: animation,
+                    child: SlideTransition(
+                      position: Tween<Offset>(
+                        begin: Offset(horizontalOffset, 0),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: child,
+                    ),
+                  );
+                },
+                child: KeyedSubtree(key: ValueKey<int>(index), child: page),
               );
             },
-            child: KeyedSubtree(
-              key: ValueKey<int>(_index),
-              child: pages[_index],
-            ),
-          ),
-          bottomNavigationBar: _WorkerBottomNavigation(
-            selectedIndex: _index,
-            workerId: widget.profile.id,
-            onSelected: _selectTab,
-          ),
+          );
+        },
+      ),
+      bottomNavigationBar: ValueListenableBuilder<int>(
+        valueListenable: _index,
+        builder: (context, index, _) => _WorkerBottomNavigation(
+          selectedIndex: index,
+          workerId: widget.profile.id,
+          onSelected: _selectTab,
         ),
-      );
-    },
+      ),
+    ),
   );
 }
 
@@ -155,7 +190,7 @@ class _WorkerTabSwipeRegion extends StatefulWidget {
     required this.child,
   });
 
-  final int currentIndex;
+  final ValueGetter<int> currentIndex;
   final ValueChanged<int> onSwipeToIndex;
   final Widget child;
 
@@ -178,14 +213,13 @@ class _WorkerTabSwipeRegionState extends State<_WorkerTabSwipeRegion> {
         velocity >= _velocityThreshold;
     _horizontalDistance = 0;
 
+    final currentIndex = widget.currentIndex();
     final targetIndex = movesForward
-        ? widget.currentIndex + 1
+        ? currentIndex + 1
         : movesBackward
-        ? widget.currentIndex - 1
-        : widget.currentIndex;
-    if (targetIndex >= 0 &&
-        targetIndex <= 3 &&
-        targetIndex != widget.currentIndex) {
+        ? currentIndex - 1
+        : currentIndex;
+    if (targetIndex >= 0 && targetIndex <= 3 && targetIndex != currentIndex) {
       widget.onSwipeToIndex(targetIndex);
     }
   }

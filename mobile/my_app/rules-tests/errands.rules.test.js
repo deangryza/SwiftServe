@@ -60,6 +60,13 @@ before(async () => {
 
 beforeEach(async () => {
   await environment.clearFirestore();
+  // Posting jobs requires a verified account.
+  await environment.withSecurityRulesDisabled(async (context) => {
+    await setDoc(doc(context.firestore(), 'users/client-1'), {
+      role: 'client',
+      verificationStatus: 'verified',
+    });
+  });
 });
 
 after(async () => {
