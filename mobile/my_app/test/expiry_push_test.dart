@@ -67,8 +67,8 @@ void main() {
       expect(ExpiryPushTarget.parse({...valid, ...change}, 'owner'), isNull);
     }
   });
-  test('push is disabled unless explicitly enabled at build time', () {
-    expect(ExpiryPushService.enabled, isFalse);
+  test('push is enabled unless explicitly disabled at build time', () {
+    expect(ExpiryPushService.enabled, isTrue);
   });
 
   test(

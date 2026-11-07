@@ -90,6 +90,229 @@ class _ProfileView extends StatelessWidget {
         ? createdAt.toDate().year.toString()
         : (user.metadata.creationTime?.year.toString() ?? '—');
 
+    final inShell = ClientTabShellScope.maybeOf(context) != null;
+    final scaffold = Scaffold(
+      backgroundColor: background,
+      bottomNavigationBar: inShell
+          ? null
+          : _ProfileBottomNavigation(
+              userId: user.uid,
+              background: background,
+              surface: surface,
+              text: text,
+            ),
+      body: SafeArea(
+        bottom: false,
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 430),
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: background),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
+                children: [
+                  const Text(
+                    'Profile',
+                    style: TextStyle(
+                      color: _profileInk,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 22),
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
+                    decoration: _cardDecoration(surface),
+                    child: Column(
+                      children: [
+                        _ProfilePhoto(
+                          userId: user.uid,
+                          name: safeName,
+                          photoBase64: (data['photoBase64'] ?? '').toString(),
+                          photoUrl: user.photoURL,
+                          joinedAt: createdAt is Timestamp
+                              ? createdAt.toDate()
+                              : user.metadata.creationTime,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          safeName,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: text,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 7),
+                        _VerificationBadge(status: status),
+                        const SizedBox(height: 21),
+                        Divider(
+                          color: muted.withValues(alpha: 0.18),
+                          height: 1,
+                        ),
+                        const SizedBox(height: 18),
+                        StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                          stream: FirebaseFirestore.instance
+                              .collection('service_requests')
+                              .where('clientId', isEqualTo: user.uid)
+                              .snapshots(),
+                          builder: (context, jobsSnapshot) => Row(
+                            children: [
+                              _ProfileStat(
+                                value: jobsSnapshot.hasData
+                                    ? '${jobsSnapshot.data!.docs.length}'
+                                    : '—',
+                                label: 'Jobs',
+                                text: text,
+                                muted: muted,
+                              ),
+                              AccountRatingBuilder(
+                                userId: user.uid,
+                                builder: (context, summary) => _ProfileStat(
+                                  value: summary.displayAverage,
+                                  label: summary.label,
+                                  text: text,
+                                  muted: muted,
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    clientPageRoute(
+                                      ReviewsScreen(
+                                        userId: user.uid,
+                                        reviewsFor: ReviewsFor.account,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              _ProfileStat(
+                                value: since,
+                                label: 'Since',
+                                text: text,
+                                muted: muted,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton(
+                            key: const ValueKey('client-edit-profile'),
+                            onPressed: () => Navigator.push(
+                              context,
+                              clientPageRoute(
+                                ClientEditProfileScreen(
+                                  initialData: data,
+                                  photoUrl: user.photoURL,
+                                ),
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: text,
+                              side: BorderSide(
+                                color: muted.withValues(alpha: 0.3),
+                              ),
+                              minimumSize: const Size.fromHeight(48),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 0,
+                              backgroundColor: surface,
+                            ),
+                            child: const Text(
+                              'Edit Profile',
+                              style: TextStyle(fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    decoration: _cardDecoration(surface),
+                    child: Column(
+                      children: [
+                        _ContactRow(
+                          icon: Icons.mail_outline,
+                          value: email,
+                          text: text,
+                          muted: muted,
+                        ),
+                        _ContactRow(
+                          icon: Icons.phone_outlined,
+                          value: phone,
+                          text: text,
+                          muted: muted,
+                        ),
+                        _ContactRow(
+                          icon: Icons.location_on_outlined,
+                          value: address,
+                          text: text,
+                          muted: muted,
+                          showDivider: false,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Material(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListTile(
+                      key: const ValueKey('client-profile-reviews'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      leading: Icon(Icons.reviews_outlined, color: muted),
+                      title: Text('Reviews', style: TextStyle(color: text)),
+                      subtitle: Text(
+                        'See all reviews you received',
+                        style: TextStyle(color: muted),
+                      ),
+                      trailing: Icon(Icons.chevron_right, color: muted),
+                      onTap: () => Navigator.push(
+                        context,
+                        clientPageRoute(
+                          ReviewsScreen(
+                            userId: user.uid,
+                            reviewsFor: ReviewsFor.account,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Material(
+                    color: surface,
+                    borderRadius: BorderRadius.circular(12),
+                    child: ListTile(
+                      key: const ValueKey('client-profile-settings'),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      leading: Icon(Icons.settings_outlined, color: muted),
+                      title: Text('Settings', style: TextStyle(color: text)),
+                      trailing: Icon(Icons.chevron_right, color: muted),
+                      onTap: () => Navigator.push(
+                        context,
+                        clientPageRoute(
+                          ClientSettingsScreen(
+                            profile: AppUser.fromMap(user.uid, data),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (inShell) return scaffold;
     return ClientTabSwipeRegion(
       currentIndex: 3,
       onSwipeToIndex: (_) => Navigator.pushReplacement(
@@ -100,225 +323,7 @@ class _ProfileView extends StatelessWidget {
           toIndex: 2,
         ),
       ),
-      child: Scaffold(
-        backgroundColor: background,
-        bottomNavigationBar: _ProfileBottomNavigation(
-          userId: user.uid,
-          background: background,
-          surface: surface,
-          text: text,
-        ),
-        body: SafeArea(
-          bottom: false,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 430),
-              child: DecoratedBox(
-                decoration: BoxDecoration(color: background),
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
-                  children: [
-                    const Text(
-                      'Profile',
-                      style: TextStyle(
-                        color: _profileInk,
-                        fontSize: 22,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 22),
-                    Container(
-                      padding: const EdgeInsets.fromLTRB(22, 24, 22, 18),
-                      decoration: _cardDecoration(surface),
-                      child: Column(
-                        children: [
-                          _ProfilePhoto(
-                            userId: user.uid,
-                            name: safeName,
-                            photoBase64: (data['photoBase64'] ?? '').toString(),
-                            photoUrl: user.photoURL,
-                            joinedAt: createdAt is Timestamp
-                                ? createdAt.toDate()
-                                : user.metadata.creationTime,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            safeName,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: text,
-                              fontSize: 18,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(height: 7),
-                          _VerificationBadge(status: status),
-                          const SizedBox(height: 21),
-                          Divider(
-                            color: muted.withValues(alpha: 0.18),
-                            height: 1,
-                          ),
-                          const SizedBox(height: 18),
-                          StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                            stream: FirebaseFirestore.instance
-                                .collection('service_requests')
-                                .where('clientId', isEqualTo: user.uid)
-                                .snapshots(),
-                            builder: (context, jobsSnapshot) => Row(
-                              children: [
-                                _ProfileStat(
-                                  value: jobsSnapshot.hasData
-                                      ? '${jobsSnapshot.data!.docs.length}'
-                                      : '—',
-                                  label: 'Jobs',
-                                  text: text,
-                                  muted: muted,
-                                ),
-                                AccountRatingBuilder(
-                                  userId: user.uid,
-                                  builder: (context, summary) => _ProfileStat(
-                                    value: summary.displayAverage,
-                                    label: summary.label,
-                                    text: text,
-                                    muted: muted,
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      clientPageRoute(
-                                        ReviewsScreen(
-                                          userId: user.uid,
-                                          reviewsFor: ReviewsFor.account,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                _ProfileStat(
-                                  value: since,
-                                  label: 'Since',
-                                  text: text,
-                                  muted: muted,
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton(
-                              key: const ValueKey('client-edit-profile'),
-                              onPressed: () => Navigator.push(
-                                context,
-                                clientPageRoute(
-                                  ClientEditProfileScreen(
-                                    initialData: data,
-                                    photoUrl: user.photoURL,
-                                  ),
-                                ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: text,
-                                side: BorderSide(
-                                  color: muted.withValues(alpha: 0.3),
-                                ),
-                                minimumSize: const Size.fromHeight(48),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                elevation: 0,
-                                backgroundColor: surface,
-                              ),
-                              child: const Text(
-                                'Edit Profile',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      decoration: _cardDecoration(surface),
-                      child: Column(
-                        children: [
-                          _ContactRow(
-                            icon: Icons.mail_outline,
-                            value: email,
-                            text: text,
-                            muted: muted,
-                          ),
-                          _ContactRow(
-                            icon: Icons.phone_outlined,
-                            value: phone,
-                            text: text,
-                            muted: muted,
-                          ),
-                          _ContactRow(
-                            icon: Icons.location_on_outlined,
-                            value: address,
-                            text: text,
-                            muted: muted,
-                            showDivider: false,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Material(
-                      color: surface,
-                      borderRadius: BorderRadius.circular(12),
-                      child: ListTile(
-                        key: const ValueKey('client-profile-reviews'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        leading: Icon(Icons.reviews_outlined, color: muted),
-                        title: Text('Reviews', style: TextStyle(color: text)),
-                        subtitle: Text(
-                          'See all reviews you received',
-                          style: TextStyle(color: muted),
-                        ),
-                        trailing: Icon(Icons.chevron_right, color: muted),
-                        onTap: () => Navigator.push(
-                          context,
-                          clientPageRoute(
-                            ReviewsScreen(
-                              userId: user.uid,
-                              reviewsFor: ReviewsFor.account,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Material(
-                      color: surface,
-                      borderRadius: BorderRadius.circular(12),
-                      child: ListTile(
-                        key: const ValueKey('client-profile-settings'),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        leading: Icon(Icons.settings_outlined, color: muted),
-                        title: Text('Settings', style: TextStyle(color: text)),
-                        trailing: Icon(Icons.chevron_right, color: muted),
-                        onTap: () => Navigator.push(
-                          context,
-                          clientPageRoute(
-                            ClientSettingsScreen(
-                              profile: AppUser.fromMap(user.uid, data),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: scaffold,
     );
   }
 }

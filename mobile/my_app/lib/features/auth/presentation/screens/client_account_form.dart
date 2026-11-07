@@ -5,6 +5,7 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/phone_number_field.dart';
+import '../widgets/phone_otp_verifier.dart';
 import '../widgets/registration_contact_fields.dart';
 import '../widgets/registration_validation_theme.dart';
 import '../widgets/registration_address_fields.dart';
@@ -32,6 +33,10 @@ class ClientAccountForm extends StatefulWidget {
     this.onChangeRole,
     this.onExit,
     this.contactAvailability,
+    this.verifiedPhoneNumber,
+    this.onPhoneVerified,
+    this.otpSender,
+    this.otpVerifier,
   });
 
   final GlobalKey<FormState> formKey;
@@ -53,6 +58,15 @@ class ClientAccountForm extends StatefulWidget {
   final VoidCallback? onChangeRole;
   final VoidCallback? onExit;
   final ContactAvailabilityLookup? contactAvailability;
+
+  /// The number the screen already holds a verification token for.
+  final String? verifiedPhoneNumber;
+
+  /// Receives the SMS verification token. When null, the code page is not
+  /// enforced (used by older callers and tests).
+  final void Function(String phoneNumber, String token)? onPhoneVerified;
+  final SendPhoneOtp? otpSender;
+  final VerifyPhoneOtp? otpVerifier;
 
   @override
   State<ClientAccountForm> createState() => _ClientAccountFormState();
@@ -136,6 +150,13 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           );
           return;
         }
+      } else if (_page == 2 && !_phoneVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter the code we sent to your phone to continue.'),
+          ),
+        );
+        return;
       }
       if (_page == 5) {
         widget.onRegister();
@@ -566,45 +587,28 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
     ],
   );
 
-  Widget _otpPage() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        'Enter code',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: _text,
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 8),
-      Text(
-        'Your code was sent to ${normalizePhoneNumber(widget.countryCode, widget.phone.text)}',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: _muted),
-      ),
-      const SizedBox(height: 24),
-      Row(
-        children: List.generate(
-          6,
-          (_) => Expanded(
-            child: Container(
-              height: 52,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: _field,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _border),
-              ),
-            ),
-          ),
-        ),
-      ),
-      const SizedBox(height: 14),
-      Text("Didn't get code?", style: TextStyle(color: _muted)),
-    ],
-  );
+  String get _phoneNumber =>
+      normalizePhoneNumber(widget.countryCode, widget.phone.text);
+
+  bool get _phoneVerified =>
+      widget.onPhoneVerified == null ||
+      widget.verifiedPhoneNumber == _phoneNumber;
+
+  Widget _otpPage() {
+    final phone = _phoneNumber;
+    return PhoneOtpVerifier(
+      key: ValueKey('client-otp-$phone'),
+      phoneNumber: phone,
+      alreadyVerified: widget.verifiedPhoneNumber == phone,
+      onVerified: (token) => widget.onPhoneVerified?.call(phone, token),
+      sendCode: widget.otpSender,
+      verifyCode: widget.otpVerifier,
+      textColor: _text,
+      mutedColor: _muted,
+      fieldColor: _field,
+      borderColor: _border,
+    );
+  }
 
   Widget _idPage() => Container(
     padding: const EdgeInsets.all(14),

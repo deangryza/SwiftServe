@@ -30,6 +30,8 @@ app.use('/api/admin/verifications', adminVerificationRoutes);
 app.use('/api/admin', require('./routes/adminDataRoutes'));
 app.use('/api/routes', require('./routes/routeRoutes'));
 app.use('/api/sos', require('./routes/sosRoutes'));
+app.use('/api/push', require('./routes/pushRoutes'));
+app.use('/api/otp', require('./routes/otpRoutes'));
 app.use('/api', verificationRoutes());
 
 app.use((error, _req, res, _next) => {

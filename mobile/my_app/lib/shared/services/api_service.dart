@@ -85,6 +85,7 @@ class ApiService {
     String category = '',
     List<String> skills = const [],
     String photoBase64 = '',
+    String? phoneVerificationToken,
   }) async {
     late final http.Response response;
     try {
@@ -104,6 +105,7 @@ class ApiService {
               if (category.isNotEmpty) 'category': category,
               if (skills.isNotEmpty) 'skills': skills,
               if (photoBase64.isNotEmpty) 'photoBase64': photoBase64,
+              'phoneVerificationToken': ?phoneVerificationToken,
             }),
           )
           .timeout(_requestTimeout);
@@ -215,9 +217,36 @@ class ApiService {
 
   static const _sosTimeout = Duration(seconds: 15);
 
+  /// Registers (or with `revoke: true`, removes) this phone's push token so
+  /// the backend can send job and chat notifications to it.
+  Future<void> registerPushDevice({
+    required String idToken,
+    required Map<String, Object> device,
+  }) => _postJson('/api/push/devices', idToken, device);
+
+  /// Texts a one-time code to a Philippine mobile number (+639XXXXXXXXX).
+  /// No sign-in needed: email sign-ups verify before the account exists.
+  Future<void> sendPhoneOtp(String phoneNumber) =>
+      _postJson('/api/otp/send', null, {'phoneNumber': phoneNumber});
+
+  /// Checks the SMS code; returns the token that profile creation requires.
+  Future<String> verifyPhoneOtp(String phoneNumber, String code) async {
+    final body = await _postJson('/api/otp/verify', null, {
+      'phoneNumber': phoneNumber,
+      'code': code,
+    });
+    final token = body['verificationToken'];
+    if (token is! String || token.isEmpty) {
+      throw const ApiConnectionException(
+        'Could not confirm the code. Please try again.',
+      );
+    }
+    return token;
+  }
+
   Future<Map<String, dynamic>> _postJson(
     String path,
-    String idToken,
+    String? idToken,
     Map<String, Object> body, {
     Duration timeout = _requestTimeout,
   }) async {
@@ -228,7 +257,7 @@ class ApiService {
             Uri.parse('${ApiConfig.baseUrl}$path'),
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': 'Bearer $idToken',
+              if (idToken != null) 'Authorization': 'Bearer $idToken',
             },
             body: jsonEncode(body),
           )
@@ -279,6 +308,12 @@ class ApiException implements Exception {
   }
 
   String? get code => _payload['code']?.toString();
+
+  /// Seconds to wait before retrying, when the server sends one (OTP resend).
+  int? get retryAfterSeconds => switch (_payload['retryAfterSeconds']) {
+    num value => value.ceil(),
+    _ => null,
+  };
 
   String get message =>
       _payload['message']?.toString() ?? 'The request could not be completed.';

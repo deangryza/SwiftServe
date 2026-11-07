@@ -61,84 +61,99 @@ void main() {
     expect(find.text('Confirm Password'), findsOneWidget);
   });
 
-  testWidgets(
-    'worker next buttons traverse the placeholder verification flow',
-    (tester) async {
-      tester.view.physicalSize = const Size(364, 1024);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
+  testWidgets('worker next buttons traverse the verification flow', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(364, 1024);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final sentTo = <String>[];
 
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: WorkerRegisterScreen(contactAvailability: _available),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WorkerRegisterScreen(
+          contactAvailability: _available,
+          otpSender: (phone) async => sentTo.add(phone),
+          otpVerifier: (phone, code) async => 'token',
         ),
-      );
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    var fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Alex');
+    await tester.enterText(fields.at(1), 'Worker');
+    await _tapNext(tester);
+
+    fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'alex@example.com');
+    await tester.enterText(fields.at(1), '09171234567');
+    for (final entry in {
+      'Street / House No. (optional)': '123 Service Lane',
+      'Barangay': 'Bulihan',
+      'City / Municipality': 'Malolos',
+      'Province': 'Bulacan',
+      'worker-Password': 'password',
+      'worker-Confirm Password': 'password',
+    }.entries) {
+      final field = find.byKey(ValueKey(entry.key));
+      await tester.ensureVisible(field);
+      await tester.enterText(field, entry.value);
       await tester.pumpAndSettle();
+    }
+    await tester.ensureVisible(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(CheckboxListTile));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
+      isTrue,
+    );
+    expect(tester.state<FormState>(find.byType(Form)).validate(), isTrue);
+    await _tapNext(tester);
 
-      var fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'Alex');
-      await tester.enterText(fields.at(1), 'Worker');
-      await _tapNext(tester);
+    expect(find.text('Service Categories'), findsOneWidget);
+    expect(find.text('Weekly Availability'), findsNothing);
+    expect(find.text('Choose your services'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('worker-category-Academic Help')),
+    );
+    final repairs = find.byKey(const ValueKey('worker-category-Repairs'));
+    await tester.ensureVisible(repairs);
+    await tester.tap(repairs);
+    final other = find.byKey(const ValueKey('worker-category-Other'));
+    await tester.ensureVisible(other);
+    await tester.tap(other);
+    await _tapNext(tester);
+    expect(find.text('Service Categories'), findsOneWidget);
+    expect(find.text('Please specify your service.'), findsWidgets);
+    final customService = find.byKey(const ValueKey('worker-custom-service'));
+    await tester.ensureVisible(customService);
+    await tester.enterText(customService, 'Pet grooming');
+    await _tapNext(tester);
+    expect(find.text('Enter code'), findsOneWidget);
+    expect(sentTo, ['+639171234567']);
 
-      fields = find.byType(TextFormField);
-      await tester.enterText(fields.at(0), 'alex@example.com');
-      await tester.enterText(fields.at(1), '09171234567');
-      for (final entry in {
-        'Street / House No. (optional)': '123 Service Lane',
-        'Barangay': 'Bulihan',
-        'City / Municipality': 'Malolos',
-        'Province': 'Bulacan',
-        'worker-Password': 'password',
-        'worker-Confirm Password': 'password',
-      }.entries) {
-        final field = find.byKey(ValueKey(entry.key));
-        await tester.ensureVisible(field);
-        await tester.enterText(field, entry.value);
-        await tester.pumpAndSettle();
-      }
-      await tester.ensureVisible(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      await tester.tap(find.byType(CheckboxListTile));
-      await tester.pumpAndSettle();
-      expect(
-        tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value,
-        isTrue,
-      );
-      expect(tester.state<FormState>(find.byType(Form)).validate(), isTrue);
-      await _tapNext(tester);
+    // Next is refused until the SMS code is confirmed.
+    await _tapNext(tester);
+    expect(find.text('Enter code'), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('phone-otp-input')),
+      '123456',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Phone verified'), findsOneWidget);
 
-      expect(find.text('Service Categories'), findsOneWidget);
-      expect(find.text('Weekly Availability'), findsNothing);
-      expect(find.text('Choose your services'), findsOneWidget);
-      await tester.tap(
-        find.byKey(const ValueKey('worker-category-Academic Help')),
-      );
-      final repairs = find.byKey(const ValueKey('worker-category-Repairs'));
-      await tester.ensureVisible(repairs);
-      await tester.tap(repairs);
-      final other = find.byKey(const ValueKey('worker-category-Other'));
-      await tester.ensureVisible(other);
-      await tester.tap(other);
-      await _tapNext(tester);
-      expect(find.text('Service Categories'), findsOneWidget);
-      expect(find.text('Please specify your service.'), findsWidgets);
-      final customService = find.byKey(const ValueKey('worker-custom-service'));
-      await tester.ensureVisible(customService);
-      await tester.enterText(customService, 'Pet grooming');
-      await _tapNext(tester);
-      expect(find.text('Enter code'), findsOneWidget);
-
-      await _tapNext(tester);
-      expect(find.text('Government ID'), findsOneWidget);
-      await _tapNext(tester);
-      expect(find.text('Face Recognition'), findsOneWidget);
-      await _tapNext(tester);
-      expect(find.text('Verification in Progress'), findsOneWidget);
-      expect(find.text('Identity Check'), findsOneWidget);
-      expect(find.text('Certificates'), findsOneWidget);
-    },
-  );
+    await _tapNext(tester);
+    expect(find.text('Government ID'), findsOneWidget);
+    await _tapNext(tester);
+    expect(find.text('Face Recognition'), findsOneWidget);
+    await _tapNext(tester);
+    expect(find.text('Verification in Progress'), findsOneWidget);
+    expect(find.text('Identity Check'), findsOneWidget);
+    expect(find.text('Certificates'), findsOneWidget);
+  });
 
   testWidgets('worker registration applies the readable dark palette', (
     tester,

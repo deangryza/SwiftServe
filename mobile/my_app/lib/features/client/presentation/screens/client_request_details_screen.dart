@@ -50,13 +50,7 @@ class _ClientRequestDetailsScreenState
     if (!confirmed || _saving) return;
     setState(() => _saving = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('service_requests')
-          .doc(_request.id)
-          .update({
-            'status': 'cancelled',
-            'cancelledAt': FieldValue.serverTimestamp(),
-          });
+      await ServiceRequestRepository().cancel(request: _request);
       if (mounted) Navigator.pop(context);
     } finally {
       if (mounted) setState(() => _saving = false);

@@ -4,7 +4,7 @@ import 'post_request_screen.dart';
 import 'client_sections.dart';
 import 'client_search_screen.dart';
 import 'client_notifications_screen.dart';
-import 'client_dashboard_view.dart';
+import 'client_tab_shell.dart';
 
 class ClientHomeScreen extends StatelessWidget {
   const ClientHomeScreen({super.key, this.profile});
@@ -12,7 +12,7 @@ class ClientHomeScreen extends StatelessWidget {
   final AppUser? profile;
 
   @override
-  Widget build(BuildContext context) => ClientDashboardView(profile: profile);
+  Widget build(BuildContext context) => ClientTabShell(profile: profile);
 
   Widget legacyBuild(BuildContext context) {
     final colors = Theme.of(context).colorScheme;

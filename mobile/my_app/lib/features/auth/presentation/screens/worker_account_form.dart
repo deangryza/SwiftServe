@@ -7,6 +7,7 @@ import '../../../../shared/models/worker_service_selection.dart';
 import '../widgets/worker_service_selector.dart';
 
 import '../widgets/phone_number_field.dart';
+import '../widgets/phone_otp_verifier.dart';
 import '../widgets/registration_contact_fields.dart';
 import '../widgets/registration_validation_theme.dart';
 import '../widgets/registration_address_fields.dart';
@@ -60,6 +61,10 @@ class WorkerAccountForm extends StatefulWidget {
     this.onExit,
     this.contactAvailability,
     this.services,
+    this.verifiedPhoneNumber,
+    this.onPhoneVerified,
+    this.otpSender,
+    this.otpVerifier,
   });
 
   final GlobalKey<FormState> formKey;
@@ -83,6 +88,15 @@ class WorkerAccountForm extends StatefulWidget {
   final VoidCallback? onExit;
   final ContactAvailabilityLookup? contactAvailability;
   final WorkerServiceSelection? services;
+
+  /// The number the screen already holds a verification token for.
+  final String? verifiedPhoneNumber;
+
+  /// Receives the SMS verification token. When null, the code page is not
+  /// enforced (used by older callers and tests).
+  final void Function(String phoneNumber, String token)? onPhoneVerified;
+  final SendPhoneOtp? otpSender;
+  final VerifyPhoneOtp? otpVerifier;
 
   @override
   State<WorkerAccountForm> createState() => _WorkerAccountFormState();
@@ -189,6 +203,13 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
           }
           return;
         }
+      } else if (_page == 3 && !_phoneVerified) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Enter the code we sent to your phone to continue.'),
+          ),
+        );
+        return;
       }
 
       if (_page == 6) {
@@ -570,46 +591,31 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
     ],
   );
 
-  Widget _otpPage() => Column(
-    crossAxisAlignment: CrossAxisAlignment.stretch,
-    children: [
-      Text(
-        'Enter code',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: _text,
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-        ),
+  String get _phoneNumber =>
+      normalizePhoneNumber(widget.countryCode, widget.phone.text);
+
+  bool get _phoneVerified =>
+      widget.onPhoneVerified == null ||
+      widget.verifiedPhoneNumber == _phoneNumber;
+
+  Widget _otpPage() {
+    final phone = _phoneNumber;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 80),
+      child: PhoneOtpVerifier(
+        key: ValueKey('worker-otp-$phone'),
+        phoneNumber: phone,
+        alreadyVerified: widget.verifiedPhoneNumber == phone,
+        onVerified: (token) => widget.onPhoneVerified?.call(phone, token),
+        sendCode: widget.otpSender,
+        verifyCode: widget.otpVerifier,
+        textColor: _text,
+        mutedColor: _muted,
+        fieldColor: _field,
+        borderColor: _border,
       ),
-      const SizedBox(height: 8),
-      Text(
-        'Your code was sent to ${normalizePhoneNumber(widget.countryCode, widget.phone.text)}',
-        textAlign: TextAlign.center,
-        style: TextStyle(color: _muted),
-      ),
-      const SizedBox(height: 24),
-      Row(
-        children: List.generate(
-          6,
-          (_) => Expanded(
-            child: Container(
-              height: 58,
-              margin: const EdgeInsets.symmetric(horizontal: 3),
-              decoration: BoxDecoration(
-                color: _field,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: _border),
-              ),
-            ),
-          ),
-        ),
-      ),
-      const SizedBox(height: 14),
-      Text("Didn't get code?", style: TextStyle(color: _muted)),
-      const SizedBox(height: 120),
-    ],
-  );
+    );
+  }
 
   Widget _idPage() => Container(
     padding: const EdgeInsets.all(14),

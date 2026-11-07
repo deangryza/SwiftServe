@@ -12,6 +12,7 @@ class ProfileDraft {
     this.category = '',
     this.skills = const [],
     this.photoBase64 = '',
+    this.phoneVerificationToken,
   });
 
   final String fullName;
@@ -23,6 +24,21 @@ class ProfileDraft {
   final List<String> skills;
   final String photoBase64;
 
+  /// Proof from the SMS code step that [phoneNumber] belongs to the user.
+  final String? phoneVerificationToken;
+
+  ProfileDraft withPhoneVerificationToken(String? token) => ProfileDraft(
+    fullName: fullName,
+    email: email,
+    phoneNumber: phoneNumber,
+    address: address,
+    role: role,
+    category: category,
+    skills: skills,
+    photoBase64: photoBase64,
+    phoneVerificationToken: token,
+  );
+
   Map<String, dynamic> toJson() => {
     'fullName': fullName,
     'email': email,
@@ -32,6 +48,7 @@ class ProfileDraft {
     'category': category,
     'skills': skills,
     'photoBase64': photoBase64,
+    'phoneVerificationToken': ?phoneVerificationToken,
   };
 
   factory ProfileDraft.fromJson(Map<String, dynamic> json) => ProfileDraft(
@@ -43,6 +60,7 @@ class ProfileDraft {
     category: (json['category'] ?? '').toString(),
     skills: List<String>.from(json['skills'] ?? const []),
     photoBase64: (json['photoBase64'] ?? '').toString(),
+    phoneVerificationToken: json['phoneVerificationToken'] as String?,
   );
 }
 

@@ -52,6 +52,11 @@ void main() {
         'workerApplication': NotificationAudience.client,
         'requestAccepted': NotificationAudience.client,
         'applicationAccepted': NotificationAudience.worker,
+        'jobStarted': NotificationAudience.client,
+        'jobCompleted': NotificationAudience.client,
+        'errandStageUpdated': NotificationAudience.client,
+        'applicationRejected': NotificationAudience.worker,
+        'bookingCancelled': NotificationAudience.worker,
       }.entries) {
         final data = {'recipientId': 'me', 'type': entry.key, 'read': false};
         expect(notificationAudience(data, 'me'), entry.value);

@@ -508,6 +508,18 @@ class ServiceRequestRepository {
         'createdAt': FieldValue.serverTimestamp(),
       });
     });
+
+    await _notifyRejectedApplicants(
+      request: request,
+      workerIds: applicationSnapshot.docs
+          .where(
+            (document) =>
+                document.id != application.workerId &&
+                document.data()['status'] ==
+                    ServiceApplicationStatus.pending.name,
+          )
+          .map((document) => document.id),
+    );
   }
 
   Future<void> accept({
@@ -563,6 +575,52 @@ class ServiceRequestRepository {
     });
   }
 
+  /// Writes one in-app notification. Best effort: the job action has already
+  /// been saved, so a failed notification must never undo or fail it.
+  Future<void> _notify({
+    required String recipientId,
+    required String senderId,
+    required String requestId,
+    required String type,
+    required String title,
+    required String body,
+  }) async {
+    if (recipientId.isEmpty || recipientId == senderId) return;
+    try {
+      await _firestore
+          .collection('notifications')
+          .doc()
+          .set(
+            _notificationData(
+              recipientId: recipientId,
+              senderId: senderId,
+              requestId: requestId,
+              type: type,
+              title: title,
+              body: body,
+            ),
+          );
+    } catch (_) {}
+  }
+
+  Map<String, dynamic> _notificationData({
+    required String recipientId,
+    required String senderId,
+    required String requestId,
+    required String type,
+    required String title,
+    required String body,
+  }) => {
+    'recipientId': recipientId,
+    'senderId': senderId,
+    'requestId': requestId,
+    'type': type,
+    'title': title,
+    'body': body,
+    'read': false,
+    'createdAt': FieldValue.serverTimestamp(),
+  };
+
   Future<void> transition({
     required String requestId,
     required ServiceRequestStatus from,
@@ -570,7 +628,7 @@ class ServiceRequestRepository {
     required String workerId,
   }) async {
     final reference = _firestore.collection('service_requests').doc(requestId);
-    await _firestore.runTransaction((transaction) async {
+    final data = await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(reference);
       final data = snapshot.data();
       if (data == null ||
@@ -586,7 +644,85 @@ class ServiceRequestRepository {
             to == ServiceRequestStatus.ongoing)
           'errandStage': ErrandStage.headingToPickup.name,
       });
+      return data;
     });
+
+    final isErrand = data['modality'] == JobModality.errand.name;
+    final title = (data['title'] ?? 'your job').toString();
+    final workerName = (data['workerName'] ?? 'Your worker').toString();
+    final (type, heading, body) = switch (to) {
+      ServiceRequestStatus.ongoing => (
+        'jobStarted',
+        isErrand ? 'Errand started' : 'Job started',
+        isErrand
+            ? '$workerName is heading to the pickup for $title.'
+            : '$workerName started $title.',
+      ),
+      ServiceRequestStatus.completed => (
+        'jobCompleted',
+        isErrand ? 'Errand delivered' : 'Job completed',
+        isErrand
+            ? '$workerName delivered $title.'
+            : '$workerName marked $title as complete.',
+      ),
+      _ => (null, '', ''),
+    };
+    if (type == null) return;
+    await _notify(
+      recipientId: (data['clientId'] ?? '').toString(),
+      senderId: workerId,
+      requestId: requestId,
+      type: type,
+      title: heading,
+      body: body,
+    );
+  }
+
+  /// Cancels a client's booking and lets the assigned worker know.
+  Future<void> cancel({required ServiceRequest request}) async {
+    await _firestore.collection('service_requests').doc(request.id).update({
+      'status': ServiceRequestStatus.cancelled.name,
+      'cancelledAt': FieldValue.serverTimestamp(),
+    });
+    final workerId = request.workerId;
+    if (workerId == null || workerId.isEmpty) return;
+    await _notify(
+      recipientId: workerId,
+      senderId: request.clientId,
+      requestId: request.id,
+      type: 'bookingCancelled',
+      title: 'Booking cancelled',
+      body: '${request.clientName} cancelled ${request.title}.',
+    );
+  }
+
+  /// Tells applicants who were not chosen. Small batches keep each write
+  /// within the security rules' per-request document-read limit.
+  Future<void> _notifyRejectedApplicants({
+    required ServiceRequest request,
+    required Iterable<String> workerIds,
+  }) async {
+    final recipients = workerIds.toList();
+    for (var start = 0; start < recipients.length; start += 5) {
+      final batch = _firestore.batch();
+      for (final workerId in recipients.skip(start).take(5)) {
+        batch.set(
+          _firestore.collection('notifications').doc(),
+          _notificationData(
+            recipientId: workerId,
+            senderId: request.clientId,
+            requestId: request.id,
+            type: 'applicationRejected',
+            title: 'Application not selected',
+            body:
+                '${request.clientName} chose another worker for ${request.title}.',
+          ),
+        );
+      }
+      try {
+        await batch.commit();
+      } catch (_) {}
+    }
   }
 
   /// Moves an ongoing errand one stage forward.
@@ -600,7 +736,7 @@ class ServiceRequestRepository {
       throw StateError('Mark the errand as delivered instead.');
     }
     final reference = _firestore.collection('service_requests').doc(requestId);
-    await _firestore.runTransaction((transaction) async {
+    final data = await _firestore.runTransaction((transaction) async {
       final snapshot = await transaction.get(reference);
       final data = snapshot.data();
       if (data == null ||
@@ -613,7 +749,16 @@ class ServiceRequestRepository {
         'errandStage': to.name,
         '${to.name}At': FieldValue.serverTimestamp(),
       });
+      return data;
     });
+    await _notify(
+      recipientId: (data['clientId'] ?? '').toString(),
+      senderId: workerId,
+      requestId: requestId,
+      type: 'errandStageUpdated',
+      title: 'Errand update',
+      body: '${data['title'] ?? 'Your errand'}: ${to.label}.',
+    );
   }
 
   DocumentReference<Map<String, dynamic>> _riderLocationRef(String requestId) =>

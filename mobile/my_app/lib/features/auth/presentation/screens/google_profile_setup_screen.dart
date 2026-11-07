@@ -12,6 +12,7 @@ import '../../../../shared/services/profile_draft_store.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
 import '../../../../shared/models/worker_service_selection.dart';
 import '../widgets/phone_number_field.dart';
+import '../widgets/phone_otp_verifier.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
 
@@ -38,6 +39,13 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   bool _saving = false;
   bool _accepted = false;
   Uint8List? _profileImageBytes;
+  String? _verifiedPhone;
+  String? _phoneToken;
+
+  void _phoneVerified(String phone, String token) => setState(() {
+    _verifiedPhone = phone;
+    _phoneToken = token;
+  });
 
   @override
   void initState() {
@@ -131,6 +139,12 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    final phone = normalizePhoneNumber(_countryCode, _phone.text);
+    if (_verifiedPhone != phone || _phoneToken == null) {
+      final token = await PhoneOtpScreen.verify(context, phone);
+      if (token == null || !mounted) return;
+      _phoneVerified(phone, token);
+    }
     setState(() => _saving = true);
     final category = _role == 'worker' ? _category.text.trim() : '';
     final draft = ProfileDraft(
@@ -144,6 +158,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
       photoBase64: _profileImageBytes == null
           ? ''
           : base64Encode(_profileImageBytes!),
+      phoneVerificationToken: _phoneToken,
     );
     try {
       await ProfileDraftStore().save(draft);
@@ -158,6 +173,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
         category: draft.category,
         skills: draft.skills,
         photoBase64: draft.photoBase64,
+        phoneVerificationToken: draft.phoneVerificationToken,
       );
       await user.updateDisplayName(draft.fullName);
       await ProfileDraftStore().clear();
@@ -231,6 +247,8 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             federatedAccount: true,
             onChangeRole: _chooseRole,
             onExit: _signOut,
+            verifiedPhoneNumber: _verifiedPhone,
+            onPhoneVerified: _phoneVerified,
           )
         : WorkerAccountForm(
             contactAvailability: _contactAvailability,
@@ -255,6 +273,8 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             federatedAccount: true,
             onChangeRole: _chooseRole,
             onExit: _signOut,
+            verifiedPhoneNumber: _verifiedPhone,
+            onPhoneVerified: _phoneVerified,
           );
     return ClientThemeScope(child: form);
   }

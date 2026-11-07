@@ -5,6 +5,7 @@ import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/api_service.dart';
 import '../../../../shared/services/profile_draft_store.dart';
+import '../widgets/phone_otp_verifier.dart';
 
 class ProfileCompletionScreen extends StatefulWidget {
   const ProfileCompletionScreen({super.key});
@@ -36,8 +37,12 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
 
   Future<void> _retry() async {
     final user = FirebaseAuth.instance.currentUser;
-    final draft = _draft;
+    var draft = _draft;
     if (user == null || draft == null) return;
+    if (draft.phoneVerificationToken == null) {
+      draft = await _reverifyPhone(draft);
+      if (draft == null) return;
+    }
     setState(() {
       _loading = true;
       _error = null;
@@ -54,12 +59,19 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         category: draft.category,
         skills: draft.skills,
         photoBase64: draft.photoBase64,
+        phoneVerificationToken: draft.phoneVerificationToken,
       );
       await ProfileDraftStore().clear();
       if (mounted) {
         Navigator.of(context).popUntil((route) => route.isFirst);
       }
     } on ApiException catch (error) {
+      if (error.code == 'PHONE_VERIFICATION_REQUIRED') {
+        // The saved verification expired; verify again on the next retry.
+        final cleared = draft.withPhoneVerificationToken(null);
+        await ProfileDraftStore().save(cleared);
+        _draft = cleared;
+      }
       if (mounted) setState(() => _error = error.message);
     } on ApiConnectionException catch (error) {
       if (mounted) setState(() => _error = error.message);
@@ -73,6 +85,15 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<ProfileDraft?> _reverifyPhone(ProfileDraft draft) async {
+    final token = await PhoneOtpScreen.verify(context, draft.phoneNumber);
+    if (token == null || !mounted) return null;
+    final updated = draft.withPhoneVerificationToken(token);
+    await ProfileDraftStore().save(updated);
+    _draft = updated;
+    return updated;
   }
 
   Future<void> _signOut() async {

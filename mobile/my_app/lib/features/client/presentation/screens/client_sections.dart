@@ -153,6 +153,28 @@ class ClientMessagesScreen extends StatelessWidget {
     if (uid == null) {
       return const Scaffold(body: Center(child: Text('Please log in again.')));
     }
+    final inShell = ClientTabShellScope.maybeOf(context) != null;
+    final inbox = ConversationInboxScreen(
+      userId: uid,
+      role: UserRole.client,
+      counterpartIdField: 'workerId',
+      counterpartNameField: 'workerName',
+      bottomNavigationBar: inShell
+          ? null
+          : _ClientMessagesBottomNav(userId: uid),
+      onOpenConversation: (conversationId, name) {
+        Navigator.push(
+          context,
+          clientPageRoute(
+            ClientChatScreen(
+              conversationId: conversationId,
+              otherPersonName: name,
+            ),
+          ),
+        );
+      },
+    );
+    if (inShell) return inbox;
     return ClientTabSwipeRegion(
       currentIndex: 2,
       onSwipeToIndex: (index) {
@@ -164,24 +186,7 @@ class ClientMessagesScreen extends StatelessWidget {
           clientTabPageRoute(screen, fromIndex: 2, toIndex: index),
         );
       },
-      child: ConversationInboxScreen(
-        userId: uid,
-        role: UserRole.client,
-        counterpartIdField: 'workerId',
-        counterpartNameField: 'workerName',
-        bottomNavigationBar: _ClientMessagesBottomNav(userId: uid),
-        onOpenConversation: (conversationId, name) {
-          Navigator.push(
-            context,
-            clientPageRoute(
-              ClientChatScreen(
-                conversationId: conversationId,
-                otherPersonName: name,
-              ),
-            ),
-          );
-        },
-      ),
+      child: inbox,
     );
   }
 }

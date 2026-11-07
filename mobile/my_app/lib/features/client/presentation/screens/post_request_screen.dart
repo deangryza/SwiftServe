@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'client_request_details_screen.dart';
 import '../../../../shared/theme/app_theme.dart';
 
+import '../../../../shared/models/app_user.dart';
 import '../../../../shared/models/job_location.dart';
 import '../../../../shared/models/service_request.dart';
 import '../../../../shared/repositories/service_request_repository.dart';
@@ -56,10 +60,15 @@ class PostRequestScreen extends StatefulWidget {
     this.categoryNames,
     this.existing,
     this.repostOf,
+    this.accountVerification,
   }) : assert(existing == null || repostOf == null);
 
   final String? initialCategory;
   final Stream<List<String>>? categoryNames;
+
+  /// The signed-in account's verification status. Defaults to the live
+  /// `users/{uid}` document; tests can inject a stream instead.
+  final Stream<VerificationStatus>? accountVerification;
 
   /// The open post being edited. Leave null to post a new job.
   final ServiceRequest? existing;
@@ -90,6 +99,19 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   _GpsAddress? _gpsAddress;
   bool _isPosting = false;
   bool _loadingLocation = false;
+
+  /// Null until the account's status has loaded (or when it can't be read).
+  VerificationStatus? _verification;
+  StreamSubscription<VerificationStatus>? _verificationSubscription;
+
+  /// New and reposted jobs need a verified account; editing does not.
+  bool get _postingBlocked =>
+      !_isEditing &&
+      _verification != null &&
+      _verification != VerificationStatus.verified;
+
+  static const _verificationRequiredMessage =
+      'Your account must be verified before you can post a job.';
 
   bool get _isEditing => widget.existing != null;
   bool get _isReposting => widget.repostOf != null;
@@ -143,6 +165,12 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
   @override
   void initState() {
     super.initState();
+    _verificationSubscription =
+        (widget.accountVerification ?? _liveAccountVerification())?.listen((
+          status,
+        ) {
+          if (mounted) setState(() => _verification = status);
+        }, onError: (_) {});
     final existing = widget.existing ?? widget.repostOf;
     if (existing != null) {
       _prefill(existing);
@@ -150,6 +178,20 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
     }
     _selectedCategory = widget.initialCategory?.trim();
     if (isErrandCategory(_selectedCategory)) _modality = JobModality.errand;
+  }
+
+  static Stream<VerificationStatus>? _liveAccountVerification() {
+    if (Firebase.apps.isEmpty) return null;
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .snapshots()
+        .map(
+          (doc) =>
+              VerificationStatus.fromWire(doc.data()?['verificationStatus']),
+        );
   }
 
   void _prefill(ServiceRequest request) {
@@ -208,6 +250,7 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
 
   @override
   void dispose() {
+    _verificationSubscription?.cancel();
     _titleController.dispose();
     _budgetController.dispose();
     _descriptionController.dispose();
@@ -420,6 +463,18 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
           .collection('users')
           .doc(user.uid)
           .get();
+      if (profile.data()?['verificationStatus'] != 'verified') {
+        if (!mounted) return;
+        setState(
+          () => _verification = VerificationStatus.fromWire(
+            profile.data()?['verificationStatus'],
+          ),
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text(_verificationRequiredMessage)),
+        );
+        return;
+      }
       final fullName = profile.data()?['fullName'];
       final clientName = fullName is String && fullName.trim().isNotEmpty
           ? fullName.trim()
@@ -458,9 +513,17 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
       }
     } catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Could not post job: $error')));
+      final denied =
+          error is FirebaseException && error.code == 'permission-denied';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            denied
+                ? _verificationRequiredMessage
+                : 'Could not post job: $error',
+          ),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _isPosting = false);
     }
@@ -624,6 +687,37 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (_postingBlocked)
+                      Container(
+                        key: const ValueKey('post-job-verification-required'),
+                        margin: const EdgeInsets.only(bottom: 20),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppTheme.softYellow,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _yellow),
+                        ),
+                        child: const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.verified_user_outlined,
+                              color: _ink,
+                              size: 20,
+                            ),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                _verificationRequiredMessage,
+                                style: TextStyle(
+                                  color: _ink,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     if (_isReposting)
                       const Padding(
                         padding: EdgeInsets.only(bottom: 20),
@@ -1089,7 +1183,9 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
                       height: 54,
                       child: FilledButton(
                         key: const ValueKey('post-job-submit'),
-                        onPressed: _isPosting ? null : _postJob,
+                        onPressed: _isPosting || _postingBlocked
+                            ? null
+                            : _postJob,
                         style: FilledButton.styleFrom(
                           backgroundColor: _yellow,
                           foregroundColor: _ink,

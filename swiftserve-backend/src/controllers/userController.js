@@ -3,6 +3,7 @@ const crypto = require('node:crypto');
 const { db } = require('../config/firebase');
 const { normalizeProfilePhoto } = require('../services/profilePhotoService');
 const { publicProfileLocation } = require('../services/publicProfileLocation');
+const { isPhilippineMobile, readPhoneToken } = require('../services/otpService');
 
 const normalizePhoneNumber = (value) => {
   const phoneNumber = String(value || '').replace(/[\s()-]/g, '');
@@ -54,6 +55,21 @@ const createUserProfile = async (req, res) => {
         message: 'A valid international phone number is required.',
       });
     }
+    const otpRequired = process.env.PHONE_OTP_REQUIRED !== 'false';
+    if (otpRequired) {
+      if (!isPhilippineMobile(normalizedPhoneNumber)) {
+        return res.status(400).json({
+          code: 'INVALID_PHONE_NUMBER',
+          message: 'Enter a valid Philippine mobile number (+63 9XX XXX XXXX).',
+        });
+      }
+      if (readPhoneToken(req.body.phoneVerificationToken) !== normalizedPhoneNumber) {
+        return res.status(400).json({
+          code: 'PHONE_VERIFICATION_REQUIRED',
+          message: 'Verify your phone number with the SMS code first.',
+        });
+      }
+    }
 
     const userRef = db.collection('users').doc(uid);
     const publicProfileRef = db.collection('public_profiles').doc(uid);
@@ -82,6 +98,7 @@ const createUserProfile = async (req, res) => {
       fullName,
       email,
       phoneNumber: normalizedPhoneNumber,
+      ...(otpRequired ? { phoneVerified: true, phoneVerifiedAt: new Date() } : {}),
       address: address || '',
       role,
       roles: [role],

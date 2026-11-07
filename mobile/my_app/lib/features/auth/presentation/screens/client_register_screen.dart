@@ -15,16 +15,26 @@ import 'profile_completion_screen.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
 import '../widgets/phone_number_field.dart';
+import '../widgets/phone_otp_verifier.dart';
 import '../widgets/registration_contact_fields.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
-  const ClientRegisterScreen({super.key, this.contactAvailability});
+  const ClientRegisterScreen({
+    super.key,
+    this.contactAvailability,
+    this.otpSender,
+    this.otpVerifier,
+  });
   final ContactAvailabilityLookup? contactAvailability;
+  final SendPhoneOtp? otpSender;
+  final VerifyPhoneOtp? otpVerifier;
 
   @override
   Widget build(BuildContext context) => AccountRegistrationScreen(
     role: 'client',
     contactAvailability: contactAvailability,
+    otpSender: otpSender,
+    otpVerifier: otpVerifier,
   );
 }
 
@@ -33,10 +43,16 @@ class AccountRegistrationScreen extends StatefulWidget {
     super.key,
     required this.role,
     this.contactAvailability,
+    this.otpSender,
+    this.otpVerifier,
   });
 
   final String role;
   final ContactAvailabilityLookup? contactAvailability;
+
+  /// Test hooks; default to the SwiftServe backend.
+  final SendPhoneOtp? otpSender;
+  final VerifyPhoneOtp? otpVerifier;
 
   @override
   State<AccountRegistrationScreen> createState() =>
@@ -57,6 +73,13 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   bool _loading = false;
   String _countryCode = '+63';
   Uint8List? _profileImageBytes;
+  String? _verifiedPhone;
+  String? _phoneToken;
+
+  void _phoneVerified(String phone, String token) => setState(() {
+    _verifiedPhone = phone;
+    _phoneToken = token;
+  });
 
   Future<void> _register() async {
     if (widget.role == 'worker' && _services.validationError != null) {
@@ -75,6 +98,13 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       }
       return;
     }
+    final phone = normalizePhoneNumber(_countryCode, _phone.text);
+    if (_verifiedPhone != phone || _phoneToken == null) {
+      // The code page normally does this; this covers a changed number.
+      final token = await PhoneOtpScreen.verify(context, phone);
+      if (token == null || !mounted) return;
+      _phoneVerified(phone, token);
+    }
     setState(() => _loading = true);
     final draft = ProfileDraft(
       fullName: _name.text.trim(),
@@ -91,6 +121,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           : _category.text.trim().isEmpty
           ? const []
           : [_category.text.trim()],
+      phoneVerificationToken: _phoneToken,
     );
     try {
       await ApiService().checkReachable();
@@ -122,6 +153,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         category: draft.category,
         skills: draft.skills,
         photoBase64: draft.photoBase64,
+        phoneVerificationToken: draft.phoneVerificationToken,
       );
       await ProfileDraftStore().clear();
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
@@ -237,6 +269,10 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           onRegister: _register,
           countryCode: _countryCode,
           onCountryCodeChanged: (value) => setState(() => _countryCode = value),
+          verifiedPhoneNumber: _verifiedPhone,
+          onPhoneVerified: _phoneVerified,
+          otpSender: widget.otpSender,
+          otpVerifier: widget.otpVerifier,
         ),
       );
     }
@@ -261,6 +297,10 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           onRegister: _register,
           countryCode: _countryCode,
           onCountryCodeChanged: (value) => setState(() => _countryCode = value),
+          verifiedPhoneNumber: _verifiedPhone,
+          onPhoneVerified: _phoneVerified,
+          otpSender: widget.otpSender,
+          otpVerifier: widget.otpVerifier,
         ),
       );
     }
@@ -514,7 +554,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     const SizedBox(height: 16),
                     _RegistrationField(
                       label: 'Password',
-                      hintText: '••••••••',
+                      hintText: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
                       controller: _password,
                       obscureText: true,
                       validator: (value) => (value?.length ?? 0) < 6
@@ -526,7 +566,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     const SizedBox(height: 16),
                     _RegistrationField(
                       label: 'Confirm Password',
-                      hintText: '••••••••',
+                      hintText: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
                       controller: _confirmPassword,
                       obscureText: true,
                       validator: (value) => value != _password.text

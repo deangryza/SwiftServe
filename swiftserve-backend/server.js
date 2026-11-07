@@ -13,6 +13,15 @@ const start = async () => {
   const server = app.listen(PORT, () => {
     console.log(`SwiftServe backend listening on port ${PORT}`);
   });
+  // Phone push for job updates and chats. Set PUSH_DISPATCH_ENABLED=false to
+  // turn it off (for example on extra API instances).
+  if (process.env.PUSH_DISPATCH_ENABLED !== 'false') {
+    const { getMessaging } = require('firebase-admin/messaging');
+    const { db } = require('./src/config/firebase');
+    const { startPushDispatcher } = require('./src/services/pushService');
+    startPushDispatcher({ db, messaging: getMessaging() });
+    console.log('Push dispatcher started.');
+  }
   return server;
 };
 

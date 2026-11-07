@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -11,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'activity_push_router.dart';
+import 'api_service.dart';
 import '../widgets/push_permission_explanation.dart';
 import '../repositories/profile_repository.dart';
 import '../models/service_request.dart';
@@ -40,13 +39,14 @@ Future<void> expiryBackgroundMessage(RemoteMessage message) async {
   }
 }
 
-/// No FCM, token registration, permission prompt or callable request when disabled.
+/// No FCM, token registration or permission prompt when disabled.
 class ExpiryPushService with WidgetsBindingObserver {
   ExpiryPushService._();
   static final instance = ExpiryPushService._();
-  static const enabled =
-      bool.fromEnvironment('ENABLE_PUSH_NOTIFICATIONS') ||
-      bool.fromEnvironment('ENABLE_EXPIRY_PUSH');
+
+  /// On by default. Build with `--dart-define=DISABLE_PUSH_NOTIFICATIONS=true`
+  /// to turn phone push off.
+  static const enabled = !bool.fromEnvironment('DISABLE_PUSH_NOTIFICATIONS');
   static final navigatorKey = GlobalKey<NavigatorState>();
   String? _readyUid;
   String? _token;
@@ -257,13 +257,6 @@ class ExpiryPushService with WidgetsBindingObserver {
     },
   );
 
-  FirebaseFunctions get _functions => FirebaseFunctions.instanceFor(
-    region: const String.fromEnvironment(
-      'EXPIRY_FUNCTIONS_REGION',
-      defaultValue: 'us-central1',
-    ),
-  );
-
   Future<void> initialize() async {
     if (Firebase.app().options.projectId.startsWith('demo-')) return;
     if (!enabled ||
@@ -274,23 +267,10 @@ class ExpiryPushService with WidgetsBindingObserver {
         ].contains(defaultTargetPlatform)) {
       return;
     }
-    try {
-      await FirebaseAppCheck.instance.activate(
-        providerAndroid:
-            kDebugMode && const bool.fromEnvironment('PUSH_APP_CHECK_DEBUG')
-            ? const AndroidDebugProvider()
-            : const AndroidPlayIntegrityProvider(),
-        providerApple:
-            kDebugMode && const bool.fromEnvironment('PUSH_APP_CHECK_DEBUG')
-            ? const AppleDebugProvider()
-            : const AppleAppAttestWithDeviceCheckFallbackProvider(),
-      );
-      // Auto-init remains off until the user gives informed consent.
-      _initialized = true;
-      WidgetsBinding.instance.addObserver(this);
-    } catch (_) {
-      return;
-    }
+    // Registration goes to the SwiftServe backend, which verifies the user's
+    // Firebase ID token. Auto-init remains off until the user consents.
+    _initialized = true;
+    WidgetsBinding.instance.addObserver(this);
     FirebaseMessaging.onBackgroundMessage(expiryBackgroundMessage);
     FirebaseAuth.instance.authStateChanges().listen((user) {
       if (_readyUid != null && user?.uid != _readyUid) {
@@ -454,15 +434,20 @@ class ExpiryPushService with WidgetsBindingObserver {
           FirebaseAuth.instance.currentUser?.uid != uid) {
         return;
       }
-      await _functions.httpsCallable('registerPushDevice').call({
-        ...choices,
-        'enabled': !forceDisabled && permitted && choices['enabled'] == true,
-        'installationId': _installation,
-        'token': token,
-        'platform': defaultTargetPlatform == TargetPlatform.iOS
-            ? 'ios'
-            : 'android',
-      });
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (idToken == null) return;
+      await ApiService().registerPushDevice(
+        idToken: idToken,
+        device: {
+          ...choices,
+          'enabled': !forceDisabled && permitted && choices['enabled'] == true,
+          'installationId': _installation!,
+          'token': token,
+          'platform': defaultTargetPlatform == TargetPlatform.iOS
+              ? 'ios'
+              : 'android',
+        },
+      );
       if (_generation != generation) {
         await FirebaseMessaging.instance.deleteToken();
         return;
@@ -481,17 +466,13 @@ class ExpiryPushService with WidgetsBindingObserver {
     await _router.ready(null);
     await _activityRouter.ready(null);
     try {
-      if (_token != null && _installation != null) {
-        await _functions
-            .httpsCallable('registerPushDevice')
-            .call({
-              'installationId': _installation,
-              'token': _token,
-              'revoke': true,
-              'platform': defaultTargetPlatform == TargetPlatform.iOS
-                  ? 'ios'
-                  : 'android',
-            })
+      final idToken = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (_installation != null && idToken != null) {
+        await ApiService()
+            .registerPushDevice(
+              idToken: idToken,
+              device: {'installationId': _installation!, 'revoke': true},
+            )
             .timeout(const Duration(seconds: 5));
       }
     } catch (_) {
