@@ -69,5 +69,5 @@ bool serviceStartHasPassed(ServiceRequest request, {DateTime? now}) {
   if (start == null) return false;
   final wall = serviceWallTime(start);
   if (wall.hour == 0 && wall.minute == 0) return false;
-  return start.isBefore(now ?? DateTime.now());
+  return !start.isAfter(now ?? DateTime.now());
 }

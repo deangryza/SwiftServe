@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>SwiftServe uses the photo you choose to update your public profile picture.</string>
+	<string>SwiftServe accesses photos you select for your profile picture or identity verification.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>SwiftServe uses the camera to capture an ID and complete a live selfie check for worker verification.</string>
+	<string>SwiftServe uses the camera to capture an ID and complete a live selfie check for account verification.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>SwiftServe uses your location while the app is open to pin service jobs and show workers their approximate distance.</string>
 	<key>LSApplicationQueriesSchemes</key>

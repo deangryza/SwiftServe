@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { validateBirthday } = require('../services/registrationBirthday');
 
 const { db } = require('../config/firebase');
 const { normalizeProfilePhoto } = require('../services/profilePhotoService');
@@ -31,6 +32,7 @@ const createUserProfile = async (req, res) => {
     const uid = req.user.uid;
 
     const {
+      dateOfBirth,
       fullName,
       email,
       phoneNumber,
@@ -42,6 +44,11 @@ const createUserProfile = async (req, res) => {
       photoBase64,
     } = req.body;
 
+    const birthdayError = validateBirthday(dateOfBirth);
+    if (birthdayError) {
+      const { status, ...body } = birthdayError;
+      return res.status(status).json(body);
+    }
     const normalizedPhoneNumber = normalizePhoneNumber(phoneNumber);
 
     if (!fullName || !email || !['client', 'worker'].includes(role)) {
@@ -94,6 +101,7 @@ const createUserProfile = async (req, res) => {
     }
 
     const userData = {
+      dateOfBirth,
       uid,
       fullName,
       email,
@@ -171,7 +179,8 @@ const createUserProfile = async (req, res) => {
       user: userData,
     });
   } catch (error) {
-    console.error('Create user profile error:', error);
+    if (process.env.SWIFTSERVE_STAGING === 'true') require('../config/stagingFirebase').diagnostic('profile-firestore', error);
+    else console.error('Create user profile error:', error);
 
     return res.status(500).json({
       message: 'Failed to create user profile.',

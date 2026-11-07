@@ -19,6 +19,7 @@ import {
 import StatusBadge from '../../components/StatusBadge'
 import useAdminData from '../../lib/useAdminData'
 import DataState from '../../components/DataState'
+import { useAdminAccess } from '../../lib/AdminAccessContext'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -116,6 +117,7 @@ function AttentionQueue({ attentionItems }) {
 }
 
 export default function DashboardHome() {
+  const access = useAdminAccess()
   const navigate = useNavigate()
   const { data, loading, error } = useAdminData('overview', { users: [], bookings: [], reports: [], categories: [], verifications: [] })
   const { bookings, reports, verifications } = data
@@ -128,13 +130,13 @@ export default function DashboardHome() {
     { title: 'Active bookings', value: activeBookings, detail: 'Accepted or ongoing', progress: ratio(activeBookings, bookings.length), icon: CalendarClock, tone: 'primary' },
     { title: 'Pending verification', value: pending, detail: 'Needs review', progress: ratio(pending, verifications.length), icon: ShieldCheck, tone: 'warning' },
     { title: 'Open reports', value: openReports.length, detail: openReports.filter(item => item.priority === 'High').length + ' marked urgent', progress: ratio(openReports.length, reports.length), icon: FileWarning, tone: 'danger' },
-    { title: 'Verified workers', value: verified, detail: 'Completed verification', progress: ratio(verified, verifications.length), icon: UsersRound, tone: 'success' },
+    { title: 'Worker access recorded', value: verified, detail: 'Existing access status; not proof of PSA authentication', progress: ratio(verified, verifications.length), icon: UsersRound, tone: 'success' },
   ]
   const attentionItems = [
     { title: 'Worker verification', description: 'ID and face review', count: pending, route: '/dashboard/verification', tone: 'warning' },
     { title: 'Open complaints', description: 'Pending or under review', count: openReports.length, route: '/dashboard/reports', tone: 'danger' },
     { title: 'Pending bookings', description: 'Awaiting assignment or response', count: bookings.filter(item => item.status === 'Pending').length, route: '/dashboard/bookings', tone: 'primary' },
-  ]
+  ].filter(item => access.canOpen(item.route))
   const latestBookings = bookings.slice(0, 5).map(item => ({ ...item, client: item.clientName, worker: item.providerName }))
   const weeklyBookings = Array.from({ length: 7 }, (_, index) => {
     const date = new Date(); date.setDate(date.getDate() - 6 + index)
@@ -150,10 +152,10 @@ export default function DashboardHome() {
           <h1 className="mt-1 text-2xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-3xl">Dashboard</h1>
           <p className="mt-1 text-sm text-muted-foreground">{formattedDate} · Saved records ? refreshed every 30 seconds</p>
         </div>
-        <Button type="button" size="lg" className="h-10 self-start bg-primary-600 text-white hover:bg-primary-700" onClick={() => navigate('/dashboard/verification')}>
+        {access.canOpen('/dashboard/verification') && <Button type="button" size="lg" className="h-10 self-start bg-primary-600 text-primary-foreground hover:bg-primary-400" onClick={() => navigate('/dashboard/verification')}>
           Review {pending} workers
           <ArrowRight data-icon="inline-end" aria-hidden="true" />
-        </Button>
+        </Button>}
       </header>
 
       <section aria-label="Priority platform metrics" className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -167,7 +169,7 @@ export default function DashboardHome() {
               <CardTitle>Booking volume</CardTitle>
               <CardDescription>Bookings created during the last seven days</CardDescription>
             </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/dashboard/bookings')}>View bookings</Button>
+            {access.canOpen('/dashboard/bookings') && <Button type="button" variant="ghost" size="sm" onClick={() => navigate('/dashboard/bookings')}>View bookings</Button>}
           </CardHeader>
           <CardContent className="p-4 sm:p-5">
             <div className="h-[260px] w-full" role="img" aria-label={weeklyBookings.map(item => `${item.day}: ${item.bookings} bookings`).join(', ')}>
@@ -187,7 +189,7 @@ export default function DashboardHome() {
         <AttentionQueue attentionItems={attentionItems} />
       </section>
 
-      <Card className="gap-0 overflow-hidden py-0 shadow-card ring-1 ring-slate-200">
+      {access.canOpen('/dashboard/bookings') && <Card className="gap-0 overflow-hidden py-0 shadow-card ring-1 ring-slate-200">
         <CardHeader className="flex-row items-start justify-between border-b px-5 py-4">
           <div>
             <CardTitle>Latest bookings</CardTitle>
@@ -226,7 +228,7 @@ export default function DashboardHome() {
             ))}
           </TableBody>
         </Table>
-      </Card>
+      </Card>}
     </div>
   )
 }

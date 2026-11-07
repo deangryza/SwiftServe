@@ -21,6 +21,11 @@ const {
 } = require('../src/services/faceVerificationService');
 
 const THRESHOLDS = Object.freeze({ autoVerifyMin: 80, reviewMin: 60 });
+const descriptorAt = (x = 0, y = 0) => {
+  const descriptor = new Array(128).fill(0);
+  descriptor[0] = x; descriptor[1] = y; descriptor[127] = 1;
+  return descriptor;
+};
 
 let uploadsDir;
 let previousStorage;
@@ -38,7 +43,7 @@ afterEach(async () => {
   await fs.rm(uploadsDir, { recursive: true, force: true });
 });
 
-const fixtures = ({ secondUploadFails = false, prior } = {}) => {
+const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', transactionUserStatus } = {}) => {
   const writes = [];
   const attempts = [];
   const deleted = [];
@@ -67,7 +72,7 @@ const fixtures = ({ secondUploadFails = false, prior } = {}) => {
           if (name === 'users') {
             return {
               name,
-              get: async () => ({ exists: true, data: () => ({ role: 'worker', verificationStatus: 'pending' }) }),
+              get: async () => ({ exists: true, data: () => ({ role: 'worker', verificationStatus: userStatus }) }),
             };
           }
           if (name === 'worker_verifications') {
@@ -87,6 +92,12 @@ const fixtures = ({ secondUploadFails = false, prior } = {}) => {
         set(ref, value) { pending.push([ref.name, value]); },
         async commit() { writes.push(...pending); },
       };
+    },
+    async runTransaction(callback) {
+      if (transactionUserStatus) userStatus = transactionUserStatus;
+      const pending = [];
+      const value = await callback({ get: ref => ref.get(), set: (ref, data) => pending.push([ref.name, data]) });
+      writes.push(...pending); return value;
     },
   };
   return {
@@ -175,7 +186,7 @@ test('extracts one descriptor and rejects zero or multiple faces with image attr
 
   const expected = Float32Array.from([0.1, 0.2]);
   assert.equal(
-    await getFaceDescriptor(Buffer.from('image'), 'document', runtimeFor([{ descriptor: expected }])),
+    await getFaceDescriptor(Buffer.from('image'), 'document', runtimeFor([{ descriptor: expected }]), { quality: () => {} }),
     expected,
   );
 
@@ -193,7 +204,7 @@ test('extracts one descriptor and rejects zero or multiple faces with image attr
   );
 });
 
-test('maps descriptor distance onto the calibrated similarity anchors', () => {
+test('maps descriptor distance onto the configured similarity anchors (not empirical calibration)', () => {
   assert.equal(distanceToSimilarity(0), 100);
   assert.equal(distanceToSimilarity(0.3), 86.67);
   assert.equal(distanceToSimilarity(0.45), 80);
@@ -204,23 +215,24 @@ test('maps descriptor distance onto the calibrated similarity anchors', () => {
 });
 
 test('assigns strong, borderline, and mismatch bands from similarity', () => {
-  assert.deepEqual(compareDescriptors([0], [0.45], THRESHOLDS), {
+  assert.deepEqual(compareDescriptors(descriptorAt(), descriptorAt(0.45), THRESHOLDS), {
     match: true,
     band: 'strong',
     distance: 0.45,
     similarity: 80,
     confidence: 80,
   });
-  const borderline = compareDescriptors([0], [0.5], THRESHOLDS);
+  const borderline = compareDescriptors(descriptorAt(), descriptorAt(0.5), THRESHOLDS);
   assert.equal(borderline.band, 'borderline');
   assert.equal(borderline.match, true);
   assert.equal(borderline.similarity, 73.33);
-  assert.equal(compareDescriptors([0], [0.6], THRESHOLDS).band, 'borderline');
-  const mismatch = compareDescriptors([0], [0.7], THRESHOLDS);
+  assert.equal(compareDescriptors(descriptorAt(), descriptorAt(0.6), THRESHOLDS).band, 'borderline');
+  const mismatch = compareDescriptors(descriptorAt(), descriptorAt(0.7), THRESHOLDS);
   assert.equal(mismatch.band, 'mismatch');
   assert.equal(mismatch.match, false);
-  assert.throws(() => compareDescriptors([0], [0, 1]), /equal lengths/);
-  assert.throws(() => compareDescriptors([Number.NaN], [0]), /finite/);
+  assert.throws(() => compareDescriptors([0], [0, 1]), /exactly 128/);
+  const invalid = descriptorAt(); invalid[0] = Number.NaN;
+  assert.throws(() => compareDescriptors(invalid, descriptorAt()), /finite/);
 });
 
 test('reads decision thresholds from the environment with safe fallbacks', () => {
@@ -245,7 +257,7 @@ test('orchestrates document then selfie descriptors', async () => {
     thresholds: THRESHOLDS,
     descriptor: async (_buffer, image) => {
       images.push(image);
-      return image === 'document' ? [0, 0] : [0.3, 0.4];
+      return image === 'document' ? descriptorAt() : descriptorAt(0.3, 0.4);
     },
   });
   assert.deepEqual(images, ['document', 'selfie']);
@@ -253,25 +265,29 @@ test('orchestrates document then selfie descriptors', async () => {
   assert.equal(result.band, 'borderline');
 });
 
-test('auto-verifies a strong match and updates the worker badge source', async () => {
+test('strong face match stores independent evidence but cannot grant worker privileges', async () => {
   const fixture = fixtures();
   const result = await compareAndCreateSubmission(input(fixture, async () => comparison('strong', 91.5)));
 
-  assert.equal(result.status, 'verified');
+  assert.equal(result.status, 'pending');
   const record = fixture.record();
-  assert.equal(record.status, 'verified');
-  assert.equal(record.reviewedBy, 'auto_face_match');
+  assert.equal(record.status, 'pending');
+  assert.equal(record.face.status, 'MATCH');
+  assert.equal(record.workerDecision.eligible, false);
+  assert.equal(record.government.status, 'NOT_INTEGRATED');
+  assert.equal(record.liveness.status, 'NOT_IMPLEMENTED');
+  assert.notEqual(record.reviewedBy, 'auto_face_match');
   assert.equal(record.faceMatchConfidence, 91.5);
   assert.equal(record.faceMatchBand, 'strong');
   assert.equal(record.faceMatchThreshold, 60);
   assert.equal(record.faceAutoVerifyMin, 80);
   assert.equal(record.maskedIdNumber, '********6789');
   assert.equal(Object.values(record).includes('123456789'), false);
-  assert.ok(record.purgeAfter instanceof Date);
+  assert.equal(record.purgeAfter instanceof Date, false);
   assert.equal(record.storageBackend, 'local');
-  assert.deepEqual(fixture.writesTo('users').map((value) => value.verificationStatus), ['verified']);
-  assert.deepEqual(fixture.writesTo('worker_profiles').map((value) => value.verificationStatus), ['verified']);
-  assert.equal(fixture.writesTo('notifications').length, 1);
+  assert.deepEqual(fixture.writesTo('users'), []);
+  assert.deepEqual(fixture.writesTo('worker_profiles'), []);
+  assert.equal(fixture.writesTo('notifications').length, 0);
   assert.deepEqual(await fs.readFile(path.join(uploadsDir, record.governmentIdPath)), Buffer.from('id'));
   assert.deepEqual(await fs.readFile(path.join(uploadsDir, record.facePhotoPath)), Buffer.from('face'));
 });
@@ -283,6 +299,8 @@ test('sends a borderline match to admin review without touching the worker statu
   assert.equal(result.status, 'pending');
   assert.equal(fixture.record().status, 'pending');
   assert.equal(fixture.record().faceReviewFlag, 'borderline');
+  assert.equal(fixture.record().face.status, 'BORDERLINE');
+  assert.equal(fixture.record().workerDecision.eligible, false);
   assert.equal(fixture.writesTo('users').length, 0);
   assert.equal(fixture.writesTo('notifications').length, 0);
 });
@@ -292,12 +310,14 @@ test('stores no images for a mismatch and logs the attempt score', async () => {
   const mismatch = comparison('mismatch', 42);
   const result = await compareAndCreateSubmission(input(fixture, async () => mismatch));
 
-  assert.deepEqual(result, mismatch);
+  const faceResult = { status: 'NO_MATCH', distance: 0.4, similarity: 42, band: 'mismatch' };
+  assert.deepEqual(result, { ...mismatch, faceResult });
   assert.equal(fixture.writes.length, 0);
   assert.deepEqual(fixture.attempts, [{
     similarity: 42,
     distance: 0.4,
     reviewMin: 60,
+    face: faceResult,
     attemptedAt: new Date('2026-01-01T00:00:00.000Z'),
   }]);
   assert.deepEqual(await fs.readdir(uploadsDir), []);
@@ -315,6 +335,7 @@ test('removes partial Cloud Storage uploads and schedules replaced images for de
 
   const replacement = fixtures({
     prior: {
+      schemaVersion: 2,
       status: 'rejected',
       governmentIdPath: 'old/id.jpg',
       facePhotoPath: 'old/selfie.jpg',
@@ -329,10 +350,29 @@ test('deletes replaced local images after a new submission', async () => {
   await fs.mkdir(path.join(uploadsDir, 'old'), { recursive: true });
   await fs.writeFile(path.join(uploadsDir, 'old/id.jpg'), 'old');
   const fixture = fixtures({
-    prior: { status: 'resubmission_required', storageBackend: 'local', governmentIdPath: 'old/id.jpg' },
+    prior: { schemaVersion: 2, status: 'resubmission_required', storageBackend: 'local', governmentIdPath: 'old/id.jpg' },
   });
   await compareAndCreateSubmission(input(fixture, async () => comparison('borderline', 70)));
   await assert.rejects(fs.access(path.join(uploadsDir, 'old/id.jpg')));
+});
+
+test('existing verified workers and all legacy verification records remain untouched', async () => {
+  for (const options of [{ userStatus: 'verified' }, { prior: { status: 'pending' } }, { prior: { status: 'rejected' } }]) {
+    const fixture = fixtures(options);
+    let compared = false;
+    await assert.rejects(compareAndCreateSubmission(input(fixture, async () => { compared = true; return comparison('strong', 99); })), { name: 'VerificationConflictError' });
+    assert.equal(compared, false);
+    assert.deepEqual(fixture.writes, []);
+    assert.deepEqual(await fs.readdir(uploadsDir), []);
+  }
+});
+
+test('approval appearing during inference/upload is preserved by the transaction recheck', async () => {
+  const fixture = fixtures({ transactionUserStatus: 'verified' });
+  await assert.rejects(compareAndCreateSubmission(input(fixture, async () => comparison('strong', 99))), { name: 'VerificationConflictError' });
+  assert.deepEqual(fixture.writes, []);
+  const remaining = await fs.readdir(uploadsDir, { recursive: true, withFileTypes: true });
+  assert.deepEqual(remaining.filter(entry => entry.isFile()), []);
 });
 
 test('masks short and long identifiers consistently', () => {
@@ -392,11 +432,11 @@ test('tries the EXIF orientation first, then other turns, and prefers the main I
   });
 
   const sideways = jpegWithOrientation(6);
-  assert.deepEqual(await getFaceDescriptor(sideways, 'document', runtimeFor(90, [box(4)])), [4]);
+  assert.deepEqual(await getFaceDescriptor(sideways, 'document', runtimeFor(90, [box(4)]), { quality: () => {} }), [4]);
   assert.deepEqual(tried, [90]);
 
   tried.length = 0;
-  const ghostImage = await getFaceDescriptor(sideways, 'document', runtimeFor(0, [box(2), box(9)]));
+  const ghostImage = await getFaceDescriptor(sideways, 'document', runtimeFor(0, [box(2), box(9)]), { quality: () => {} });
   assert.deepEqual(ghostImage, [9]);
   assert.deepEqual(tried, [90, 180, 0]);
 

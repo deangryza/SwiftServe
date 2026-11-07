@@ -34,12 +34,17 @@ const collectionRef = name => ({
   where: (field, operator, value) => query(name, []).where(field, operator, value),
   get: async () => query(name, []).get(),
 });
-const db = { collection: collectionRef };
+const db = { collection: collectionRef, batch: () => {
+  const pending = [];
+  return { update: (ref, data) => pending.push(() => ref.update(data)), set: (ref, data) => pending.push(() => ref.set(data)),
+    commit: async () => { for (const operation of pending) await operation(); } };
+} };
 
 const configPath = require.resolve('../src/config/firebase');
 require.cache[configPath] = { id: configPath, filename: configPath, loaded: true, exports: {
   db,
-  auth: { verifyIdToken: async token => ({ uid: token, admin: token === 'admin', email: `${token}@example.com` }) },
+  auth: { verifyIdToken: async token => ({ uid: token, admin: token === 'admin', email: `${token}@example.com` }),
+    getUser: async uid => ({ uid, disabled: false, customClaims: { admin: uid === 'admin' } }) },
 } };
 const app = express();
 app.use(express.json());
@@ -137,4 +142,5 @@ test('admins list alerts needing attention first and can resolve them', async ()
     .send({ status: 'resolved', adminNotes: 'Police responded; client safe.' }).expect(200);
   assert.equal(table('sos_alerts')[body.id].status, 'resolved');
   assert.equal(table('sos_alerts')[body.id].handledBy, 'admin@example.com');
+  assert.ok(Object.values(table('admin_audit_logs')).some(item => item.action === 'sos.updated' && item.targetId === body.id));
 });

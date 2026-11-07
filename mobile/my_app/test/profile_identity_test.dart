@@ -73,6 +73,7 @@ void main() {
       }),
     );
     await api.createUserProfile(
+      dateOfBirth: '2000-01-01',
       idToken: 'token',
       fullName: restored.fullName,
       email: restored.email,

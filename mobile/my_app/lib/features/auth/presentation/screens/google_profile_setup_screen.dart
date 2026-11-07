@@ -1,3 +1,7 @@
+import '../../domain/registration_identity_draft.dart';
+import '../../../../shared/models/app_user.dart';
+import '../../../worker/presentation/screens/worker_verification_screen.dart';
+import '../../../../shared/utils/registration_birthday.dart';
 import 'package:my_app/shared/services/expiry_push_service.dart';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -12,7 +16,9 @@ import '../../../../shared/services/profile_draft_store.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
 import '../../../../shared/models/worker_service_selection.dart';
 import '../widgets/phone_number_field.dart';
-import '../widgets/phone_otp_verifier.dart';
+import '../../data/firebase_registration_otp.dart';
+import '../../data/iprog_registration_otp.dart';
+import '../../domain/registration_otp_gateway.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
 
@@ -26,6 +32,7 @@ class GoogleProfileSetupScreen extends StatefulWidget {
 
 class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   final _form = GlobalKey<FormState>();
+  final _birthday = TextEditingController();
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
@@ -34,18 +41,19 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   final _confirmPassword = TextEditingController();
   final _category = TextEditingController();
   final _services = WorkerServiceSelection();
+  final _identity = RegistrationIdentityDraft();
   String _role = 'client';
   String _countryCode = '+63';
   bool _saving = false;
   bool _accepted = false;
   Uint8List? _profileImageBytes;
-  String? _verifiedPhone;
-  String? _phoneToken;
+  FirebaseRegistrationOtp? _otp;
 
-  void _phoneVerified(String phone, String token) => setState(() {
-    _verifiedPhone = phone;
-    _phoneToken = token;
-  });
+  /// Live SMS codes (IPROG SMS via the backend) when the emulator-only
+  /// Firebase SMS flow is off, i.e. in the real app.
+  final IprogRegistrationOtp? _iprogOtp = RegistrationSmsConfig.enabled
+      ? null
+      : IprogRegistrationOtp();
 
   @override
   void initState() {
@@ -53,11 +61,46 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     final user = FirebaseAuth.instance.currentUser;
     _name.text = user?.displayName?.trim() ?? '';
     _email.text = user?.email?.trim() ?? '';
+    if (RegistrationSmsConfig.enabled && user != null) {
+      final uid = user.uid;
+      final auth = FirebaseAuth.instance;
+      _otp = FirebaseRegistrationOtp(
+        auth: auth,
+        project: auth.app.options.projectId,
+        prepareAccount: () async {
+          final current = auth.currentUser;
+          if (current == null || current.uid != uid) {
+            throw const RegistrationOtpException(
+              'Your signed-in account changed. Restart registration.',
+            );
+          }
+          await ProfileDraftStore().save(
+            ProfileDraft(
+              fullName: _name.text.trim(),
+              email: current.email ?? _email.text.trim(),
+              phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
+              address: _address.text.trim(),
+              role: _role,
+              dateOfBirth: _birthday.text,
+              category: _category.text,
+              skills: _role == 'worker' ? _services.services : const [],
+              phoneVerificationUid: uid,
+              phoneVerificationProject: auth.app.options.projectId,
+            ),
+          );
+          return current;
+        },
+      );
+    }
   }
 
   @override
   void dispose() {
+    _identity.dispose();
+    _otp?.dispose();
+    _iprogOtp?.dispose();
     for (final controller in [
+      _birthday,
       _name,
       _email,
       _phone,
@@ -139,15 +182,31 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     }
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
+    final birthdayError = RegistrationBirthday.validate(_birthday.text);
+    if (birthdayError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(birthdayError)));
+      return;
+    }
     final phone = normalizePhoneNumber(_countryCode, _phone.text);
-    if (_verifiedPhone != phone || _phoneToken == null) {
-      final token = await PhoneOtpScreen.verify(context, phone);
-      if (token == null || !mounted) return;
-      _phoneVerified(phone, token);
+    if (_iprogOtp != null && !_iprogOtp.verifiedFor(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verify your mobile number with the SMS code first.'),
+        ),
+      );
+      return;
     }
     setState(() => _saving = true);
     final category = _role == 'worker' ? _category.text.trim() : '';
     final draft = ProfileDraft(
+      phoneVerificationToken: _iprogOtp?.tokenFor(phone),
+      phoneVerificationUid: _otp == null ? '' : user.uid,
+      phoneVerificationProject: _otp == null
+          ? ''
+          : FirebaseAuth.instance.app.options.projectId,
+      dateOfBirth: _birthday.text,
       fullName: _name.text.trim(),
       email: user.email ?? _email.text.trim(),
       phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
@@ -158,13 +217,14 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
       photoBase64: _profileImageBytes == null
           ? ''
           : base64Encode(_profileImageBytes!),
-      phoneVerificationToken: _phoneToken,
     );
     try {
+      if (_otp != null) await _otp!.requireVerified(draft.phoneNumber);
       await ProfileDraftStore().save(draft);
       final token = await user.getIdToken();
       await ApiService().createUserProfile(
         idToken: token!,
+        dateOfBirth: draft.dateOfBirth,
         fullName: draft.fullName,
         email: draft.email,
         phoneNumber: draft.phoneNumber,
@@ -177,7 +237,34 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
       );
       await user.updateDisplayName(draft.fullName);
       await ProfileDraftStore().clear();
+      if (mounted && _identity.hasId) {
+        final files = await _identity.takeForVerification();
+        if (mounted && files != null) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => WorkerVerificationScreen(
+                profile: AppUser(
+                  id: user.uid,
+                  fullName: draft.fullName,
+                  email: draft.email,
+                  role: draft.role == 'worker'
+                      ? UserRole.worker
+                      : UserRole.client,
+                  verificationStatus: VerificationStatus.pending,
+                ),
+                initialDocument: files.document,
+                initialSelfie: files.selfie,
+              ),
+            ),
+          );
+        } else if (files != null) {
+          await RegistrationIdentityDraft.deleteTemporary(files.document);
+          await RegistrationIdentityDraft.deleteTemporary(files.selfie);
+        }
+      }
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } on RegistrationOtpException catch (error) {
+      _showError(error.message);
     } on ApiException catch (error) {
       _showError(
         error.code == 'PHONE_NUMBER_IN_USE'
@@ -218,6 +305,7 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
   }
 
   Future<void> _signOut() async {
+    _otp?.invalidate();
     await ExpiryPushService.instance.beforeSignOut();
     await FirebaseAuth.instance.signOut();
   }
@@ -227,8 +315,11 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
     void changeCountry(String value) => setState(() => _countryCode = value);
     final form = _role == 'client'
         ? ClientAccountForm(
+            otpGateway: _otp ?? _iprogOtp,
+            identityDraft: _identity,
             contactAvailability: _contactAvailability,
             key: const ValueKey('google-client-account-flow'),
+            birthday: _birthday,
             formKey: _form,
             name: _name,
             email: _email,
@@ -247,12 +338,13 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             federatedAccount: true,
             onChangeRole: _chooseRole,
             onExit: _signOut,
-            verifiedPhoneNumber: _verifiedPhone,
-            onPhoneVerified: _phoneVerified,
           )
         : WorkerAccountForm(
+            otpGateway: _otp ?? _iprogOtp,
+            identityDraft: _identity,
             contactAvailability: _contactAvailability,
             key: const ValueKey('google-worker-account-flow'),
+            birthday: _birthday,
             formKey: _form,
             name: _name,
             email: _email,
@@ -273,8 +365,6 @@ class _GoogleProfileSetupScreenState extends State<GoogleProfileSetupScreen> {
             federatedAccount: true,
             onChangeRole: _chooseRole,
             onExit: _signOut,
-            verifiedPhoneNumber: _verifiedPhone,
-            onPhoneVerified: _phoneVerified,
           );
     return ClientThemeScope(child: form);
   }

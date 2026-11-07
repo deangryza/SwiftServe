@@ -13,6 +13,7 @@ enum FaceVerificationFailure {
   mismatch,
   noFace,
   multipleFaces,
+  quality,
   rateLimited,
   authentication,
   conflict,
@@ -52,17 +53,19 @@ class FaceVerificationResult {
     this.confidence,
     this.band,
     this.status,
+    this.evidence = const {},
   });
 
   /// Calibrated similarity percentage (0–100).
   final double? similarity;
   final double? confidence;
 
-  /// `strong` (auto-verified) or `borderline` (sent to admin review).
+  /// Face comparison band only; neither band grants worker authorization.
   final String? band;
 
   /// Verification status after submission: `verified` or `pending`.
   final String? status;
+  final Map<String, dynamic> evidence;
 
   bool get isVerified => status == 'verified';
 }
@@ -94,6 +97,9 @@ class VerificationRepository {
     required String idNumber,
     required File governmentId,
     required File facePhoto,
+    bool comparisonOnly = false,
+    String? documentSessionId,
+    String? documentAttemptId,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -104,10 +110,18 @@ class VerificationRepository {
     }
     final request = http.MultipartRequest(
       'POST',
-      Uri.parse('${ApiConfig.baseUrl}/api/verify'),
+      Uri.parse(
+        '${ApiConfig.baseUrl}/api/verify${comparisonOnly ? '/face' : ''}',
+      ),
     );
     request.headers['Authorization'] = 'Bearer ${await user.getIdToken(true)}';
     request.fields.addAll({'idType': idType, 'idNumber': idNumber});
+    if (documentSessionId != null) {
+      request.fields['documentSessionId'] = documentSessionId;
+    }
+    if (documentAttemptId != null) {
+      request.fields['documentAttemptId'] = documentAttemptId;
+    }
     request.files.add(
       await http.MultipartFile.fromPath(
         'document',
@@ -133,6 +147,7 @@ class VerificationRepository {
           similarity: _number(payload['similarity'] ?? payload['confidence']),
           confidence: _number(payload['confidence'] ?? payload['similarity']),
           band: payload['band']?.toString(),
+          evidence: payload,
           status: verification is Map
               ? verification['status']?.toString()
               : null,
@@ -181,6 +196,7 @@ class VerificationRepository {
       : MediaType('image', 'jpeg');
 
   FaceVerificationFailure _failureFor(int status, String? code) {
+    if (code == 'IMAGE_QUALITY') return FaceVerificationFailure.quality;
     if (code == 'FACE_MISMATCH') return FaceVerificationFailure.mismatch;
     if (code == 'FACE_NOT_DETECTED') return FaceVerificationFailure.noFace;
     if (code == 'MULTIPLE_FACES_DETECTED') {

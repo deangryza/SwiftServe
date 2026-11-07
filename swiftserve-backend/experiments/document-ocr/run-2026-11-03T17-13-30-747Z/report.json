@@ -1,0 +1,1894 @@
+{
+  "schema": "swiftserve-synthetic-ocr-report-v1",
+  "syntheticOnly": true,
+  "ocrInferenceExecuted": false,
+  "engine": {
+    "status": "UNAVAILABLE",
+    "package": "tesseract.js",
+    "version": null
+  },
+  "sampleCount": 308,
+  "corpusCounts": {
+    "philid_style": 22,
+    "digital_national_style": 22,
+    "driver_style": 22,
+    "passport_style": 22,
+    "umid_style": 22,
+    "postal_style": 22,
+    "voter_style": 22,
+    "unrelated_card": 22,
+    "paper": 22,
+    "portrait": 22,
+    "landscape": 22,
+    "screenshot": 22,
+    "fabricated": 22,
+    "blank": 22
+  },
+  "metrics": {
+    "perClassPrecision": "NOT MEASURED",
+    "perClassRecall": "NOT MEASURED",
+    "confusionMatrix": "NOT MEASURED",
+    "falseAcceptanceRate": "NOT MEASURED",
+    "falseRejectionRate": "NOT MEASURED",
+    "unknownHandlingAccuracy": "NOT MEASURED",
+    "unreadableHandlingAccuracy": "NOT MEASURED",
+    "characterErrorRate": "NOT MEASURED",
+    "wordErrorRate": "NOT MEASURED",
+    "abstentionRate": "NOT MEASURED",
+    "averageProcessingMs": "NOT MEASURED",
+    "p50ProcessingMs": "NOT MEASURED",
+    "p95ProcessingMs": "NOT MEASURED",
+    "peakMemoryBytes": "NOT MEASURED"
+  },
+  "note": "Fallback records and corpus integrity checks are not OCR/classification measurements. No classifier executed.",
+  "results": [
+    {
+      "id": "philid_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "philid_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "digital_national_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "driver_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "passport_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "umid_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "postal_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "voter_style-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "unrelated_card-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "paper-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "portrait-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "landscape-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "screenshot-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "fabricated-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-0-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-clear",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-blur",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-low_light",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-overexposed",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-rotated",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-cropped",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-perspective_approx",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-jpeg_artifacts",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-glare_shadow",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-partial",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    },
+    {
+      "id": "blank-1-small",
+      "outcome": "DOCUMENT_REVIEW_REQUIRED",
+      "predictedCategory": "unknown",
+      "reason": "OCR_ENGINE_UNAVAILABLE"
+    }
+  ]
+}

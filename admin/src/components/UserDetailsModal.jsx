@@ -10,8 +10,9 @@ import {
   User,
 } from "lucide-react";
 import StatusBadge from "./StatusBadge";
+import { useState } from 'react';
 
-export default function UserDetailsModal({ user, onClose }) {
+export default function UserDetailsModal({ user, onClose, onSaveName }) {
   if (!user) return null;
 
   const isWorker = user.role === "Worker";
@@ -67,6 +68,7 @@ export default function UserDetailsModal({ user, onClose }) {
           </div>
 
           {/* Basic Information */}
+          {onSaveName && <NameEditor key={user.id} user={user} onSave={onSaveName} />}
           <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
             <InfoRow
               icon={User}
@@ -200,6 +202,18 @@ export default function UserDetailsModal({ user, onClose }) {
       </motion.div>
     </AnimatePresence>
   );
+}
+
+function NameEditor({ user, onSave }) {
+  const [name, setName] = useState(user.name || '');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  return <form className="space-y-2 border-b border-gray-100 p-5" onSubmit={async event => {
+    event.preventDefault(); setSaving(true); setMessage('');
+    try { await onSave(name.trim()); setMessage('Name updated.'); }
+    catch (error) { setMessage(error.message); }
+    finally { setSaving(false); }
+  }}><label className="block text-sm font-medium text-gray-700">Edit full name<input className="mt-2 min-h-10 w-full rounded-lg border border-gray-300 px-3 focus-visible:outline-2 focus-visible:outline-blue-600" value={name} onChange={event => setName(event.target.value)} required maxLength={120} /></label><button disabled={saving} className="min-h-10 rounded-lg bg-blue-600 px-4 text-sm font-medium text-white disabled:opacity-50">{saving ? 'Saving…' : 'Save name'}</button>{message && <p role="status" className="text-sm text-gray-600">{message}</p>}</form>;
 }
 
 function InfoRow({ icon: Icon, label, value }) {

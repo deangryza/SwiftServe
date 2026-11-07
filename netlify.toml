@@ -1,0 +1,27 @@
+# Local-only pilot. The function fails closed outside NETLIFY_DEV + demo emulators.
+[build]
+  command = "node -e \"throw new Error('Local-only pilot: cloud builds and deployment are not approved')\""
+  publish = "admin/dist"
+  functions = "swiftserve-backend/netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["canvas", "@tensorflow/tfjs", "@tensorflow/tfjs-backend-wasm", "@vladmandic/face-api"]
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[dev]
+  command = "npm --prefix admin run dev -- --mode netlify --host 127.0.0.1 --port 5181 --strictPort"
+  targetPort = 5181
+  port = 8888
+  framework = "#custom"
+  autoLaunch = false

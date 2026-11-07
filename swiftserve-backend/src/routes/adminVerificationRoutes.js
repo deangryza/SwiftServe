@@ -10,9 +10,9 @@ const {
 const router = express.Router();
 
 router.use(requireAdmin);
-router.get('/', listVerifications);
-router.get('/:workerId/image', getVerificationImage);
-router.get('/:workerId', getVerification);
-router.patch('/:workerId', updateVerification);
+router.get('/', requireAdmin.permission('verification.view'), listVerifications);
+router.get('/:workerId/image', requireAdmin.permission('verification.view'), getVerificationImage);
+router.get('/:workerId', requireAdmin.permission('verification.view'), getVerification);
+router.patch('/:workerId', requireAdmin.permission('verification.manage'), updateVerification);
 
 module.exports = router;

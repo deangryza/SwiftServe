@@ -1,3 +1,5 @@
+import 'helpers/registration_steps.dart';
+import 'package:my_app/features/auth/presentation/widgets/registration_birthday_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/auth/presentation/screens/client_account_form.dart';
@@ -52,10 +54,12 @@ void main() {
 }
 
 Future<void> _tapNext(WidgetTester tester, String key) async {
+  fillAdultBirthday(tester);
   final button = find.byKey(ValueKey(key));
   await tester.ensureVisible(button);
   await tester.tap(button);
   await tester.pumpAndSettle();
+  await completePersonalDetails(tester, button);
 }
 
 class _Harness {
@@ -111,5 +115,13 @@ class _Harness {
     password.dispose();
     confirmation.dispose();
     category.dispose();
+  }
+}
+
+void fillAdultBirthday(WidgetTester tester) {
+  for (final field in tester.widgetList<RegistrationBirthdayField>(
+    find.byType(RegistrationBirthdayField),
+  )) {
+    if (field.controller.text.isEmpty) field.controller.text = '2000-01-01';
   }
 }

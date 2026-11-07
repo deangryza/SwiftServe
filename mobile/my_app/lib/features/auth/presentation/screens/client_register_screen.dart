@@ -1,8 +1,16 @@
+import '../../domain/registration_identity_draft.dart';
+import '../../../../shared/models/app_user.dart';
+import '../../../worker/presentation/screens/worker_verification_screen.dart';
+import '../../data/firebase_registration_otp.dart';
+import '../../data/iprog_registration_otp.dart';
+import '../../domain/registration_otp_gateway.dart';
+import '../../../../shared/utils/registration_birthday.dart';
 import 'dart:typed_data';
 import 'dart:convert';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../widgets/policy_consent.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../../../../shared/services/profile_photo_picker.dart';
@@ -15,26 +23,22 @@ import 'profile_completion_screen.dart';
 import 'client_account_form.dart';
 import 'worker_account_form.dart';
 import '../widgets/phone_number_field.dart';
-import '../widgets/phone_otp_verifier.dart';
 import '../widgets/registration_contact_fields.dart';
 
 class ClientRegisterScreen extends StatelessWidget {
   const ClientRegisterScreen({
     super.key,
     this.contactAvailability,
-    this.otpSender,
-    this.otpVerifier,
+    this.smsGateway,
   });
   final ContactAvailabilityLookup? contactAvailability;
-  final SendPhoneOtp? otpSender;
-  final VerifyPhoneOtp? otpVerifier;
+  final IprogRegistrationOtp? smsGateway;
 
   @override
   Widget build(BuildContext context) => AccountRegistrationScreen(
     role: 'client',
     contactAvailability: contactAvailability,
-    otpSender: otpSender,
-    otpVerifier: otpVerifier,
+    smsGateway: smsGateway,
   );
 }
 
@@ -43,16 +47,14 @@ class AccountRegistrationScreen extends StatefulWidget {
     super.key,
     required this.role,
     this.contactAvailability,
-    this.otpSender,
-    this.otpVerifier,
+    this.smsGateway,
   });
 
   final String role;
   final ContactAvailabilityLookup? contactAvailability;
 
-  /// Test hooks; default to the SwiftServe backend.
-  final SendPhoneOtp? otpSender;
-  final VerifyPhoneOtp? otpVerifier;
+  /// Live SMS codes (IPROG SMS via the backend). Tests can inject one.
+  final IprogRegistrationOtp? smsGateway;
 
   @override
   State<AccountRegistrationScreen> createState() =>
@@ -61,6 +63,7 @@ class AccountRegistrationScreen extends StatefulWidget {
 
 class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _birthday = TextEditingController();
   final _name = TextEditingController();
   final _email = TextEditingController();
   final _phone = TextEditingController();
@@ -69,17 +72,122 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   final _confirmPassword = TextEditingController();
   final _category = TextEditingController();
   final _services = WorkerServiceSelection();
+  final _identity = RegistrationIdentityDraft();
   bool _acceptedTerms = false;
   bool _loading = false;
   String _countryCode = '+63';
   Uint8List? _profileImageBytes;
-  String? _verifiedPhone;
-  String? _phoneToken;
+  RegistrationSmsAccount? _smsAccount;
+  FirebaseRegistrationOtp? _otp;
 
-  void _phoneVerified(String phone, String token) => setState(() {
-    _verifiedPhone = phone;
-    _phoneToken = token;
-  });
+  /// Used whenever the emulator-only Firebase SMS flow is off (the real app).
+  late final IprogRegistrationOtp? _iprogOtp = RegistrationSmsConfig.enabled
+      ? null
+      : (widget.smsGateway ?? IprogRegistrationOtp());
+
+  @override
+  void initState() {
+    super.initState();
+    if (RegistrationSmsConfig.enabled) {
+      final auth = FirebaseAuth.instance;
+      final project = auth.app.options.projectId;
+      _smsAccount = RegistrationSmsAccount(auth: auth, project: project);
+      _otp = FirebaseRegistrationOtp(
+        auth: auth,
+        project: project,
+        prepareAccount: () async {
+          final birthdayError = RegistrationBirthday.validate(_birthday.text);
+          if (birthdayError != null || !_acceptedTerms) {
+            throw RegistrationOtpException(
+              birthdayError ?? PolicyConsent.requiredMessage,
+            );
+          }
+          await ApiService().checkReachable();
+          final user = await _smsAccount!.prepare(
+            _registrationDraft(),
+            _password.text,
+          );
+          if (mounted) setState(() {});
+          return user;
+        },
+      );
+    }
+  }
+
+  Future<bool> _smsAvailability(String kind, String value) {
+    if (kind == 'email' &&
+        _smsAccount?.ownedUid != null &&
+        FirebaseAuth.instance.currentUser?.uid == _smsAccount!.ownedUid &&
+        value.toLowerCase() == _smsAccount!.reservedEmail?.toLowerCase()) {
+      return Future.value(true);
+    }
+    return (widget.contactAvailability ??
+        ApiService().registrationContactAvailable)(kind, value);
+  }
+
+  Future<void> _leaveSmsRegistration() async {
+    if (_smsAccount?.ownedUid != null) {
+      final confirmed =
+          await showDialog<bool>(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text('Cancel registration?'),
+              content: const Text(
+                'This removes only the unfinished test account created for this registration.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  child: const Text('Keep editing'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: const Text('Cancel registration'),
+                ),
+              ],
+            ),
+          ) ??
+          false;
+      if (!confirmed) return;
+      try {
+        _otp?.invalidate();
+        await _smsAccount!.cancel();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not cancel the unfinished account. Your recovery draft was retained. Retry before leaving.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+    }
+    if (mounted) Navigator.maybePop(context);
+  }
+
+  ProfileDraft _registrationDraft() => ProfileDraft(
+    dateOfBirth: _birthday.text,
+    fullName: _name.text.trim(),
+    email: _email.text.trim(),
+    phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
+    address: _address.text.trim(),
+    role: widget.role,
+    category: _category.text.trim(),
+    photoBase64: _profileImageBytes == null
+        ? ''
+        : base64Encode(_profileImageBytes!),
+    skills: widget.role == 'worker'
+        ? _services.services
+        : _category.text.trim().isEmpty
+        ? const []
+        : [_category.text.trim()],
+    phoneVerificationToken: _iprogOtp?.tokenFor(
+      normalizePhoneNumber(_countryCode, _phone.text),
+    ),
+  );
 
   Future<void> _register() async {
     if (widget.role == 'worker' && _services.validationError != null) {
@@ -91,38 +199,33 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (!_formKey.currentState!.validate() || !_acceptedTerms) {
       if (!_acceptedTerms) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please accept the terms and privacy policy.'),
-          ),
+          const SnackBar(content: Text(PolicyConsent.requiredMessage)),
         );
       }
       return;
     }
+    final birthdayError = RegistrationBirthday.validate(_birthday.text);
+    if (birthdayError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(birthdayError)));
+      return;
+    }
     final phone = normalizePhoneNumber(_countryCode, _phone.text);
-    if (_verifiedPhone != phone || _phoneToken == null) {
-      // The code page normally does this; this covers a changed number.
-      final token = await PhoneOtpScreen.verify(context, phone);
-      if (token == null || !mounted) return;
-      _phoneVerified(phone, token);
+    if (_iprogOtp != null && !_iprogOtp.verifiedFor(phone)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verify your mobile number with the SMS code first.'),
+        ),
+      );
+      return;
     }
     setState(() => _loading = true);
-    final draft = ProfileDraft(
-      fullName: _name.text.trim(),
-      email: _email.text.trim(),
-      phoneNumber: normalizePhoneNumber(_countryCode, _phone.text),
-      address: _address.text.trim(),
-      role: widget.role,
-      category: _category.text.trim(),
-      photoBase64: _profileImageBytes == null
-          ? ''
-          : base64Encode(_profileImageBytes!),
-      skills: widget.role == 'worker'
-          ? _services.services
-          : _category.text.trim().isEmpty
-          ? const []
-          : [_category.text.trim()],
-      phoneVerificationToken: _phoneToken,
-    );
+    var draft = _registrationDraft();
+    if (_smsAccount?.ownedUid != null &&
+        FirebaseAuth.instance.currentUser != null) {
+      draft = _smsAccount!.bind(draft, FirebaseAuth.instance.currentUser!);
+    }
     try {
       await ApiService().checkReachable();
     } on ApiConnectionException catch (error) {
@@ -136,15 +239,22 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     }
     UserCredential? credential;
     try {
-      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: draft.email,
-        password: _password.text,
-      );
-      await credential.user?.updateDisplayName(draft.fullName);
+      User user;
+      if (_otp != null) {
+        user = await _otp!.requireVerified(draft.phoneNumber);
+      } else {
+        credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: draft.email,
+          password: _password.text,
+        );
+        user = credential.user!;
+      }
+      await user.updateDisplayName(draft.fullName);
       await ProfileDraftStore().save(draft);
-      final token = await credential.user!.getIdToken();
+      final token = await user.getIdToken(true);
       await ApiService().createUserProfile(
         idToken: token!,
+        dateOfBirth: draft.dateOfBirth,
         fullName: draft.fullName,
         email: draft.email,
         phoneNumber: draft.phoneNumber,
@@ -155,8 +265,40 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
         photoBase64: draft.photoBase64,
         phoneVerificationToken: draft.phoneVerificationToken,
       );
+      _smsAccount?.commit();
       await ProfileDraftStore().clear();
+      if (mounted && _identity.hasId) {
+        final files = await _identity.takeForVerification();
+        if (mounted && files != null) {
+          await Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => WorkerVerificationScreen(
+                profile: AppUser(
+                  id: user.uid,
+                  fullName: draft.fullName,
+                  email: draft.email,
+                  role: draft.role == 'worker'
+                      ? UserRole.worker
+                      : UserRole.client,
+                  verificationStatus: VerificationStatus.pending,
+                ),
+                initialDocument: files.document,
+                initialSelfie: files.selfie,
+              ),
+            ),
+          );
+        } else if (files != null) {
+          await RegistrationIdentityDraft.deleteTemporary(files.document);
+          await RegistrationIdentityDraft.deleteTemporary(files.selfie);
+        }
+      }
       if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+    } on RegistrationOtpException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error.message)));
+      }
     } on FirebaseAuthException catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -168,8 +310,10 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
       if (!mounted) return;
       if (error.code == 'PHONE_NUMBER_IN_USE') {
         try {
-          await credential?.user?.delete();
-          await ProfileDraftStore().clear();
+          if (_otp == null) {
+            await credential?.user?.delete();
+            await ProfileDraftStore().clear();
+          }
         } catch (_) {}
         if (!mounted) return;
         ScaffoldMessenger.of(
@@ -214,6 +358,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
   @override
   void dispose() {
     for (final controller in [
+      _birthday,
       _name,
       _email,
       _phone,
@@ -224,6 +369,9 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     ]) {
       controller.dispose();
     }
+    _identity.dispose();
+    _otp?.dispose();
+    if (widget.smsGateway == null) _iprogOtp?.dispose();
     _services.dispose();
     super.dispose();
   }
@@ -253,7 +401,14 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
     if (widget.role == 'client') {
       return ClientThemeScope(
         child: ClientAccountForm(
-          contactAvailability: widget.contactAvailability,
+          otpGateway: _otp ?? _iprogOtp,
+          identityDraft: _identity,
+          credentialsLocked: _smsAccount?.ownedUid != null,
+          onExit: _otp == null ? null : _leaveSmsRegistration,
+          contactAvailability: _otp == null
+              ? widget.contactAvailability
+              : _smsAvailability,
+          birthday: _birthday,
           formKey: _formKey,
           name: _name,
           email: _email,
@@ -269,17 +424,20 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           onRegister: _register,
           countryCode: _countryCode,
           onCountryCodeChanged: (value) => setState(() => _countryCode = value),
-          verifiedPhoneNumber: _verifiedPhone,
-          onPhoneVerified: _phoneVerified,
-          otpSender: widget.otpSender,
-          otpVerifier: widget.otpVerifier,
         ),
       );
     }
     if (widget.role == 'worker') {
       return ClientThemeScope(
         child: WorkerAccountForm(
-          contactAvailability: widget.contactAvailability,
+          otpGateway: _otp ?? _iprogOtp,
+          identityDraft: _identity,
+          credentialsLocked: _smsAccount?.ownedUid != null,
+          onExit: _otp == null ? null : _leaveSmsRegistration,
+          contactAvailability: _otp == null
+              ? widget.contactAvailability
+              : _smsAvailability,
+          birthday: _birthday,
           formKey: _formKey,
           name: _name,
           email: _email,
@@ -297,10 +455,6 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
           onRegister: _register,
           countryCode: _countryCode,
           onCountryCodeChanged: (value) => setState(() => _countryCode = value),
-          verifiedPhoneNumber: _verifiedPhone,
-          onPhoneVerified: _phoneVerified,
-          otpSender: widget.otpSender,
-          otpVerifier: widget.otpVerifier,
         ),
       );
     }
@@ -554,7 +708,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     const SizedBox(height: 16),
                     _RegistrationField(
                       label: 'Password',
-                      hintText: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
+                      hintText: '••••••••',
                       controller: _password,
                       obscureText: true,
                       validator: (value) => (value?.length ?? 0) < 6
@@ -566,7 +720,7 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                     const SizedBox(height: 16),
                     _RegistrationField(
                       label: 'Confirm Password',
-                      hintText: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
+                      hintText: '••••••••',
                       controller: _confirmPassword,
                       obscureText: true,
                       validator: (value) => value != _password.text
@@ -597,47 +751,11 @@ class _AccountRegistrationScreenState extends State<AccountRegistrationScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: Checkbox(
-                            value: _acceptedTerms,
-                            onChanged: (value) =>
-                                setState(() => _acceptedTerms = value ?? false),
-                            side: const BorderSide(color: AppTheme.line),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              style: TextStyle(
-                                color: Color(0xFF44474C),
-                                fontSize: 14,
-                                height: 20 / 14,
-                              ),
-                              children: [
-                                TextSpan(text: 'I agree to the '),
-                                TextSpan(
-                                  text: 'Terms and Conditions',
-                                  style: TextStyle(color: AppTheme.ink),
-                                ),
-                                TextSpan(text: ' and '),
-                                TextSpan(
-                                  text: 'Privacy Policy.',
-                                  style: TextStyle(color: AppTheme.ink),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
+                    PolicyConsent(
+                      value: _acceptedTerms,
+                      onChanged: (value) =>
+                          setState(() => _acceptedTerms = value),
+                      enabled: !_loading,
                     ),
                     const SizedBox(height: 24),
                     SizedBox(

@@ -138,7 +138,10 @@ test('expired or tampered tokens are invalid', () => {
 
 const profile = (uid, extra) => request(app).post('/api/users/profile')
   .set('Authorization', `Bearer ${uid}`)
-  .send({ fullName: 'Ana Cruz', email: `${uid}@example.com`, phoneNumber: '+639171234567', role: 'client', ...extra });
+  .send({
+    fullName: 'Ana Cruz', email: `${uid}@example.com`, phoneNumber: '+639171234567', role: 'client',
+    dateOfBirth: '1995-05-20', ...extra,
+  });
 
 test('creating a profile requires a verified phone number', async () => {
   const missing = await profile('u1', {}).expect(400);

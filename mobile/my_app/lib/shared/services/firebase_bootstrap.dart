@@ -31,9 +31,26 @@ Future<void> initializeSwiftServeFirebase() async {
       projectId: 'demo-swiftserve-cleanup',
     ),
   );
-  await FirebaseAuth.instance.useAuthEmulator(host, 9099);
-  FirebaseFirestore.instance.useFirestoreEmulator(host, 8187);
-  FirebaseFunctions.instanceFor(
-    region: 'us-central1',
-  ).useFunctionsEmulator(host, 5001);
+  await connectSwiftServeEmulators(
+    host,
+    auth: FirebaseAuth.instance,
+    firestore: FirebaseFirestore.instance,
+    functions: FirebaseFunctions.instanceFor(region: 'us-central1'),
+  );
+}
+
+/// Preserve explicit USB loopback or Android-emulator addressing. FlutterFire's
+/// automatic 127.0.0.1 -> 10.0.2.2 mapping breaks adb reverse on physical phones.
+Future<void> connectSwiftServeEmulators(
+  String host, {
+  required FirebaseAuth auth,
+  required FirebaseFirestore firestore,
+  required FirebaseFunctions functions,
+}) async {
+  if (!['127.0.0.1', 'localhost', '10.0.2.2'].contains(host)) {
+    throw StateError('Only explicit local emulator endpoints are supported.');
+  }
+  await auth.useAuthEmulator(host, 9099, automaticHostMapping: false);
+  firestore.useFirestoreEmulator(host, 8187, automaticHostMapping: false);
+  functions.useFunctionsEmulator(host, 5001, automaticHostMapping: false);
 }

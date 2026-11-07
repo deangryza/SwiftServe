@@ -1,12 +1,14 @@
+import '../utils/registration_birthday.dart';
 import 'dart:convert';
 import 'dart:async';
 
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
+import 'staging_api_client.dart';
 
 class ApiService {
-  ApiService({http.Client? client}) : _client = client ?? http.Client();
+  ApiService({http.Client? client}) : _client = client ?? createApiClient();
 
   final http.Client _client;
   Future<bool> registrationContactAvailable(
@@ -82,11 +84,14 @@ class ApiService {
     required String phoneNumber,
     required String address,
     required String role,
+    String dateOfBirth = '',
     String category = '',
     List<String> skills = const [],
     String photoBase64 = '',
     String? phoneVerificationToken,
   }) async {
+    final birthdayError = RegistrationBirthday.validate(dateOfBirth);
+    if (birthdayError != null) throw ArgumentError(birthdayError);
     late final http.Response response;
     try {
       response = await _client
@@ -97,6 +102,7 @@ class ApiService {
               'Authorization': 'Bearer $idToken',
             },
             body: jsonEncode({
+              'dateOfBirth': dateOfBirth,
               'fullName': fullName,
               'email': email,
               'phoneNumber': phoneNumber,

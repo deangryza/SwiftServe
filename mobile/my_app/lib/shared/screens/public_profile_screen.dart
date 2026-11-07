@@ -236,9 +236,9 @@ class _ProfileView extends StatelessWidget {
                                 : 'Client',
                           ),
                           if (verified)
-                            const _Badge(
+                            _Badge(
                               icon: Icons.verified_rounded,
-                              label: 'Verified',
+                              label: role == PublicProfileRole.worker ? 'Worker access recorded' : 'Existing account status',
                             ),
                         ],
                       ),
@@ -316,7 +316,7 @@ class _ProfileView extends StatelessWidget {
                                 icon: Icons.verified_user_outlined,
                                 label: 'Verification',
                                 value: verified
-                                    ? 'Identity verified'
+                                    ? 'Worker access recorded (not proof of PSA authentication)'
                                     : 'Verification pending',
                                 text: text,
                                 muted: muted,

@@ -11,6 +11,8 @@ import {
 } from 'firebase/auth';
 
 import { auth } from '../lib/firebase';
+import { apiRequest } from '../lib/api';
+import { landingPage } from '../lib/adminAccess';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,6 +22,7 @@ import { Input } from '@/components/ui/input';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getAuthErrorMessage(error) {
+  if (error?.status === 403) return 'Administrator access is inactive or unavailable. Contact your Super Admin.';
   if (error?.message === 'This account does not have administrator access.') return error.message;
 
   switch (error?.code) {
@@ -67,12 +70,13 @@ export default function LoginForm() {
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const token = await credential.user.getIdTokenResult(true);
-      if (token.claims.admin !== true) {
+      if (token.claims.admin !== true && token.claims.staff !== true) {
         await signOut(auth);
         throw new Error('This account does not have administrator access.');
       }
       toast.success('Welcome back, Administrator!');
-      navigate('/dashboard', { replace: true });
+      const session = await apiRequest('/api/admin/session');
+      navigate(landingPage(session.access), { replace: true });
     } catch (error) {
       setFormError(getAuthErrorMessage(error));
       requestAnimationFrame(() => errorSummaryRef.current?.focus());
@@ -154,7 +158,7 @@ export default function LoginForm() {
             <a href="mailto:support@swiftserve.com?subject=Admin%20access%20help" className="rounded-sm text-sm font-medium text-primary-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500 focus-visible:ring-offset-2">Need help?</a>
           </div>
 
-          <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full bg-primary-600 text-white shadow-card hover:bg-primary-700">
+          <Button type="submit" size="lg" disabled={submitting} className="h-11 w-full bg-primary-600 text-primary-foreground shadow-card hover:bg-primary-400">
             {submitting ? 'Signing in…' : 'Sign in to dashboard'}
             {!submitting && <ArrowRight data-icon="inline-end" aria-hidden="true" />}
           </Button>

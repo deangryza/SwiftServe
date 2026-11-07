@@ -1,6 +1,5 @@
-const { loadImage, createCanvas } = require('canvas');
-
 const normalizeProfilePhoto = async (value) => {
+  const { loadImage, createCanvas } = require('canvas');
   if (typeof value !== 'string' || value.length === 0 || value.length > 65536
       || !/^[A-Za-z0-9+/]+={0,2}$/.test(value)) {
     throw new Error('Choose a JPEG or PNG profile photo smaller than 48 KB.');

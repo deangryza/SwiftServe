@@ -1,3 +1,5 @@
+import 'helpers/registration_steps.dart';
+import 'package:my_app/features/auth/presentation/widgets/registration_birthday_field.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_app/features/auth/presentation/screens/client_account_form.dart';
@@ -46,6 +48,7 @@ void main() {
                 profileImage: null,
                 onPickImage: () {},
                 onRegister: () => submitted = true,
+                contactAvailability: (_, _) async => true,
               ),
             ),
           ),
@@ -59,11 +62,13 @@ void main() {
       }
 
       Future<void> advance() async {
+        fillAdultBirthday(tester);
         final button = find.byKey(const ValueKey('client-registration-next'));
         await tester.ensureVisible(button);
         await tester.pumpAndSettle();
         await tester.tap(button);
         await tester.pumpAndSettle();
+        await completePersonalDetails(tester, button);
         expect(tester.takeException(), isNull);
         expect(find.text('Account'), findsNothing);
         expect(find.text('Verification'), findsNothing);
@@ -77,28 +82,41 @@ void main() {
       expect(controllers[0].text, 'Jane Doe');
       await fill('Email Address', 'jane@example.com');
       await fill('Phone Number', '09123456789');
-      await fill('Barangay', 'Bulihan');
-      await fill('City / Municipality', 'Malolos');
-      await fill('Province', 'Bulacan');
       await fill('Password', 'password123');
       await fill('Confirm Password', 'password123');
-      await tester.ensureVisible(find.byType(CheckboxListTile));
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('policy-consent-checkbox')),
+      );
       await tester.pumpAndSettle();
-      await tester.tap(find.byType(CheckboxListTile));
+      await tester.tap(find.byKey(const ValueKey('policy-consent-checkbox')));
       await tester.pumpAndSettle();
       await advance();
-      expect(find.text('Enter code'), findsOneWidget);
+      expect(find.text('Enter One-Time-Password'), findsOneWidget);
       await advance();
-      expect(find.text('Front Side'), findsOneWidget);
+      expect(find.text('Front side'), findsOneWidget);
       for (var i = 0; i < 2; i++) {
         final skip = find.text('Skip for now');
         await tester.ensureVisible(skip);
         await tester.pumpAndSettle();
         await tester.tap(skip);
         await tester.pumpAndSettle();
+        if (i == 0) {
+          // Skipping ID must offer a way back instead of a dead selfie button.
+          final addId = find.text('Add ID photos first');
+          await tester.ensureVisible(addId);
+          await tester.pumpAndSettle();
+          await tester.tap(addId);
+          await tester.pumpAndSettle();
+          expect(find.text('Front side'), findsOneWidget);
+          final skipAgain = find.text('Skip for now');
+          await tester.ensureVisible(skipAgain);
+          await tester.pumpAndSettle();
+          await tester.tap(skipAgain);
+          await tester.pumpAndSettle();
+        }
         expect(tester.takeException(), isNull);
       }
-      expect(find.text('Verification in Progress'), findsOneWidget);
+      expect(find.text('Verification after registration'), findsOneWidget);
       expect(submitted, isFalse);
       await advance();
       expect(submitted, isTrue);
@@ -106,5 +124,13 @@ void main() {
       expect(controllers[4].text, 'password123');
       await tester.pumpWidget(const SizedBox.shrink());
     });
+  }
+}
+
+void fillAdultBirthday(WidgetTester tester) {
+  for (final field in tester.widgetList<RegistrationBirthdayField>(
+    find.byType(RegistrationBirthdayField),
+  )) {
+    if (field.controller.text.isEmpty) field.controller.text = '2000-01-01';
   }
 }

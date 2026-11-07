@@ -61,6 +61,24 @@ class Query {
 }
 const run = (db, options = {}) => runExpiredJobCleanup({ db, logger: logger(), dryRun: false, now: () => NOW, ...options });
 
+test('service deadline expires at the exact instant and notification names the PHT schedule', async () => {
+  const start = new Date('2026-10-31T07:00:00Z'); // October 31, 3 PM PHT.
+  const db = new Database({ 'service_requests/cleaning': expired({ title: 'Cleaning', clientId: 'eya',
+    scheduleFrom: Timestamp.fromDate(start) }) });
+  const before = await run(db, { now: () => new Date(start.getTime() - 1) });
+  assert.equal(before.expired, 0);
+  const at = await run(db, { now: () => start });
+  assert.equal(at.expired, 1);
+  const notification = db.records.get('notifications/jobExpired_cleaning');
+  assert.equal(notification.recipientId, 'eya');
+  assert.equal(notification.requestId, 'cleaning');
+  assert.match(notification.body, /Cleaning/);
+  assert.match(notification.body, /October 31, 2026/);
+  assert.match(notification.body, /3:00 PM PHT/);
+  assert.equal(db.records.get('service_requests/cleaning').status, 'expired');
+  assert.equal((await run(db, { now: () => start })).expired, 0);
+});
+
 test('expires only an eligible post, preserves history, and notifies exactly once', async () => {
   const db = new Database({ 'service_requests/old': expired(),
     'service_requests/old/private/location': { address: 'retained' },
@@ -83,12 +101,12 @@ test('expires only an eligible post, preserves history, and notifies exactly onc
   assert.equal(db.records.has('service_requests/other'), true);
   assert.equal((await run(db)).expired, 0);
 });
-test('future and exact-now times are retained', async () => {
+test('future times are retained and exact-now deadlines expire', async () => {
   const db = new Database({ 'service_requests/future': expired({ scheduleFrom: stamp('2026-10-30T01:00:00Z') }),
     'service_requests/now': expired({ scheduleFrom: Timestamp.fromDate(NOW) }) });
   const result = await run(db);
-  assert.equal(result.expired, 0);
-  assert.equal(result.skipped.not_expired, 2);
+  assert.equal(result.expired, 1);
+  assert.equal(result.skipped.not_expired, 1);
 });
 for (const status of ['pending', 'accepted', 'rejected']) {
   test(`any ${status} application retains the request`, async () => {

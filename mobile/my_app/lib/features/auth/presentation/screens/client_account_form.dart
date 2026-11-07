@@ -1,11 +1,16 @@
+import '../../domain/registration_identity_draft.dart';
+import '../widgets/registration_identity_capture.dart';
+import '../../domain/registration_otp_gateway.dart';
+import '../widgets/registration_otp_screen.dart';
+import '../widgets/registration_birthday_field.dart';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import '../widgets/policy_consent.dart';
 import '../../../../shared/theme/app_theme.dart';
 
 import '../../../../shared/services/client_theme_controller.dart';
 import '../widgets/phone_number_field.dart';
-import '../widgets/phone_otp_verifier.dart';
 import '../widgets/registration_contact_fields.dart';
 import '../widgets/registration_validation_theme.dart';
 import '../widgets/registration_address_fields.dart';
@@ -27,18 +32,22 @@ class ClientAccountForm extends StatefulWidget {
     required this.profileImage,
     required this.onPickImage,
     required this.onRegister,
+    this.otpGateway,
+    this.identityDraft,
+    this.credentialsLocked = false,
+    this.birthday,
     this.countryCode = '+63',
     this.onCountryCodeChanged,
     this.federatedAccount = false,
     this.onChangeRole,
     this.onExit,
     this.contactAvailability,
-    this.verifiedPhoneNumber,
-    this.onPhoneVerified,
-    this.otpSender,
-    this.otpVerifier,
   });
 
+  final RegistrationIdentityDraft? identityDraft;
+  final RegistrationOtpGateway? otpGateway;
+  final bool credentialsLocked;
+  final TextEditingController? birthday;
   final GlobalKey<FormState> formKey;
   final TextEditingController name;
   final TextEditingController email;
@@ -59,25 +68,23 @@ class ClientAccountForm extends StatefulWidget {
   final VoidCallback? onExit;
   final ContactAvailabilityLookup? contactAvailability;
 
-  /// The number the screen already holds a verification token for.
-  final String? verifiedPhoneNumber;
-
-  /// Receives the SMS verification token. When null, the code page is not
-  /// enforced (used by older callers and tests).
-  final void Function(String phoneNumber, String token)? onPhoneVerified;
-  final SendPhoneOtp? otpSender;
-  final VerifyPhoneOtp? otpVerifier;
-
   @override
   State<ClientAccountForm> createState() => _ClientAccountFormState();
 }
 
 class _ClientAccountFormState extends State<ClientAccountForm> {
   static const _yellow = AppTheme.yellow;
+  final _localBirthday = TextEditingController();
   final _firstName = TextEditingController();
   final _lastName = TextEditingController();
   final _scrollController = ScrollController();
   var _page = 0;
+  late final RegistrationIdentityDraft _identity =
+      widget.identityDraft ?? RegistrationIdentityDraft();
+  void _identityChanged() {
+    if (mounted) setState(() {});
+  }
+
   final _contactKey = GlobalKey<RegistrationContactFieldsState>();
   var _continuing = false;
   var _obscurePassword = true;
@@ -86,6 +93,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   @override
   void initState() {
     super.initState();
+    _identity.addListener(_identityChanged);
     final parts = widget.name.text.trim().split(RegExp(r'\s+'));
     if (parts.isNotEmpty && parts.first.isNotEmpty) {
       _firstName.text = parts.first;
@@ -109,6 +117,9 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
 
   @override
   void dispose() {
+    _identity.removeListener(_identityChanged);
+    if (widget.identityDraft == null) _identity.dispose();
+    _localBirthday.dispose();
     _firstName.dispose();
     _lastName.dispose();
     _scrollController.dispose();
@@ -125,13 +136,24 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   }
 
   Future<void> _continue() async {
-    if (_continuing) return;
+    if (_continuing || _identity.busy || _identity.capturing) return;
+    if ((_page == 4 && !_identity.hasId) ||
+        (_page == 5 && _identity.selfie == null)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Complete this check, or choose Skip for now.'),
+        ),
+      );
+      return;
+    }
     _continuing = true;
     try {
       if (_page == 0) {
         if (!widget.formKey.currentState!.validate()) return;
         widget.name.text = '${_firstName.text.trim()} ${_lastName.text.trim()}';
       } else if (_page == 1) {
+        if (!widget.formKey.currentState!.validate()) return;
+      } else if (_page == 2) {
         final available =
             await _contactKey.currentState?.checkAvailability() ?? false;
         if (!mounted) return;
@@ -144,21 +166,12 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         }
         if (!widget.acceptedTerms) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Please accept the terms and privacy policy.'),
-            ),
+            const SnackBar(content: Text(PolicyConsent.requiredMessage)),
           );
           return;
         }
-      } else if (_page == 2 && !_phoneVerified) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Enter the code we sent to your phone to continue.'),
-          ),
-        );
-        return;
       }
-      if (_page == 5) {
+      if (_page == 6) {
         widget.onRegister();
       } else {
         _goTo(_page + 1);
@@ -282,8 +295,8 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
   );
 
   Widget _header() {
-    const progress = [0.18, 0.30, 0.50, 0.70, 0.78, 1.0];
-    final active = _page < 2 ? 0 : (_page < 5 ? 1 : 2);
+    const progress = [0.18, 0.24, 0.30, 0.50, 0.70, 0.78, 1.0];
+    final active = _page < 3 ? 0 : (_page < 6 ? 1 : 2);
     return SizedBox(
       height: 124,
       child: Stack(
@@ -508,7 +521,27 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
       const SizedBox(height: 18),
       _nameField('First Name', _firstName),
       _nameField('Last Name', _lastName),
+
       const SizedBox(height: 22),
+    ],
+  );
+
+  Widget _birthdayLocationPage() => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      RegistrationBirthdayField(
+        controller: widget.birthday ?? _localBirthday,
+        enabled: !widget.loading,
+      ),
+      RegistrationAddressFields(
+        address: widget.address,
+        enabled: !widget.loading,
+        fieldColor: _field,
+        textColor: _text,
+        mutedColor: _muted,
+        borderColor: _border,
+        focusColor: _yellow,
+      ),
     ],
   );
 
@@ -529,23 +562,17 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
         borderColor: _border,
         focusColor: _yellow,
         federatedAccount: widget.federatedAccount,
+        emailReadOnly: widget.credentialsLocked,
         lookup: widget.contactAvailability,
       ),
-      RegistrationAddressFields(
-        address: widget.address,
-        enabled: !widget.loading,
-        fieldColor: _field,
-        textColor: _text,
-        mutedColor: _muted,
-        borderColor: _border,
-        focusColor: _yellow,
-      ),
+
       if (!widget.federatedAccount) ...[
         _inputField(
           'Password',
           'Enter your password',
           widget.password,
           obscure: _obscurePassword,
+          readOnly: widget.credentialsLocked,
           toggle: () => setState(() => _obscurePassword = !_obscurePassword),
           validator: (value) => value == null || value.length < 6
               ? 'Use at least 6 characters.'
@@ -556,6 +583,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           'Re-enter your password',
           widget.confirmPassword,
           obscure: _obscureConfirmation,
+          readOnly: widget.credentialsLocked,
           toggle: () =>
               setState(() => _obscureConfirmation = !_obscureConfirmation),
           validator: (value) =>
@@ -574,122 +602,35 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           ),
         ],
       ),
-      CheckboxListTile(
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
+      PolicyConsent(
         value: widget.acceptedTerms,
-        onChanged: (value) => widget.onTermsChanged(value ?? false),
-        title: Text(
-          'I agree to the Terms and Conditions and Privacy Policy.',
-          style: TextStyle(color: _muted, fontSize: 12),
-        ),
+        onChanged: widget.onTermsChanged,
+        enabled: !widget.loading,
       ),
     ],
   );
 
-  String get _phoneNumber =>
-      normalizePhoneNumber(widget.countryCode, widget.phone.text);
-
-  bool get _phoneVerified =>
-      widget.onPhoneVerified == null ||
-      widget.verifiedPhoneNumber == _phoneNumber;
-
-  Widget _otpPage() {
-    final phone = _phoneNumber;
-    return PhoneOtpVerifier(
-      key: ValueKey('client-otp-$phone'),
-      phoneNumber: phone,
-      alreadyVerified: widget.verifiedPhoneNumber == phone,
-      onVerified: (token) => widget.onPhoneVerified?.call(phone, token),
-      sendCode: widget.otpSender,
-      verifyCode: widget.otpVerifier,
-      textColor: _text,
-      mutedColor: _muted,
-      fieldColor: _field,
-      borderColor: _border,
-    );
-  }
-
-  Widget _idPage() => Container(
-    padding: const EdgeInsets.all(14),
-    decoration: BoxDecoration(
-      color: _field,
-      borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _border),
-    ),
-    child: Column(
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: Text(
-            'Government ID',
-            style: TextStyle(color: _text, fontWeight: FontWeight.w700),
-          ),
-        ),
-        const Align(
-          alignment: Alignment.centerLeft,
-          child: Chip(label: Text('REQUIRED')),
-        ),
-        const SizedBox(height: 12),
-        for (final side in ['Front Side', 'Back Side'])
-          Container(
-            width: double.infinity,
-            margin: const EdgeInsets.only(bottom: 12),
-            padding: const EdgeInsets.symmetric(vertical: 27),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(13),
-              border: Border.all(color: _border, style: BorderStyle.solid),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.upload_file_outlined, color: _muted),
-                const SizedBox(height: 7),
-                Text(
-                  side,
-                  style: TextStyle(color: _text, fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  'PNG, JPG up to 5MB',
-                  style: TextStyle(color: _muted, fontSize: 11),
-                ),
-              ],
-            ),
-          ),
-        Text(
-          'Your documents are encrypted and only used for identity verification.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: _muted, fontSize: 11),
-        ),
-      ],
-    ),
+  Widget _otpPage() => RegistrationOtpScreen(
+    phone: normalizePhoneNumber(widget.countryCode, widget.phone.text),
+    gateway: widget.otpGateway,
+    verifyButtonKey: const ValueKey('client-registration-next'),
+    onVerified: () => _goTo(4),
+    onEditPhone: () => _goTo(2),
+    onBack: () => _goTo(2),
   );
 
-  Widget _facePage() => Column(
-    children: [
-      Text(
-        'Face Recognition',
-        style: TextStyle(
-          color: _text,
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      const SizedBox(height: 7),
-      Text(
-        'Scan your face to verify your identity',
-        style: TextStyle(color: _muted),
-      ),
-      const SizedBox(height: 60),
-      Icon(Icons.face_retouching_natural_outlined, size: 150, color: _yellow),
-      const SizedBox(height: 55),
-    ],
+  Widget _idPage() => RegistrationIdentityCapture(draft: _identity);
+  Widget _facePage() => RegistrationIdentityCapture(
+    draft: _identity,
+    face: true,
+    onRequestId: () => _goTo(4),
   );
 
   Widget _reviewPage() => Column(
     crossAxisAlignment: CrossAxisAlignment.stretch,
     children: [
       Text(
-        'Verification in Progress',
+        'Verification after registration',
         style: TextStyle(
           color: _text,
           fontSize: 22,
@@ -698,7 +639,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
       ),
       const SizedBox(height: 8),
       Text(
-        "Our admin team is reviewing your documents. This typically takes 24–48 hours. You'll receive a notification as soon as your account is verified.",
+        'Finish creating your account. Accepted photos will open in Verification checks for consent, ID details and document review before face comparison. Skipped checks can be completed later in Settings.',
         style: TextStyle(color: _muted, height: 1.5),
       ),
       const SizedBox(height: 30),
@@ -718,7 +659,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
             const SizedBox(height: 14),
             Text('Identity Check', style: TextStyle(color: _text)),
             Text(
-              'COMPLETED OCT 24',
+              'AFTER ACCOUNT CREATION',
               style: TextStyle(color: _muted, fontSize: 10),
             ),
           ],
@@ -730,112 +671,130 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
 
   Widget _pageContent() => switch (_page) {
     0 => _accountPage(),
-    1 => _credentialsPage(),
-    2 => _otpPage(),
-    3 => _idPage(),
-    4 => _facePage(),
+    1 => _birthdayLocationPage(),
+    2 => _credentialsPage(),
+    3 => _otpPage(),
+    4 => _idPage(),
+    5 => _facePage(),
     _ => _reviewPage(),
   };
 
   @override
   Widget build(BuildContext context) => RegistrationValidationTheme(
-    child: PopScope(
-      canPop: _page == 0 && !widget.loading,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop && _page > 0 && !widget.loading) _goTo(_page - 1);
-      },
-      child: Scaffold(
-        backgroundColor: _surface,
-        appBar: AppBar(
-          backgroundColor: _surface,
-          foregroundColor: _text,
-          surfaceTintColor: Colors.transparent,
-          title: const Text('SwiftServe'),
-          leading: IconButton(
-            onPressed: widget.loading
-                ? null
-                : () {
-                    if (_page > 0) {
-                      _goTo(_page - 1);
-                    } else if (widget.onExit != null) {
-                      widget.onExit!();
-                    } else {
-                      Navigator.maybePop(context);
-                    }
-                  },
-            icon: const Icon(Icons.arrow_back),
-          ),
-        ),
-        body: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              _header(),
-              Expanded(
-                child: Form(
-                  key: widget.formKey,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _pageContent(),
-                        const SizedBox(height: 12),
-                        FilledButton(
-                          key: const ValueKey('client-registration-next'),
-                          onPressed: widget.loading ? null : _continue,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: _yellow,
-                            foregroundColor: AppTheme.ink,
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                          child: widget.loading
-                              ? const SizedBox.square(
-                                  dimension: 22,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  _page == 4
-                                      ? 'Start scan'
-                                      : _page == 5
-                                      ? 'Go to Dashboard'
-                                      : 'Next',
-                                ),
-                        ),
-                        if (_page == 3 || _page == 4)
-                          TextButton(
-                            onPressed: () => _goTo(_page + 1),
-                            child: const Text('Skip for now'),
-                          ),
-                        const SizedBox(height: 8),
-                        if (!widget.federatedAccount)
-                          TextButton(
-                            onPressed: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                            ),
-                            child: const Text(
-                              'Already have an account? Log In',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
+    child: _page == 3
+        ? _otpPage()
+        : PopScope(
+            canPop: _page == 0 && !widget.loading && !widget.credentialsLocked,
+            onPopInvokedWithResult: (didPop, _) {
+              if (!didPop && !widget.loading) {
+                if (_page > 0) {
+                  _goTo(_page - 1);
+                } else {
+                  widget.onExit?.call();
+                }
+              }
+            },
+            child: Scaffold(
+              backgroundColor: _surface,
+              appBar: AppBar(
+                backgroundColor: _surface,
+                foregroundColor: _text,
+                surfaceTintColor: Colors.transparent,
+                title: const Text('SwiftServe'),
+                leading: IconButton(
+                  onPressed: widget.loading
+                      ? null
+                      : () {
+                          if (_page > 0) {
+                            _goTo(_page - 1);
+                          } else if (widget.onExit != null) {
+                            widget.onExit!();
+                          } else {
+                            Navigator.maybePop(context);
+                          }
+                        },
+                  icon: const Icon(Icons.arrow_back),
                 ),
               ),
-            ],
+              body: SafeArea(
+                top: false,
+                child: Column(
+                  children: [
+                    _header(),
+                    Expanded(
+                      child: Form(
+                        key: widget.formKey,
+                        autovalidateMode: AutovalidateMode.onUnfocus,
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          padding: const EdgeInsets.fromLTRB(24, 10, 24, 28),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _pageContent(),
+                              const SizedBox(height: 12),
+                              FilledButton(
+                                key: const ValueKey('client-registration-next'),
+                                onPressed:
+                                    widget.loading ||
+                                        _identity.busy ||
+                                        _identity.capturing
+                                    ? null
+                                    : _continue,
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: _yellow,
+                                  foregroundColor: AppTheme.ink,
+                                  minimumSize: const Size.fromHeight(52),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: widget.loading
+                                    ? const SizedBox.square(
+                                        dimension: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
+                                    : Text(
+                                        _page == 6 ? 'Go to Dashboard' : 'Next',
+                                      ),
+                              ),
+                              if (_page == 4 || _page == 5)
+                                TextButton(
+                                  onPressed:
+                                      widget.loading ||
+                                          _identity.busy ||
+                                          _identity.capturing
+                                      ? null
+                                      : () async {
+                                          await _identity.skip(id: _page == 4);
+                                          if (mounted) _goTo(_page + 1);
+                                        },
+                                  child: const Text('Skip for now'),
+                                ),
+                              const SizedBox(height: 8),
+                              if (!widget.federatedAccount)
+                                TextButton(
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const LoginScreen(),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Already have an account? Log In',
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
-      ),
-    ),
   );
 }

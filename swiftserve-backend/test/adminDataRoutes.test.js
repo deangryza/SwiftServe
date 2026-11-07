@@ -13,12 +13,17 @@ const doc = (name, id) => ({ id, exists: Boolean(records[name][id]), data: () =>
 const db = {
   collection: name => ({
     get: async () => ({ docs: Object.keys(records[name]).map(id => doc(name, id)) }),
-    doc: id => ({ get: async () => doc(name, id), update: async data => { writes++; records[name][id] = { ...records[name][id], ...data }; } }),
+    doc: (id = `generated-${writes}`) => ({ id, get: async () => doc(name, id),
+      set: async data => { writes++; records[name] ||= {}; records[name][id] = data; },
+      update: async data => { writes++; records[name][id] = { ...records[name][id], ...data }; } }),
   }),
-  runTransaction: async callback => callback({ get: reference => reference.get(), update: (reference, data) => reference.update(data) }),
+  runTransaction: async callback => callback({ get: reference => reference.get(), update: (reference, data) => reference.update(data), set: (reference, data) => reference.set(data) }),
 };
 const configPath = require.resolve('../src/config/firebase');
-require.cache[configPath] = { id: configPath, filename: configPath, loaded: true, exports: { db, auth: { verifyIdToken: async token => ({ uid: 'admin', admin: token === 'admin' }) } } };
+require.cache[configPath] = { id: configPath, filename: configPath, loaded: true, exports: { db, auth: {
+  verifyIdToken: async token => ({ uid: 'admin', admin: token === 'admin' }),
+  getUser: async uid => ({ uid, disabled: false, customClaims: { admin: uid === 'admin' } }),
+} } };
 const app = express();
 app.use(express.json());
 app.use('/api/admin', require('../src/routes/adminDataRoutes'));
@@ -45,6 +50,7 @@ test('accepted bookings require override and completed bookings cannot be cancel
   assert.equal(writes, initialWrites);
   await request(app).patch('/api/admin/bookings/booking').set('Authorization', 'Bearer admin').send({ status: 'Cancelled', override: true }).expect(200);
   assert.equal(records.service_requests.booking.status, 'cancelled');
+  assert.ok(Object.values(records.admin_audit_logs).some(item => item.action === 'booking.cancelled' && item.targetId === 'booking'));
   records.service_requests.booking.status = 'completed';
   await request(app).patch('/api/admin/bookings/booking').set('Authorization', 'Bearer admin').send({ status: 'Cancelled', override: true }).expect(409);
 });

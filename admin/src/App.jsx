@@ -12,11 +12,14 @@ import ServiceCategories from "./page/categories/ServiceCategories";
 import WorkerVerification from "./page/verification/WorkerVerification";
 import ProtectedRoute from "./components/ProtectedRoute";
 import SosAlerts from "./page/sos/SosAlerts";
+import AdminManagement from './page/administrators/AdminManagement';
+import { AdminAccessProvider } from './lib/AdminAccessContext';
 
 
 export default function App() {
   return (
     <BrowserRouter>
+      <AdminAccessProvider>
       <Toaster position="top-right" />
 
       <Routes>
@@ -26,32 +29,34 @@ export default function App() {
 
         {/* Dashboard */}
         <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-          <Route index element={<DashboardHome />} />
+          <Route index element={<ProtectedRoute module="/dashboard"><DashboardHome /></ProtectedRoute>} />
 
         {/* Booking Management */}
-        <Route path="bookings" element={<BookingManagement />} />
+        <Route path="bookings" element={<ProtectedRoute module="/dashboard/bookings"><BookingManagement /></ProtectedRoute>} />
 
         {/* User Management */}
-        <Route path="users" element={<UserManagement />} />
+        <Route path="users" element={<ProtectedRoute module="/dashboard/users"><UserManagement /></ProtectedRoute>} />
 
         {/* Admin Profile Management */}
         <Route path="profile" element={<Profile />} />
         
         {/* Report Management */}
-        <Route path="reports" element={<ReportsManagement />} />
+        <Route path="reports" element={<ProtectedRoute module="/dashboard/reports"><ReportsManagement /></ProtectedRoute>} />
 
         {/* Service Categories */}
-        <Route path="categories" element={<ServiceCategories />} />
+        <Route path="categories" element={<ProtectedRoute module="/dashboard/categories"><ServiceCategories /></ProtectedRoute>} />
 
-        <Route path="verification" element={<WorkerVerification />} />
+        <Route path="verification" element={<ProtectedRoute module="/dashboard/verification"><WorkerVerification /></ProtectedRoute>} />
 
         {/* SOS emergency alerts */}
-        <Route path="sos" element={<SosAlerts />} />
+        <Route path="sos" element={<ProtectedRoute module="/dashboard/sos"><SosAlerts /></ProtectedRoute>} />
+        <Route path="administrators" element={<ProtectedRoute module="/dashboard/administrators"><AdminManagement /></ProtectedRoute>} />
 
 
         </Route>
 
       </Routes>
+      </AdminAccessProvider>
     </BrowserRouter>
   );
 }

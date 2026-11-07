@@ -1,4 +1,5 @@
 # Miscellaneous
+.netlify/
 *.class
 *.log
 *.pyc

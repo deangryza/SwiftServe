@@ -9,15 +9,13 @@ const {
   resolveUploadsDir,
   saveLocalBuffer,
 } = require('./verificationStorageService');
-const {
-  AUTO_REVIEWER,
-  addStatusWrites,
-  purgeDateFor,
-} = require('./verificationDecisionService');
+const { SCHEMA_VERSION, newEvidence, faceResultFor } = require('./workerVerificationPolicy');
+const { evaluateWorkerVerification } = require('./verificationDecisionService');
+const { validateFaceCapture } = require('./captureQualityService');
 
 // Euclidean distance between face-api descriptors, mapped to a 0-100
-// similarity. Anchors are calibrated for ID photo vs live selfie, where the
-// same person usually lands around 0.35-0.5 rather than near 0.
+// similarity using historical display anchors. These anchors are not supported
+// by a measured SwiftServe genuine/impostor calibration dataset.
 const SIMILARITY_ANCHORS = Object.freeze([
   [0, 100],
   [0.45, 80],
@@ -26,6 +24,7 @@ const SIMILARITY_ANCHORS = Object.freeze([
 ]);
 const DEFAULT_AUTO_VERIFY_MIN = 80;
 const DEFAULT_REVIEW_MIN = 60;
+const DESCRIPTOR_DIMENSIONS = 128;
 const MODELS_PATH = path.resolve(__dirname, '../../models');
 const MODEL_FILES = Object.freeze([
   'ssd_mobilenetv1_model-weights_manifest.json',
@@ -179,7 +178,7 @@ const largestDetection = (detections) => detections.reduce((largest, current) =>
   current.detection.box.area > largest.detection.box.area ? current : largest
 ));
 
-const getFaceDescriptor = async (imageBuffer, image, runtime) => {
+const getFaceDescriptor = async (imageBuffer, image, runtime, { quality = validateFaceCapture } = {}) => {
   const activeRuntime = runtime || await loadModels();
   const decodedImage = await activeRuntime.loadImage(imageBuffer);
   // Honour the EXIF tag first, then try the other orientations in case the ID
@@ -196,9 +195,16 @@ const getFaceDescriptor = async (imageBuffer, image, runtime) => {
       .withFaceLandmarks()
       .withFaceDescriptors();
     if (detections.length === 0) continue;
-    if (detections.length === 1) return detections[0].descriptor;
+    if (detections.length === 1) {
+      await quality(candidate, detections[0], image);
+      return detections[0].descriptor;
+    }
     // Many IDs print a small secondary "ghost" portrait; use the main photo.
-    if (image === 'document') return largestDetection(detections).descriptor;
+    if (image === 'document') {
+      const selected = largestDetection(detections);
+      await quality(candidate, selected, image);
+      return selected.descriptor;
+    }
     throw new FaceDetectionError('MULTIPLE_FACES_DETECTED', image);
   }
   throw new FaceDetectionError('FACE_NOT_DETECTED', image);
@@ -238,17 +244,30 @@ const bandFor = (similarity, { autoVerifyMin, reviewMin }) => {
 };
 
 const compareDescriptors = (a, b, thresholds = decisionThresholds()) => {
-  if (!a || !b || a.length === 0 || a.length !== b.length) {
-    throw new TypeError('Face descriptors must be non-empty and have equal lengths.');
+  const invalid = message => Object.assign(new TypeError(message), { code: 'INVALID_FACE_DESCRIPTOR' });
+  for (const descriptor of [a, b]) {
+    if (!(Array.isArray(descriptor) || ArrayBuffer.isView(descriptor)) || descriptor.length !== DESCRIPTOR_DIMENSIONS) {
+      throw invalid(`Face descriptors must contain exactly ${DESCRIPTOR_DIMENSIONS} dimensions.`);
+    }
+    let nonzero = false;
+    for (let index = 0; index < DESCRIPTOR_DIMENSIONS; index += 1) {
+      if (!Number.isFinite(descriptor[index])) {
+        throw invalid('Face descriptors must contain only finite numbers.');
+      }
+      if (descriptor[index] !== 0) nonzero = true;
+    }
+    // Exact zero is a known unusable output, including the library's empty-crop
+    // fallback. No norm interval or normalization is justified by current data.
+    if (!nonzero) throw invalid('Face descriptors must not be zero vectors.');
   }
 
   let squaredDifference = 0;
   for (let index = 0; index < a.length; index += 1) {
-    if (!Number.isFinite(a[index]) || !Number.isFinite(b[index])) {
-      throw new TypeError('Face descriptors must contain only finite numbers.');
-    }
     const difference = a[index] - b[index];
     squaredDifference += difference * difference;
+  }
+  if (!Number.isFinite(squaredDifference)) {
+    throw invalid('Face descriptor distance could not be represented.');
   }
 
   const distance = Number(Math.sqrt(squaredDifference).toFixed(6));
@@ -309,6 +328,7 @@ const recordFailedAttempt = (verificationRef, comparison, thresholds, attemptedA
     similarity: comparison.similarity,
     distance: comparison.distance,
     reviewMin: thresholds.reviewMin,
+    face: faceResultFor(comparison),
     attemptedAt,
   })
   .catch((error) => console.error('Failed to record face match attempt:', error));
@@ -321,10 +341,12 @@ const compareAndCreateSubmission = async ({
   selfie,
   db,
   storage,
+  documentBinding,
   verify = verifyFaces,
   thresholds = decisionThresholds(),
   now = () => new Date(),
   uploadsDir = resolveUploadsDir(),
+  blobStorage = process.env.SWIFTSERVE_NETLIFY_PILOT === 'true' ? require('./netlifyVerificationStorage').getBlobStorage() : null,
 }) => {
   const userRef = db.collection('users').doc(uid);
   const verificationRef = db.collection('worker_verifications').doc(uid);
@@ -341,6 +363,9 @@ const compareAndCreateSubmission = async ({
     throw new VerificationConflictError('This worker is already verified.');
   }
   const prior = verificationSnapshot.exists ? verificationSnapshot.data() : null;
+  if (prior && prior.schemaVersion !== SCHEMA_VERSION) {
+    throw new VerificationConflictError('Legacy verification records are preserved pending a separately approved transition.');
+  }
   if (prior && !FINAL_OR_REPLACEABLE_STATUSES.has(prior.status)) {
     throw new VerificationConflictError('A verification submission is already being reviewed.');
   }
@@ -348,22 +373,24 @@ const compareAndCreateSubmission = async ({
   const comparison = await verify(document.buffer, selfie.buffer, { thresholds });
   if (!comparison.match) {
     await recordFailedAttempt(verificationRef, comparison, thresholds, now());
-    return comparison;
+    return { ...comparison, faceResult: faceResultFor(comparison) };
   }
 
   const submittedAt = now();
-  const autoVerified = comparison.band === 'strong';
-  const status = autoVerified ? 'verified' : 'pending';
+  // Face matching is independent evidence, never worker authorization.
+  const status = 'pending';
   const submissionId = crypto.randomUUID();
+  const evidence = newEvidence(comparison, { workerId: uid, submissionId, now: submittedAt, thresholds });
+  const workerDecision = evaluateWorkerVerification(evidence, { workerId: uid, account: user, now: submittedAt });
   const basePath = `worker_verifications/${uid}/${submissionId}`;
   // TODO(billing): local disk while there is no Storage bucket. Set
   // VERIFICATION_STORAGE=gcs with a real FIREBASE_STORAGE_BUCKET for production.
-  const backend = isLocalStorage() || !storage?.bucket ? LOCAL_BACKEND : 'gcs';
-  const bucket = backend === LOCAL_BACKEND ? null : storage.bucket();
+  const backend = blobStorage ? 'netlify-blobs' : (isLocalStorage() || !storage?.bucket ? LOCAL_BACKEND : 'gcs');
+  const bucket = backend === 'gcs' ? storage.bucket() : null;
   const storedPaths = [];
 
   try {
-    const governmentIdPath = await storeImage({
+    const governmentIdPath = blobStorage ? await blobStorage.save({ owner: uid, submissionId, kind: 'document', file: document }) : await storeImage({
       backend,
       bucket,
       filePath: `${basePath}/government_id.${extensionFor(document.mimetype)}`,
@@ -371,7 +398,7 @@ const compareAndCreateSubmission = async ({
       uploadsDir,
     });
     storedPaths.push(governmentIdPath);
-    const facePhotoPath = await storeImage({
+    const facePhotoPath = blobStorage ? await blobStorage.save({ owner: uid, submissionId, kind: 'selfie', file: selfie }) : await storeImage({
       backend,
       bucket,
       filePath: `${basePath}/face_photo.${extensionFor(selfie.mimetype)}`,
@@ -380,10 +407,14 @@ const compareAndCreateSubmission = async ({
     });
     storedPaths.push(facePhotoPath);
 
-    const batch = db.batch();
+    const writeSubmission = async batch => {
+    if (blobStorage) await blobStorage.attach(batch, storedPaths, uid, submissionId);
     batch.set(verificationRef, {
+      ...evidence,
+      workerDecision,
       workerId: uid,
       submissionId,
+      ...(documentBinding ? { documentBinding } : {}),
       idType: String(idType).trim(),
       maskedIdNumber: maskIdNumber(idNumber),
       governmentIdPath,
@@ -398,44 +429,50 @@ const compareAndCreateSubmission = async ({
       faceMatchBand: comparison.band,
       faceMatchThreshold: thresholds.reviewMin,
       faceAutoVerifyMin: thresholds.autoVerifyMin,
-      faceReviewFlag: autoVerified ? FieldValue.delete() : 'borderline',
+      faceReviewFlag: comparison.band === 'borderline' ? 'borderline' : FieldValue.delete(),
       faceVerificationProvider: 'local_face_api',
       faceVerifiedAt: submittedAt,
       status,
       adminNotes: '',
       submittedAt,
       updatedAt: submittedAt,
-      ...(autoVerified
-        ? {
-          reviewedAt: submittedAt,
-          reviewedBy: AUTO_REVIEWER,
-          purgeAfter: purgeDateFor(status, submittedAt),
-        }
-        : {
-          reviewedAt: FieldValue.delete(),
-          reviewedBy: FieldValue.delete(),
-          purgeAfter: FieldValue.delete(),
-        }),
+      reviewedAt: FieldValue.delete(),
+      reviewedBy: FieldValue.delete(),
+      purgeAfter: FieldValue.delete(),
     }, { merge: true });
-    if (autoVerified) {
-      addStatusWrites(batch, db, uid, status, { senderId: AUTO_REVIEWER, now: submittedAt });
-    }
-    await batch.commit();
+    };
+    // Recheck after inference/upload in every storage mode. A concurrent legacy
+    // approval or newer submission must not be overwritten by this request.
+    await db.runTransaction(async tx => {
+        const currentUser = await tx.get(userRef), currentVerification = await tx.get(verificationRef);
+        if (documentBinding) {
+          await require('./documentSuitabilityService').acceptedDocument(db, uid, documentBinding.sessionId, documentBinding.attemptId, documentBinding.sha256, tx);
+        }
+        if (currentUser.data()?.role !== 'worker' || currentUser.data()?.verificationStatus === 'verified' ||
+          (currentVerification.exists && currentVerification.data().schemaVersion !== SCHEMA_VERSION) ||
+          (currentVerification.exists && !FINAL_OR_REPLACEABLE_STATUSES.has(currentVerification.data().status))) {
+          throw new VerificationConflictError('Verification eligibility changed during upload.');
+        }
+        await writeSubmission(tx);
+    });
   } catch (error) {
-    await removeStoredFiles({ paths: storedPaths, backend, storage, uploadsDir }).catch(() => {});
+    if (blobStorage) await blobStorage.requestDeletion(storedPaths).catch(() => {});
+    else await removeStoredFiles({ paths: storedPaths, backend, storage, uploadsDir }).catch(() => {});
     throw error;
   }
 
   if (prior) {
     const priorPaths = [prior.governmentIdPath, prior.facePhotoPath];
-    const cleanup = (prior.storageBackend || 'gcs') === LOCAL_BACKEND
+    const cleanup = prior.storageBackend === 'netlify-blobs' && blobStorage
+      ? blobStorage.requestDeletion(priorPaths)
+      : (prior.storageBackend || 'gcs') === LOCAL_BACKEND
       ? removeStoredFiles({ paths: priorPaths, backend: LOCAL_BACKEND, uploadsDir })
       : markForDeletion(storage.bucket(), priorPaths, submittedAt);
     await cleanup
       .catch((error) => console.error('Failed to clean up replaced verification images:', error));
   }
 
-  return { ...comparison, status };
+  return { ...comparison, status, faceResult: evidence.face, workerDecision };
 };
 
 const resetModelStateForTests = () => {
@@ -446,6 +483,7 @@ const resetModelStateForTests = () => {
 module.exports = {
   DEFAULT_AUTO_VERIFY_MIN,
   DEFAULT_REVIEW_MIN,
+  DESCRIPTOR_DIMENSIONS,
   MODEL_FILES,
   MODELS_PATH,
   FaceDetectionError,

@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import '../widgets/policy_consent.dart';
 import '../../../../shared/theme/app_theme.dart';
 import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
@@ -22,6 +23,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   bool _loading = false;
+  bool _acceptedPolicies = false;
+  bool _showPolicyError = false;
   bool _resettingPassword = false;
   bool _hasSignedInBefore = false;
   bool _showPassword = false;
@@ -46,8 +49,15 @@ class _LoginScreenState extends State<LoginScreen> {
     await preferences.setBool(_signedInBeforeKey, true);
   }
 
+  bool _validateConsent() {
+    if (_acceptedPolicies) return true;
+    setState(() => _showPolicyError = true);
+    _showMessage(PolicyConsent.requiredMessage);
+    return false;
+  }
+
   Future<void> _loginWithGoogle() async {
-    if (_loading) return;
+    if (_loading || !_validateConsent()) return;
     setState(() => _loading = true);
     try {
       await GoogleAuthService().signIn();
@@ -80,6 +90,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
+    if (_loading || !_validateConsent()) return;
     final email = _email.text.trim();
     if (email.isEmpty || _password.text.isEmpty) {
       _showMessage('Enter your email and password.');
@@ -321,7 +332,16 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(height: 30),
+                                    PolicyConsent(
+                                      value: _acceptedPolicies,
+                                      onChanged: (value) => setState(() {
+                                        _acceptedPolicies = value;
+                                        _showPolicyError = false;
+                                      }),
+                                      enabled: !_loading,
+                                      showError: _showPolicyError,
+                                    ),
+                                    const SizedBox(height: 16),
                                     FilledButton(
                                       onPressed: _loading ? null : _login,
                                       style: FilledButton.styleFrom(

@@ -5,6 +5,31 @@ import 'package:my_app/shared/models/service_request.dart';
 import 'package:my_app/shared/utils/service_schedule.dart';
 
 void main() {
+  test(
+    'explicit service deadline is reached at exactly 3 PM Philippine time',
+    () {
+      final start = DateTime.utc(2026, 10, 31, 7);
+      final request = ServiceRequest.fromMap('cleaning', {
+        'scheduleFrom': Timestamp.fromDate(start),
+      });
+      expect(
+        serviceStartHasPassed(
+          request,
+          now: start.subtract(const Duration(microseconds: 1)),
+        ),
+        isFalse,
+      );
+      expect(serviceStartHasPassed(request, now: start), isTrue);
+      expect(
+        serviceStartHasPassed(
+          request,
+          now: start.add(const Duration(seconds: 1)),
+        ),
+        isTrue,
+      );
+      expect(request.applicationDeadlineReached(now: start), isTrue);
+    },
+  );
   final today = DateTime(2026, 10, 29);
   final tomorrow = DateTime(2026, 10, 30);
   final now = DateTime.utc(2026, 10, 29, 6, 30); // 2:30 PM PHT.

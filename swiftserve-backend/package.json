@@ -9,13 +9,18 @@
     "test": "node --test",
     "models:download": "node scripts/downloadFaceModels.js",
     "admin:claim": "node scripts/setAdminClaim.js",
-    "jobs:cleanup": "node --use-system-ca scripts/runExpiredJobCleanup.js"
+    "jobs:cleanup": "node --use-system-ca scripts/runExpiredJobCleanup.js",
+    "pilot:dev": "node --use-system-ca scripts/startNetlifyPilot.js",
+    "pilot:seed": "node --use-system-ca scripts/seedNetlifyPilot.js --seed",
+    "pilot:test:http": "node --use-system-ca scripts/testNetlifyPilotHttp.js",
+    "pilot:images:reconcile": "node --use-system-ca scripts/reconcileNetlifyPilotImages.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@netlify/blobs": "^11.1.7",
     "@tensorflow/tfjs": "4.22.0",
     "@tensorflow/tfjs-backend-wasm": "4.22.0",
     "@vladmandic/face-api": "1.7.15",
@@ -25,9 +30,11 @@
     "express": "^5.2.1",
     "express-rate-limit": "^8.7.0",
     "firebase-admin": "^14.4.0",
-    "multer": "^2.4.0"
+    "multer": "^2.5.0",
+    "serverless-http": "^4.0.0"
   },
   "devDependencies": {
+    "netlify-cli": "^27.16.1",
     "supertest": "^7.3.0"
   }
 }

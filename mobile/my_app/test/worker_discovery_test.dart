@@ -116,6 +116,23 @@ class _Location extends DeviceLocationService {
 
 void main() {
   test(
+    'face and mock decision aliases cannot make a pending public worker eligible',
+    () {
+      final pending = DiscoveredWorker(
+        id: 'worker',
+        data: {
+          'workerId': 'worker',
+          'role': 'worker',
+          'verificationStatus': 'pending',
+          'faceVerified': true,
+          'officiallyVerified': true,
+          'workerDecision': {'eligible': true, 'status': 'APPROVED'},
+        },
+      );
+      expect(pending.eligibleFor('client'), isFalse);
+    },
+  );
+  test(
     'worker discovery geocodes the public locality, never the residential address',
     () async {
       const exact = '123 Example Street, Brgy. Ligas, Malolos, Bulacan';
