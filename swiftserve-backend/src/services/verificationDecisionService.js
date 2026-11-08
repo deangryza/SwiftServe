@@ -10,10 +10,18 @@ const purgeDateFor = (status, now) => (
   isFinalStatus(status) ? new Date(now.getTime() + RETENTION_MS) : null
 );
 
+// Records older than the current evidence schema can be turned down or sent
+// back for a fresh submission, but can never be approved.
+const LEGACY_CLOSING_STATUSES = new Set(['rejected', 'resubmission_required']);
+const isLegacyClosure = (evidence, workerId, status) => Boolean(evidence)
+  && evidence.schemaVersion !== SCHEMA_VERSION && LEGACY_CLOSING_STATUSES.has(status)
+  && (evidence.workerId === undefined || evidence.workerId === workerId);
+
 // `users.verificationStatus` and `worker_profiles.verificationStatus` drive the
 // verified badge in the mobile app.
 const addStatusWrites = (batch, db, workerId, status, { senderId, now, evidence, account }) => {
-  if (evidence?.schemaVersion !== SCHEMA_VERSION || evidence.workerId !== workerId
+  const currentEvidence = evidence?.schemaVersion === SCHEMA_VERSION && evidence.workerId === workerId;
+  if ((!currentEvidence && !isLegacyClosure(evidence, workerId, status))
       || account?.verificationStatus === 'verified') {
     throw Object.assign(new Error('Legacy records require a separately approved transition.'), { status: 409, code: 'LEGACY_VERIFICATION_PROTECTED' });
   }
@@ -51,6 +59,7 @@ module.exports = {
   AUTO_REVIEWER,
   evaluateWorkerVerification,
   addStatusWrites,
+  isLegacyClosure,
   isFinalStatus,
   purgeDateFor,
 };

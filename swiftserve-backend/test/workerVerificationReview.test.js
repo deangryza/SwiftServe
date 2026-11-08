@@ -83,11 +83,55 @@ test('complete synthetic policy fixture commits review, eligibility and audit to
   assert.equal(records.get('worker_verifications/worker').workerDecision.eligible, true);
   assert.ok(writes.some(write => write.ref.name === 'admin_audit_logs'));
 });
-test('all legacy records and already verified accounts are preserved without writes', async () => {
+for (const status of ['rejected', 'resubmission_required']) {
+  test(`reviewable submission can be marked ${status} with notes`, async () => {
+    const details = await request(app).get('/review/worker').set('Authorization', 'Bearer reviewer').expect(200);
+    assert.equal(details.body.item.reviewable, true);
+    const response = await review('reviewer', { status, adminNotes: 'Photo is blurry.' }).expect(200);
+    assert.equal(response.body.item.status, status);
+    assert.equal(records.get('worker_verifications/worker').status, status);
+    assert.equal(records.get('worker_verifications/worker').adminNotes, 'Photo is blurry.');
+    assert.equal(records.get('users/worker').verificationStatus, status);
+    assert.equal(records.get('worker_profiles/worker').verificationStatus, status);
+    assert.ok(writes.some(write => write.ref.name === 'notifications'));
+    assert.ok(writes.some(write => write.ref.name === 'admin_audit_logs'));
+  });
+}
+const makeLegacy = () => {
+  records.set('worker_verifications/worker', { status: 'pending', storageBackend: 'local', idSubmitted: true });
+};
+for (const status of ['rejected', 'resubmission_required']) {
+  test(`unverified legacy submission can be marked ${status}`, async () => {
+    makeLegacy();
+    const details = await request(app).get('/review/worker').set('Authorization', 'Bearer reviewer').expect(200);
+    assert.equal(details.body.item.reviewable, true);
+    assert.equal(details.body.item.approvalReady, false);
+    const response = await review('reviewer', { status, adminNotes: 'Please resend.' }).expect(200);
+    assert.equal(response.body.item.status, status);
+    assert.equal(records.get('users/worker').verificationStatus, status);
+    assert.equal(records.get('worker_verifications/worker').schemaVersion, undefined);
+    assert.ok(writes.some(write => write.ref.name === 'admin_audit_logs'));
+  });
+}
+test('rejecting a legacy record still succeeds when its stored images cannot be marked', async () => {
+  records.set('worker_verifications/worker', { status: 'pending', governmentIdPath: 'old/id.jpg' }); // Defaults to gcs.
+  await review('reviewer', { status: 'rejected' }).expect(200);
+  assert.equal(records.get('users/worker').verificationStatus, 'rejected');
+});
+test('legacy records can never be approved or moved to any other status', async () => {
+  makeLegacy();
+  for (const status of ['verified', 'under_review']) {
+    const before = structuredClone([...records]);
+    const response = await review('reviewer', { status }).expect(409);
+    assert.equal(response.body.code, 'LEGACY_VERIFICATION_PROTECTED');
+    assert.deepEqual([...records], before); assert.equal(writes.length, 0);
+  }
+});
+test('verified legacy records and already verified accounts are preserved without writes', async () => {
   for (const legacy of [true, false]) {
     const record = records.get('worker_verifications/worker');
-    if (legacy) delete record.schemaVersion;
-    else { record.schemaVersion = 2; records.get('users/worker').verificationStatus = 'verified'; }
+    if (legacy) { delete record.schemaVersion; record.status = 'verified'; }
+    else { record.schemaVersion = 2; record.status = 'pending'; records.get('users/worker').verificationStatus = 'verified'; }
     const before = structuredClone([...records]);
     const response = await review('reviewer', { status: 'rejected' }).expect(409);
     assert.equal(response.body.code, 'LEGACY_VERIFICATION_PROTECTED');

@@ -20,7 +20,7 @@ import { VERIFICATION_STATUS } from "../../data/workerVerification";
 import { apiRequestBinary } from "../../lib/api";
 import { protectedImagePath, usesProtectedImages } from '../../lib/verificationImages';
 import { useAdminAccess } from '../../lib/AdminAccessContext';
-import { canApproveEvidence, canReviewEvidence, verificationRows, verificationBlockers } from '../../lib/verificationEvidence';
+import { canApproveEvidence, canReviewEvidence, reviewBlockedReason, verificationRows, verificationBlockers } from '../../lib/verificationEvidence';
 
 // TODO(billing): local image links are backend routes needing the admin token,
 // so they open via an authenticated fetch into a blob URL. GCS signed URLs
@@ -73,6 +73,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
   const canManage = can('verification.manage');
   const reviewable = canReviewEvidence(request, canManage);
   const approvalReady = canApproveEvidence(request, canManage);
+  const blockedReason = reviewBlockedReason(request, canManage);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -311,6 +312,11 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                   className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400 resize-none"
                 />
               </div>
+              {blockedReason && (
+                <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                  {blockedReason}
+                </p>
+              )}
             </section>
           </div>
 
@@ -327,7 +333,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
               type="button"
               onClick={handleResubmission}
               disabled={saving || !reviewable}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-orange-200 text-sm text-orange-600 hover:bg-orange-50 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-orange-200 text-sm text-orange-600 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
               <RotateCcw size={15} />
               Request Resubmission
@@ -336,7 +342,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
               type="button"
               onClick={handleReject}
               disabled={saving || !reviewable}
-              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 text-sm text-white hover:bg-red-700 transition-colors"
+              className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-red-600 text-sm text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
             >
               <XCircle size={15} />
               Reject

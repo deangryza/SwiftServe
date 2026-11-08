@@ -356,8 +356,17 @@ test('deletes replaced local images after a new submission', async () => {
   await assert.rejects(fs.access(path.join(uploadsDir, 'old/id.jpg')));
 });
 
-test('existing verified workers and all legacy verification records remain untouched', async () => {
-  for (const options of [{ userStatus: 'verified' }, { prior: { status: 'pending' } }, { prior: { status: 'rejected' } }]) {
+for (const status of ['rejected', 'resubmission_required']) {
+  test(`legacy ${status} worker can submit under the current checks`, async () => {
+    const fixture = fixtures({ prior: { status, governmentIdPath: 'old/id.jpg' } });
+    await compareAndCreateSubmission(input(fixture, async () => comparison('strong', 99)));
+    assert.equal(fixture.record().schemaVersion, 2);
+    assert.equal(fixture.record().status, 'pending');
+  });
+}
+
+test('existing verified workers and legacy submissions still under review remain untouched', async () => {
+  for (const options of [{ userStatus: 'verified' }, { prior: { status: 'pending' } }, { prior: { status: 'verified' } }]) {
     const fixture = fixtures(options);
     let compared = false;
     await assert.rejects(compareAndCreateSubmission(input(fixture, async () => { compared = true; return comparison('strong', 99); })), { name: 'VerificationConflictError' });

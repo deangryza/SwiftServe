@@ -9,7 +9,7 @@ const {
   resolveUploadsDir,
   saveLocalBuffer,
 } = require('./verificationStorageService');
-const { SCHEMA_VERSION, newEvidence, faceResultFor } = require('./workerVerificationPolicy');
+const { newEvidence, faceResultFor } = require('./workerVerificationPolicy');
 const { evaluateWorkerVerification } = require('./verificationDecisionService');
 const { validateFaceCapture } = require('./captureQualityService');
 
@@ -363,9 +363,6 @@ const compareAndCreateSubmission = async ({
     throw new VerificationConflictError('This worker is already verified.');
   }
   const prior = verificationSnapshot.exists ? verificationSnapshot.data() : null;
-  if (prior && prior.schemaVersion !== SCHEMA_VERSION) {
-    throw new VerificationConflictError('Legacy verification records are preserved pending a separately approved transition.');
-  }
   if (prior && !FINAL_OR_REPLACEABLE_STATUSES.has(prior.status)) {
     throw new VerificationConflictError('A verification submission is already being reviewed.');
   }
@@ -449,7 +446,6 @@ const compareAndCreateSubmission = async ({
           await require('./documentSuitabilityService').acceptedDocument(db, uid, documentBinding.sessionId, documentBinding.attemptId, documentBinding.sha256, tx);
         }
         if (currentUser.data()?.role !== 'worker' || currentUser.data()?.verificationStatus === 'verified' ||
-          (currentVerification.exists && currentVerification.data().schemaVersion !== SCHEMA_VERSION) ||
           (currentVerification.exists && !FINAL_OR_REPLACEABLE_STATUSES.has(currentVerification.data().status))) {
           throw new VerificationConflictError('Verification eligibility changed during upload.');
         }
@@ -463,12 +459,13 @@ const compareAndCreateSubmission = async ({
 
   if (prior) {
     const priorPaths = [prior.governmentIdPath, prior.facePhotoPath];
-    const cleanup = prior.storageBackend === 'netlify-blobs' && blobStorage
-      ? blobStorage.requestDeletion(priorPaths)
-      : (prior.storageBackend || 'gcs') === LOCAL_BACKEND
-      ? removeStoredFiles({ paths: priorPaths, backend: LOCAL_BACKEND, uploadsDir })
-      : markForDeletion(storage.bucket(), priorPaths, submittedAt);
-    await cleanup
+    // Older records may name a storage target that is no longer configured.
+    await Promise.resolve()
+      .then(() => (prior.storageBackend === 'netlify-blobs' && blobStorage
+        ? blobStorage.requestDeletion(priorPaths)
+        : (prior.storageBackend || 'gcs') === LOCAL_BACKEND
+        ? removeStoredFiles({ paths: priorPaths, backend: LOCAL_BACKEND, uploadsDir })
+        : markForDeletion(storage.bucket(), priorPaths, submittedAt)))
       .catch((error) => console.error('Failed to clean up replaced verification images:', error));
   }
 

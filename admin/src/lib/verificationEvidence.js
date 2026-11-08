@@ -10,6 +10,16 @@ const reasons = {
 export const isMockEvidence = record => record?.providerType === 'MOCK' || record?.checkSource === 'SYNTHETIC_FIXTURE';
 export const canReviewEvidence = (record, canManage) => canManage === true && record?.reviewable === true && !isMockEvidence(record);
 export const canApproveEvidence = (record, canManage) => canReviewEvidence(record, canManage) && record.approvalReady === true;
+// Why the review buttons are off, so a disabled action is never unexplained.
+export function reviewBlockedReason(record, canManage) {
+  if (canReviewEvidence(record, canManage)) return null;
+  if (canManage !== true) return 'Your administrator account does not have permission to review worker verification.';
+  if (record?.reviewable === undefined) return 'The connected backend is out of date. Deploy the latest backend, then reopen this submission.';
+  if (isMockEvidence(record)) return 'Mock evidence cannot be reviewed.';
+  if (record.status === 'verified') return 'This worker is already verified, so this submission can no longer be changed.';
+  if (record.status === 'rejected') return 'This submission was already rejected. The worker can send a new one from the app.';
+  return 'This worker account is already verified, so this submission can no longer be changed.';
+}
 export function verificationRows(record) {
   const mock = isMockEvidence(record);
   return [

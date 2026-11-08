@@ -9,6 +9,7 @@ const {
 const {
   AUTO_REVIEWER,
   addStatusWrites,
+  isLegacyClosure,
   isFinalStatus,
   purgeDateFor,
   evaluateWorkerVerification,
@@ -31,7 +32,9 @@ const toIso = (value) => {
 
 const serialize = (id, verification, user = {}) => {
   const currentDecision = evaluateWorkerVerification(verification, { workerId: id, account: user });
-  const reviewable = verification.schemaVersion === SCHEMA_VERSION && !['verified', 'rejected'].includes(verification.status)
+  // Legacy records stay reviewable for reject/resubmit; approvalReady stays
+  // false for them because their evidence fails the current policy.
+  const reviewable = !['verified', 'rejected'].includes(verification.status)
     && user.verificationStatus !== 'verified';
   return ({
   verificationId: id,
@@ -166,7 +169,8 @@ const updateVerification = async (req, res) => {
       const before = verification.data(), account = user.data();
       const refuse = (code, message, status = 409) => { throw Object.assign(new Error(message), { code, status }); };
       if (!verification.exists || !user.exists) refuse('VERIFICATION_NOT_FOUND', 'Verification request not found.', 404);
-      if (before.schemaVersion !== SCHEMA_VERSION || before.status === 'verified' || account.verificationStatus === 'verified') {
+      if ((before.schemaVersion !== SCHEMA_VERSION && !isLegacyClosure(before, workerId, status))
+        || before.status === 'verified' || account.verificationStatus === 'verified') {
         refuse('LEGACY_VERIFICATION_PROTECTED', 'Existing verified and legacy records require a separately approved transition.');
       }
       if (isFinalStatus(before.status) && status !== before.status) refuse('FINAL_VERIFICATION_DECISION', 'A final verification decision cannot be reopened.');
@@ -204,11 +208,10 @@ const updateVerification = async (req, res) => {
           uploadsDir: resolveUploadsDir(),
         }).catch((error) => console.error('Failed to remove local verification images:', error));
       } else {
-        await markForDeletion(
-          storage.bucket(),
-          [before.governmentIdPath, before.facePhotoPath],
-          now,
-        );
+        // The decision is already saved, so a storage problem must not report failure.
+        await Promise.resolve()
+          .then(() => markForDeletion(storage.bucket(), [before.governmentIdPath, before.facePhotoPath], now))
+          .catch((error) => console.error('Failed to mark verification images for deletion:', error));
       }
     }
     return res.json({ item: serialize(workerId, updated, account) });
