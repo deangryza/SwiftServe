@@ -8,7 +8,9 @@ const { sendLocalFile } = require('../services/verificationStorageService');
 const { rateLimit } = require('express-rate-limit');
 const service = createDocumentService({ db, audit: addAudit });
 const safe = fn => async (req, res) => { try { await fn(req, res); } catch (e) {
-  res.status(e.status || 500).json({ code: e.status ? e.code : 'DOCUMENT_PROCESSING_ERROR', message: e.status === 422 ? 'Document unreadable. Please upload a clear JPEG/PNG document image.' : 'Document review could not be completed. Refresh its status and try again.' });
+  res.status(e.status || 500).json({ code: e.status ? e.code : 'DOCUMENT_PROCESSING_ERROR',
+    ...(e.status && e.publicMessage ? { reason: e.reason, image: e.image } : {}),
+    message: e.status && e.publicMessage ? e.publicMessage : e.status === 422 ? 'Document unreadable. Please upload a clear JPEG/PNG document image.' : 'Document review could not be completed. Refresh its status and try again.' });
 } };
 const user = express.Router(), review = express.Router();
 const localOnly = (_req,res,next) => { try { documentEnvironment(db); next(); } catch { res.status(503).json({code:'DOCUMENT_DEMO_ENVIRONMENT_REQUIRED',message:'Document review is available only in the isolated demo emulator pilot.'}); } };

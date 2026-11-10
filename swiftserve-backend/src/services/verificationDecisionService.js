@@ -1,6 +1,6 @@
-const { evaluateWorkerVerification, SCHEMA_VERSION } = require('./workerVerificationPolicy');
-// Retained only to identify historical face-only approvals, never for new approval.
-const AUTO_REVIEWER = 'auto_face_match';
+// AUTO_REVIEWER marks approvals made without a person: historical face-only
+// approvals, and strong matches while VERIFICATION_AUTO_APPROVE is on.
+const { evaluateWorkerVerification, SCHEMA_VERSION, AUTO_REVIEWER } = require('./workerVerificationPolicy');
 const FINAL_STATUSES = new Set(['verified', 'rejected']);
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 

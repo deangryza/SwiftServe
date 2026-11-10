@@ -18,7 +18,7 @@ export default function DocumentSuitabilityReviews() {
     if (!gate.current.tryStart()) return;
     setBusy(true); setError('');
     try { const result=await apiRequest(`/api/admin/document-reviews${more&&cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`); setItems(previous=>more ? [...new Map([...previous,...result.items].map(item=>[item.ownerId,item])).values()] : result.items);setCursor(result.next); }
-    catch { setError('Could not load document reviews. Check your access and refresh.'); }
+    catch (e) { setError(e?.status ? `Could not load document reviews: ${e.message}` : 'Could not load document reviews. Check that the API is running, then refresh.'); }
     finally { gate.current.finish(); if (alive.current) setBusy(false); }
   }
   useEffect(() => { if (can('verification.view')) load(); }, []);
@@ -43,9 +43,9 @@ export default function DocumentSuitabilityReviews() {
   }
   if (!can('verification.view')) return null;
   const reviewable = canReviewDocument(selected, can('verification.manage'));
-  return <section className="mb-6 rounded-2xl border border-gray-200 bg-white p-4">
-    <h2 className="text-lg font-semibold">Document suitability review</h2>
-    <p className="text-sm text-gray-600">Manual appearance review only. This does not authenticate an ID, pass liveness or approve a worker.</p>
+  return <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-4">
+    <h2 className="text-lg font-semibold">ID uploads</h2>
+    <p className="text-sm text-gray-600">ID photos are checked automatically when they are uploaded. Any upload still marked review required needs a manual decision here. This does not authenticate an ID or approve an account.</p>
     <button disabled={busy} onClick={()=>load()} className="my-3 rounded-lg border px-4 py-2">{busy ? 'Loading…' : 'Refresh documents'}</button>
     {cursor && <button disabled={busy} onClick={()=>load(true)} className="m-3 rounded-lg border px-4 py-2">Load older documents</button>}
     {error && <p role="alert" className="text-red-700">{error}</p>}

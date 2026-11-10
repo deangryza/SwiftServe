@@ -69,15 +69,17 @@ app.use('/api/identity', identityRouters.user);
 app.use('/api/admin/identity', identityRouters.review);
 app.use('/api/admin/verifications', adminVerificationRoutes);
 app.use('/api/admin/administrators', require('./routes/adminManagementRoutes'));
+// Must come before the generic /api/admin/:kind handler below, which answers
+// 404 for any name it does not know.
+const documentSuitability = require('./routes/documentSuitabilityRoutes');
+app.use('/api/admin/document-reviews', documentSuitability.review);
 app.use('/api/admin', require('./routes/adminDataRoutes'));
 app.use('/api/routes', require('./routes/routeRoutes'));
 app.use('/api/sos', require('./routes/sosRoutes'));
 app.use('/api/push', require('./routes/pushRoutes'));
 app.use('/api/otp', require('./routes/otpRoutes'));
 app.use('/api', verificationRoutes());
-const documentSuitability = require('./routes/documentSuitabilityRoutes');
 app.use('/api/verification/document', documentSuitability.user);
-app.use('/api/admin/document-reviews', documentSuitability.review);
 if (process.env.SWIFTSERVE_NETLIFY_PILOT === 'true') app.use('/api/pilot', require('./routes/netlifyPilotRoutes'));
 
 app.use((error, _req, res, _next) => {

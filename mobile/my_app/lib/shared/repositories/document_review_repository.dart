@@ -37,8 +37,14 @@ class DocumentReviewRepository implements DocumentReviewGateway {
 
   String get _url => '${ApiConfig.baseUrl}/api/verification/document';
   Map<String, dynamic> _parse(http.Response response) {
-    final body = jsonDecode(response.body);
-    if (response.statusCode >= 400) {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(response.body);
+    } on FormatException {
+      decoded = null;
+    }
+    final body = decoded is Map ? decoded : const {};
+    if (response.statusCode >= 400 || body['item'] is! Map) {
       throw DocumentReviewException(
         body['message'] ?? 'Document review failed. Refresh and try again.',
         body['code'],

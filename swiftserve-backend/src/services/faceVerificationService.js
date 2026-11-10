@@ -9,8 +9,8 @@ const {
   resolveUploadsDir,
   saveLocalBuffer,
 } = require('./verificationStorageService');
-const { newEvidence, faceResultFor, verifiableRoles } = require('./workerVerificationPolicy');
-const { evaluateWorkerVerification } = require('./verificationDecisionService');
+const { newEvidence, faceResultFor, verifiableRoles, autoApprove, AUTO_REVIEWER } = require('./workerVerificationPolicy');
+const { evaluateWorkerVerification, addStatusWrites, purgeDateFor } = require('./verificationDecisionService');
 const { validateFaceCapture } = require('./captureQualityService');
 
 // Euclidean distance between face-api descriptors, mapped to a 0-100
@@ -374,11 +374,14 @@ const compareAndCreateSubmission = async ({
   }
 
   const submittedAt = now();
-  // Face matching is independent evidence, never worker authorization.
-  const status = 'pending';
+  // Face matching alone never authorizes an account. The one exception is the
+  // opt-in auto-approve switch: a strong match on an accepted ID document.
+  let status = 'pending';
+  const autoEligible = autoApprove() && comparison.band === 'strong' && Boolean(documentBinding);
   const submissionId = crypto.randomUUID();
   const evidence = newEvidence(comparison, { workerId: uid, submissionId, now: submittedAt, thresholds });
-  const workerDecision = evaluateWorkerVerification(evidence, { workerId: uid, account: user, now: submittedAt });
+  let workerDecision = evaluateWorkerVerification(evidence, { workerId: uid, account: user, now: submittedAt });
+  let review = evidence.review;
   const basePath = `worker_verifications/${uid}/${submissionId}`;
   // TODO(billing): local disk while there is no Storage bucket. Set
   // VERIFICATION_STORAGE=gcs with a real FIREBASE_STORAGE_BUCKET for production.
@@ -406,14 +409,16 @@ const compareAndCreateSubmission = async ({
 
     const writeSubmission = async batch => {
     if (blobStorage) await blobStorage.attach(batch, storedPaths, uid, submissionId);
+    const approved = status === 'verified';
     batch.set(verificationRef, {
       ...evidence,
+      review,
       workerDecision,
       workerId: uid,
       submissionId,
       ...(documentBinding ? { documentBinding } : {}),
       idType: String(idType).trim(),
-      maskedIdNumber: maskIdNumber(idNumber),
+      maskedIdNumber: String(idNumber || '').trim() ? maskIdNumber(idNumber) : '',
       governmentIdPath,
       governmentIdMimeType: document.mimetype,
       facePhotoPath,
@@ -433,9 +438,9 @@ const compareAndCreateSubmission = async ({
       adminNotes: '',
       submittedAt,
       updatedAt: submittedAt,
-      reviewedAt: FieldValue.delete(),
-      reviewedBy: FieldValue.delete(),
-      purgeAfter: FieldValue.delete(),
+      reviewedAt: approved ? submittedAt : FieldValue.delete(),
+      reviewedBy: approved ? AUTO_REVIEWER : FieldValue.delete(),
+      purgeAfter: approved ? purgeDateFor(status, submittedAt) : FieldValue.delete(),
     }, { merge: true });
     };
     // Recheck after inference/upload in every storage mode. A concurrent legacy
@@ -448,6 +453,18 @@ const compareAndCreateSubmission = async ({
         if (!verifiableRoles.includes(currentUser.data()?.role) || currentUser.data()?.verificationStatus === 'verified' ||
           (currentVerification.exists && !FINAL_OR_REPLACEABLE_STATUSES.has(currentVerification.data().status))) {
           throw new VerificationConflictError('Verification eligibility changed during upload.');
+        }
+        if (autoEligible) {
+          const account = currentUser.data();
+          const autoReview = { required: true, status: 'APPROVED', reviewerId: AUTO_REVIEWER,
+            reasonCode: 'AUTO_STRONG_FACE_MATCH', reviewedAt: submittedAt };
+          const approvedEvidence = { ...evidence, review: autoReview };
+          if (evaluateWorkerVerification(approvedEvidence, { workerId: uid, account, now: submittedAt }).eligible) {
+            workerDecision = addStatusWrites(tx, db, uid, 'verified', {
+              senderId: AUTO_REVIEWER, now: submittedAt, evidence: approvedEvidence, account });
+            review = autoReview;
+            status = 'verified';
+          }
         }
         await writeSubmission(tx);
     });
@@ -469,7 +486,7 @@ const compareAndCreateSubmission = async ({
       .catch((error) => console.error('Failed to clean up replaced verification images:', error));
   }
 
-  return { ...comparison, status, faceResult: evidence.face, workerDecision };
+  return { ...comparison, status, faceResult: evidence.face, workerDecision, reviewStatus: review.status };
 };
 
 const resetModelStateForTests = () => {
