@@ -55,6 +55,24 @@ void main() {
     return (email, phone, key);
   }
 
+  testWidgets('an unfinished sign-up tells the owner to sign in and finish', (
+    tester,
+  ) async {
+    final (email, phone, key) = await mount(tester, (kind, value) async {
+      if (kind == 'email') throw const RegistrationIncompleteException();
+      return true;
+    });
+    email.text = 'half@example.com';
+    phone.text = '9171234567';
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pump();
+
+    expect(find.textContaining('unfinished sign-up'), findsOneWidget);
+    expect(find.text('This email address is already in use.'), findsNothing);
+    // It still blocks a second registration with that email.
+    expect(key.currentState!.hasCurrentAvailability, isFalse);
+  });
+
   testWidgets(
     'debounces typing and displays duplicate contact errors in red outlined fields',
     (tester) async {
@@ -182,6 +200,16 @@ void main() {
           idToken: 'token',
         ),
         isFalse,
+      );
+      final unfinished = ApiService(
+        client: MockClient(
+          (_) async =>
+              http.Response('{"available":false,"incomplete":true}', 200),
+        ),
+      );
+      await expectLater(
+        unfinished.registrationContactAvailable('email', 'half@example.com'),
+        throwsA(isA<RegistrationIncompleteException>()),
       );
       final invalid = ApiService(
         client: MockClient((_) async => http.Response('{}', 200)),

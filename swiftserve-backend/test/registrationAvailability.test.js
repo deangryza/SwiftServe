@@ -4,9 +4,11 @@ const crypto = require('node:crypto');
 const express = require('express');
 const request = require('supertest');
 
-const emails = new Map([['used@example.com', { uid: 'existing' }], ['google@example.com', { uid: 'google-user' }]]);
+const emails = new Map([['used@example.com', { uid: 'existing' }], ['google@example.com', { uid: 'google-user' }],
+  ['unfinished@example.com', { uid: 'no-profile' }], ['staff@example.com', { uid: 'staff-login', customClaims: { staff: true } }],
+  ['admin@example.com', { uid: 'admin-login', customClaims: { admin: true } }]]);
 const authPhones = new Map([['+639171111111', { uid: 'existing' }]]);
-const users = new Map([['legacy', { phoneNumber: '+639172222222' }]]);
+const users = new Map([['legacy', { phoneNumber: '+639172222222' }], ['existing', { role: 'client' }], ['google-user', { role: 'worker' }]]);
 const claims = new Map();
 const claimId = value => crypto.createHash('sha256').update(value).digest('hex');
 claims.set(claimId('+639173333333'), { uid: 'claimed' });
@@ -44,6 +46,13 @@ const app = express();
 app.use(express.json());
 app.use('/api/users', require('../src/routes/userRoutes'));
 const check = body => request(app).post('/api/users/registration-availability').send(body);
+
+test('a login without a profile is reported as an unfinished sign-up; staff logins are not', async () => {
+  assert.deepEqual((await check({ kind: 'email', value: 'Unfinished@Example.com' }).expect(200)).body, { available: false, incomplete: true });
+  for (const value of ['staff@example.com', 'admin@example.com']) {
+    assert.deepEqual((await check({ kind: 'email', value }).expect(200)).body, { available: false });
+  }
+});
 
 test('email checks normalize case and report password/federated accounts without user data', async () => {
   for (const email of [' USED@EXAMPLE.COM ', 'google@example.com']) {

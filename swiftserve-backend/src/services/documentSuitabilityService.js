@@ -42,7 +42,13 @@ function publicDocument(record) {
     reason: live(record) ? REASONS[record.reasonCode] || '' : 'Document review expired. Please upload a replacement.',
     history: (record.history || []).map(item => ({ ...item, reviewedAt: dateText(item.reviewedAt) })) };
 }
-function createDocumentService({ db, uploadsDir, audit }) {
+// Friendly retake guidance when the automatic ID check cannot use the photo.
+const FACE_GUIDANCE = Object.freeze({
+  FACE_NOT_DETECTED: 'We could not find the photo on your ID. Lay the card flat, fill the frame with it, avoid glare and try again.',
+  MULTIPLE_FACES_DETECTED: 'More than one face was found. Photograph only the ID card, with nothing else in the frame.',
+});
+const defaultFaceCheck = buffer => require('./faceVerificationService').getFaceDescriptor(buffer, 'document');
+function createDocumentService({ db, uploadsDir, audit, checkFace = defaultFaceCheck }) {
   const refFor = uid => db.collection('document_suitability').doc(uid);
   function active(user) {
     if (!user || !['client', 'worker'].includes(user.role) || [user.status, user.accountStatus].some(v => ['suspended','disabled','inactive'].includes(v))) throw fail('DOCUMENT_ACCOUNT_REQUIRED', 403);
@@ -68,9 +74,25 @@ function createDocumentService({ db, uploadsDir, audit }) {
       let decoded;
       try { decoded = await loadImage(file.buffer); } catch { throw fail('DOCUMENT_UNREADABLE', 422); }
       if (!decoded.width || !decoded.height || decoded.width * decoded.height > 16000000) throw fail('DOCUMENT_UNREADABLE', 422);
+      // Admin-review mode checks the ID straight away instead of queueing it for
+      // a person: the same face detection the later match uses must succeed.
+      const autoChecked = require('./workerVerificationPolicy').adminReviewMode();
+      if (autoChecked) {
+        try { await checkFace(file.buffer); } catch (error) {
+          if (!['FACE_NOT_DETECTED', 'MULTIPLE_FACES_DETECTED', 'IMAGE_QUALITY'].includes(error?.code)) throw error;
+          throw Object.assign(fail(error.code, 422), { reason: error.reason, image: 'document',
+            publicMessage: FACE_GUIDANCE[error.code] || `${error.message} Then photograph your ID again.` });
+        }
+      }
       // The submitted bytes are unchanged across Firestore retries. Hash once;
       // ownership, account state and attempt binding still recheck in every retry.
       const imageDigest = digest(file.buffer);
+      // The same photo file on a second account is one ID shared by two people.
+      const sameImage = await db.collection('document_suitability').where('sha256', '==', imageDigest).limit(5).get();
+      if (sameImage.docs.some(doc => doc.id !== uid)) {
+        throw Object.assign(fail('DOCUMENT_ALREADY_USED', 409), { image: 'document',
+          publicMessage: 'This ID photo is already in use on another account. Use your own ID, or contact support if this is a mistake.' });
+      }
       const attemptId = randomUUID(), imagePath = `document_suitability/${uid}/${attemptId}.${file.mimetype === 'image/png' ? 'png' : 'jpg'}`;
       await saveLocalBuffer(imagePath, file.buffer, uploadsDir);
       let committed = false, prior;
@@ -81,12 +103,15 @@ function createDocumentService({ db, uploadsDir, audit }) {
           if (prior) bound(prior, uid, fields.sessionId, fields.attemptId, true);
           else if (fields.sessionId || fields.attemptId) throw fail('DOCUMENT_ATTEMPT_STALE');
           const now = new Date();
-          const value = { ownerId: uid, sessionId: prior?.sessionId || randomUUID(), attemptId,
+          const sessionId = prior?.sessionId || randomUUID();
+          const decision = autoChecked ? { status: 'DOCUMENT_ACCEPTED', reasonCode: 'SUITABLE', reviewerId: 'auto_document_check', reviewedAt: now, sessionId, attemptId } : null;
+          const value = { ownerId: uid, sessionId, attemptId,
             declaredType: fields.idType, status: 'DOCUMENT_REVIEW_REQUIRED', mock: false,
             sha256: imageDigest, imagePath, contentType: file.mimetype,
-            submittedAt: now, expiresAt: new Date(now.getTime() + 30 * 86400000), history: (prior?.history || []).slice(-20) };
+            submittedAt: now, expiresAt: new Date(now.getTime() + 30 * 86400000),
+            ...(decision || {}), history: [...(prior?.history || []), ...(decision ? [decision] : [])].slice(-20) };
           tx.set(refFor(uid), value);
-          audit(tx, { uid }, 'document.submitted', uid, { sessionId: value.sessionId, attemptId });
+          audit(tx, { uid }, 'document.submitted', uid, { sessionId: value.sessionId, attemptId, ...(decision ? { autoAccepted: true } : {}) });
           return value;
         });
         committed = true;

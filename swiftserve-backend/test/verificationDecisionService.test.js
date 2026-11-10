@@ -100,3 +100,28 @@ test('admin-review mode verifies workers and clients without PSA or liveness, bu
     assert.doesNotThrow(() => documentEnvironment({ projectId: 'swiftserve-production', databaseId: '(default)' }));
   } finally { delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
 });
+
+test('the automatic reviewer only counts for a strong match while auto-approve is on', () => {
+  const auto = (change = {}) => {
+    const record = evidence();
+    record.government = { status: 'NOT_INTEGRATED', provider: 'NONE' }; record.liveness = { status: 'NOT_IMPLEMENTED' };
+    Object.assign(record.review, { reviewerId: 'auto_face_match', reasonCode: 'AUTO_STRONG_FACE_MATCH' });
+    Object.assign(record.face, change);
+    return record;
+  };
+  const refused = record => assert.ok(evaluate(record).reasonCodes.includes('ADMIN_REVIEW_REQUIRED'));
+  process.env.VERIFICATION_AUTO_APPROVE = 'true';
+  try {
+    refused(auto());
+    process.env.VERIFICATION_ADMIN_REVIEW_MODE = 'true';
+    refused(auto());
+    assert.equal(evaluateWorkerVerification(auto(), { workerId: 'worker', account: { role: 'client' }, now }).officiallyVerified, false);
+    refused(auto({ status: 'BORDERLINE', band: 'borderline', similarity: 65 }));
+    // Only client-only accounts: anyone holding the worker role needs a person.
+    const as = roleAccount => evaluateWorkerVerification(auto(), { workerId: 'worker', account: roleAccount, now });
+    assert.equal(as({ role: 'client' }).eligible, true);
+    assert.ok(as({ role: 'client', roles: ['client', 'worker'] }).reasonCodes.includes('ADMIN_REVIEW_REQUIRED'));
+    delete process.env.VERIFICATION_AUTO_APPROVE;
+    refused(auto());
+  } finally { delete process.env.VERIFICATION_AUTO_APPROVE; delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
+});

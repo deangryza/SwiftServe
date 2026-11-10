@@ -125,24 +125,16 @@ void main() {
         await tester.ensureVisible(start);
         await tester.tap(start);
         await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const ValueKey('verification_id_number')),
-          'SYNTHETIC',
-        );
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('verification_continue')),
-        );
-        await tester.tap(find.byKey(const ValueKey('verification_continue')));
-        await tester.pumpAndSettle();
+        // No ID number and no submit button: the ID is checked on capture
+        // and the match runs as soon as the selfie is taken.
+        expect(find.byType(TextFormField), findsNothing);
         await tester.tap(find.byKey(const ValueKey('verification_capture_id')));
         await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const ValueKey('verification_capture_selfie')),
+        final selfie = find.byKey(
+          const ValueKey('verification_capture_selfie'),
         );
-        await tester.pumpAndSettle();
-        final submit = find.byKey(const ValueKey('verification_submit'));
-        await tester.ensureVisible(submit);
-        await tester.tap(submit);
+        await tester.ensureVisible(selfie);
+        await tester.tap(selfie);
         await tester.pumpAndSettle();
         expect(find.text('FACE MATCHED'), findsOneWidget);
         expect(find.textContaining('PSA NOT INTEGRATED'), findsOneWidget);

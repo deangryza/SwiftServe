@@ -94,7 +94,7 @@ class VerificationRepository {
 
   Future<FaceVerificationResult> submit({
     required String idType,
-    required String idNumber,
+    String idNumber = '',
     required File governmentId,
     required File facePhoto,
     bool comparisonOnly = false,
@@ -115,7 +115,8 @@ class VerificationRepository {
       ),
     );
     request.headers['Authorization'] = 'Bearer ${await user.getIdToken(true)}';
-    request.fields.addAll({'idType': idType, 'idNumber': idNumber});
+    request.fields['idType'] = idType;
+    if (idNumber.trim().isNotEmpty) request.fields['idNumber'] = idNumber;
     if (documentSessionId != null) {
       request.fields['documentSessionId'] = documentSessionId;
     }

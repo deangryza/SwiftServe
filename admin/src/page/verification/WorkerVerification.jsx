@@ -151,7 +151,6 @@ export default function WorkerVerification() {
   return (
     <div>
       <NationalIdMockReviews />
-      <DocumentSuitabilityReviews />
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-semibold text-gray-800">
@@ -211,6 +210,10 @@ export default function WorkerVerification() {
         requests={filteredRequests}
         onViewDetails={handleViewDetails}
       />
+
+      {/* IDs are checked automatically on upload; this is the log, and the
+          manual queue when automatic checks are switched off. */}
+      <DocumentSuitabilityReviews />
 
       {/* Details Modal */}
       {selectedRequest && (

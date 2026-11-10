@@ -43,7 +43,7 @@ afterEach(async () => {
   await fs.rm(uploadsDir, { recursive: true, force: true });
 });
 
-const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', transactionUserStatus } = {}) => {
+const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', transactionUserStatus, account = { role: 'worker' } } = {}) => {
   const writes = [];
   const attempts = [];
   const deleted = [];
@@ -72,7 +72,7 @@ const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', tr
           if (name === 'users') {
             return {
               name,
-              get: async () => ({ exists: true, data: () => ({ role: 'worker', verificationStatus: userStatus }) }),
+              get: async () => ({ exists: true, data: () => ({ ...account, verificationStatus: userStatus }) }),
             };
           }
           if (name === 'worker_verifications') {
@@ -80,6 +80,13 @@ const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', tr
               name,
               get: async () => ({ exists: Boolean(prior), data: () => prior }),
               collection: () => ({ add: async (value) => { attempts.push(value); } }),
+            };
+          }
+          if (name === 'document_suitability') {
+            return {
+              name,
+              get: async () => ({ exists: true, data: () => ({ ownerId: 'worker-1', sessionId: 'session-1', attemptId: 'attempt-1',
+                sha256: 'digest-1', status: 'DOCUMENT_ACCEPTED', declaredType: 'National ID', expiresAt: new Date('2999-01-01T00:00:00.000Z') }) }),
             };
           }
           return { name };
@@ -459,4 +466,59 @@ test('tries the EXIF orientation first, then other turns, and prefers the main I
     (error) => error.code === 'FACE_NOT_DETECTED',
   );
   assert.deepEqual(tried, [90, 180, 0, 270]);
+});
+
+test('auto-approve verifies a strong match on an accepted ID and leaves every other case to an administrator', async () => {
+  const binding = { sessionId: 'session-1', attemptId: 'attempt-1', sha256: 'digest-1', declaredType: 'National ID' };
+  const run = async (band, similarity, documentBinding = binding, account = { role: 'client' }) => {
+    const fixture = fixtures({ account });
+    const result = await compareAndCreateSubmission({ ...input(fixture, async () => comparison(band, similarity)), documentBinding });
+    return { fixture, result };
+  };
+  const pending = ({ fixture, result }) => {
+    assert.equal(result.status, 'pending');
+    assert.equal(fixture.record().status, 'pending');
+    assert.notEqual(fixture.record().reviewedBy, 'auto_face_match');
+    assert.deepEqual(fixture.writesTo('users'), []);
+    assert.equal(fixture.writesTo('notifications').length, 0);
+  };
+  process.env.VERIFICATION_ADMIN_REVIEW_MODE = 'true';
+  try {
+    // Admin-review mode alone never approves without a person.
+    pending(await run('strong', 95));
+    process.env.VERIFICATION_AUTO_APPROVE = 'true';
+    const { fixture, result } = await run('strong', 95);
+    assert.equal(result.status, 'verified');
+    assert.equal(result.reviewStatus, 'APPROVED');
+    const record = fixture.record();
+    assert.equal(record.status, 'verified');
+    assert.equal(record.reviewedBy, 'auto_face_match');
+    assert.equal(record.review.reasonCode, 'AUTO_STRONG_FACE_MATCH');
+    assert.equal(record.workerDecision.eligible, true);
+    assert.equal(record.workerDecision.officiallyVerified, false);
+    assert.ok(record.purgeAfter instanceof Date);
+    assert.deepEqual(record.documentBinding, binding);
+    assert.equal(fixture.writesTo('users')[0].verificationStatus, 'verified');
+    // A client-only account has no worker profile to mark.
+    assert.deepEqual(fixture.writesTo('worker_profiles'), []);
+    assert.equal(fixture.writesTo('notifications').length, 1);
+    pending(await run('borderline', 70));
+    pending(await run('strong', 95, null));
+    // Anyone who holds the worker role waits for an administrator.
+    pending(await run('strong', 95, binding, { role: 'worker' }));
+    pending(await run('strong', 95, binding, { role: 'client', roles: ['client', 'worker'] }));
+  } finally { delete process.env.VERIFICATION_AUTO_APPROVE; delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
+  // The auto switch does nothing without admin-review mode.
+  process.env.VERIFICATION_AUTO_APPROVE = 'true';
+  try {
+    const fixture = fixtures();
+    const result = await compareAndCreateSubmission(input(fixture, async () => comparison('strong', 95)));
+    pending({ fixture, result });
+  } finally { delete process.env.VERIFICATION_AUTO_APPROVE; }
+});
+
+test('a submission without an ID number stores an empty mask', async () => {
+  const fixture = fixtures();
+  await compareAndCreateSubmission({ ...input(fixture, async () => comparison('borderline', 70)), idNumber: '' });
+  assert.equal(fixture.record().maskedIdNumber, '');
 });

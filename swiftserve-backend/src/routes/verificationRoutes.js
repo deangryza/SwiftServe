@@ -90,10 +90,10 @@ const createVerificationRouter = ({
       }
       const idType = String(req.body?.idType || '').trim();
       const idNumber = String(req.body?.idNumber || '').trim();
-      if (!document || !selfie || !idType || !idNumber) {
+      if (!document || !selfie || !idType) {
         return res.status(400).json({
           code: 'INVALID_UPLOAD',
-          message: 'ID type, ID number, document, and selfie are required.',
+          message: 'ID type, document, and selfie are required.',
         });
       }
       const maxBytes = (idType === 'National ID' ? 20 : 5) * 1024 * 1024;

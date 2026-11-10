@@ -40,7 +40,9 @@ async function documentRetryBaseline() {
   const user = { role: 'worker' }, ref = (collection, id) => ({ collection, id });
   const get = async r => ({ data: () => r.collection === 'users' ? user : undefined });
   const db = { projectId: 'demo-swiftserve-performance', databaseId: '(default)',
-    collection: collection => ({ doc: id => ({ ...ref(collection, id), get() { return get(this); } }) }),
+    collection: collection => ({ doc: id => ({ ...ref(collection, id), get() { return get(this); } }),
+      // No other account holds this synthetic image.
+      where: () => ({ limit: () => ({ get: async () => ({ docs: [] }) }) }) }),
     async runTransaction(callback) {
       let result;
       for (let retry = 0; retry < 3; retry++) result = await callback({ get, set() {} });

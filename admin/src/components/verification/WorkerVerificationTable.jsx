@@ -111,6 +111,14 @@ export default function WorkerVerificationTable({ requests, onViewDetails }) {
                 </td>
                 <td className="px-4 py-3">
                   <StatusBadge status={r?.status} />
+                  {r?.autoVerified && (
+                    <span
+                      className="ml-2 inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700"
+                      title="Verified automatically on a strong face match, without an administrator"
+                    >
+                      Auto
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex items-center justify-end">

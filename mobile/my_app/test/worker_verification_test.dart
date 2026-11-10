@@ -110,7 +110,7 @@ void main() {
     expect(find.text('Apply for this request'), findsNothing);
   });
 
-  group('guided verification onboarding', () {
+  group('quick verification flow', () {
     late Directory temporaryDirectory;
     late File document;
     late File replacementDocument;
@@ -135,12 +135,61 @@ void main() {
       }
     });
 
-    testWidgets('rapid callbacks send only one verification request', (
+    testWidgets('start asks only for the ID type and consent', (tester) async {
+      await _pumpVerification(tester, documentCapture: (_) async => document);
+
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+      expect(find.text('Verify your identity'), findsOneWidget);
+      expect(find.byType(TextFormField), findsNothing);
+      await _tapVisible(
+        tester,
+        find.byKey(const ValueKey('verification_id_type_Passport')),
+      );
+      await _start(tester);
+
+      expect(find.text('Step 2 of 3'), findsOneWidget);
+      expect(find.text('Scan your Passport'), findsOneWidget);
+    });
+
+    testWidgets('start stays disabled until consent is given', (tester) async {
+      await _pumpVerification(
+        tester,
+        documentCapture: (_) async => document,
+        consent: false,
+      );
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.byKey(const ValueKey('verification_start_button')),
+            )
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('the ID is checked at once and leads straight to the selfie', (
       tester,
     ) async {
-      final pending = Completer<FaceVerificationResult>();
       final review = FakeDocumentReview();
-      var calls = 0;
+      await _pumpVerification(
+        tester,
+        documentReview: review,
+        documentCapture: (_) async => document,
+      );
+      await _start(tester);
+      await _scanId(tester);
+
+      expect(review.uploads, 1);
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+      expect(find.text('Take a selfie'), findsOneWidget);
+      expect(find.text('ID accepted'), findsOneWidget);
+    });
+
+    testWidgets('an unusable ID photo is refused before the selfie step', (
+      tester,
+    ) async {
+      final review = FakeDocumentReview(error: 'FACE_NOT_DETECTED');
+      var comparisons = 0;
       await _pumpVerification(
         tester,
         documentReview: review,
@@ -152,60 +201,108 @@ void main() {
               required idNumber,
               required governmentId,
               required facePhoto,
-            }) {
-              calls++;
-              return pending.future;
+            }) async {
+              comparisons++;
+              return const FaceVerificationResult(status: 'pending');
             },
       );
-      await _reachReview(tester);
-      final callback = tester
-          .widget<FilledButton>(
-            find.byKey(const ValueKey('verification_submit')),
-          )
-          .onPressed!;
-      // Same callback before Flutter has rebuilt/disabled the button.
-      callback();
-      callback();
-      await tester.pump();
-      final observed = calls;
-      final uploads = review.uploads;
-      pending.complete(
-        const FaceVerificationResult(
-          similarity: 90,
-          band: 'strong',
-          status: 'pending',
-        ),
+      await _start(tester);
+      await _scanId(tester);
+
+      expect(review.uploads, 1);
+      expect(comparisons, 0);
+      expect(find.text('Step 2 of 3'), findsOneWidget);
+      expect(
+        find.textContaining('Please upload a clearer image'),
+        findsOneWidget,
       );
-      await tester.pumpAndSettle();
-      expect(observed, 1);
-      expect(uploads, 1);
+      expect(
+        find.byKey(const ValueKey('verification_capture_selfie')),
+        findsNothing,
+      );
+      expect(find.text('Retake ID'), findsOneWidget);
     });
 
-    testWidgets('requires an ID number before advancing', (tester) async {
+    testWidgets('a connection failure during the ID check can be retried', (
+      tester,
+    ) async {
+      final review = _FlakyReview();
+      await _pumpVerification(
+        tester,
+        documentReview: review,
+        documentCapture: (_) async => document,
+      );
+      await _start(tester);
+      await _scanId(tester);
+
+      expect(find.textContaining('Check your connection'), findsOneWidget);
+      await _tapVisible(
+        tester,
+        find.byKey(const ValueKey('verification_check_id')),
+      );
+      await tester.pumpAndSettle();
+      expect(review.uploads, 2);
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+    });
+
+    testWidgets('the selfie is matched without a separate submit step', (
+      tester,
+    ) async {
+      final pending = Completer<FaceVerificationResult>();
+      var calls = 0;
       await _pumpVerification(
         tester,
         documentCapture: (_) async => document,
         selfieCapture: (_) async => selfie,
+        submitter:
+            ({
+              required idType,
+              required idNumber,
+              required governmentId,
+              required facePhoto,
+            }) {
+              calls++;
+              expect(idNumber, isEmpty);
+              expect(governmentId.path, document.path);
+              expect(facePhoto.path, selfie.path);
+              return pending.future;
+            },
       );
-
-      expect(find.text('Verify your identity'), findsOneWidget);
-      await _tapVisible(
-        tester,
-        find.byKey(const ValueKey('verification_start_button')),
+      await _start(tester);
+      await _scanId(tester);
+      await tester.tap(
+        find.byKey(const ValueKey('verification_capture_selfie')),
       );
       await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('verification_continue')));
       await tester.pump();
 
-      expect(find.text('ID number is required'), findsOneWidget);
-      expect(find.text('Step 1 of 4'), findsOneWidget);
-      expect(find.text('Photograph your government ID'), findsNothing);
+      // While the match runs there is nothing to tap twice.
+      expect(calls, 1);
+      expect(find.textContaining('Matching your selfie'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('verification_capture_selfie')),
+        findsNothing,
+      );
+      expect(find.byKey(const ValueKey('verification_submit')), findsNothing);
+      pending.complete(
+        const FaceVerificationResult(
+          similarity: 72,
+          band: 'borderline',
+          status: 'pending',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(calls, 1);
+      expect(
+        find.byKey(const ValueKey('verification_submission_complete')),
+        findsOneWidget,
+      );
     });
 
     for (final role in [UserRole.client, UserRole.worker]) {
       for (final accepted in [false, true]) {
         testWidgets(
-          '$role registration photos reach review without recapture; accepted=$accepted',
+          '$role sign-up photos are checked and matched without recapture; accepted=$accepted',
           (tester) async {
             final review = FakeDocumentReview(
               status: accepted
@@ -219,7 +316,9 @@ void main() {
               initialDocument: document,
               initialSelfie: selfie,
               documentCapture: (_) async =>
-                  throw StateError('Must reuse accepted registration image'),
+                  throw StateError('Must reuse the sign-up image'),
+              selfieCapture: (_) async =>
+                  throw StateError('Must reuse the sign-up selfie'),
               documentReview: review,
               submitter:
                   ({
@@ -235,163 +334,91 @@ void main() {
                     return const FaceVerificationResult(status: 'pending');
                   },
             );
-            await _tapVisible(
-              tester,
-              find.byKey(const ValueKey('verification_start_button')),
-            );
-            await tester.enterText(
-              find.byKey(const ValueKey('verification_id_number')),
-              'synthetic-number',
-            );
-            await _tapVisible(
-              tester,
-              find.byKey(const ValueKey('verification_continue')),
-            );
-            await _tapVisible(
-              tester,
-              find.byKey(const ValueKey('verification_use_selected_id')),
-            );
-            await _submit(tester);
+            await _start(tester);
+
             expect(review.uploads, 1);
             expect(comparisons, accepted ? 1 : 0);
             if (!accepted) {
-              expect(
-                find.textContaining('Awaiting document review'),
-                findsOneWidget,
+              // Strict mode: an administrator reviews the ID first.
+              expect(find.text('Waiting for ID review'), findsOneWidget);
+              review.status = 'DOCUMENT_ACCEPTED';
+              await _tapVisible(
+                tester,
+                find.byKey(const ValueKey('verification_refresh_document')),
               );
+              await tester.pumpAndSettle();
+              expect(comparisons, 1);
             }
+            expect(find.text('Almost done'), findsOneWidget);
             await tester.pumpWidget(const SizedBox.shrink());
           },
         );
       }
     }
 
-    testWidgets('captures auto-advance and review masks the ID number', (
-      tester,
-    ) async {
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-        selfieCapture: (_) async => selfie,
-      );
-
-      await _reachReview(tester, idNumber: '123456789012');
-
-      expect(find.text('Step 4 of 4'), findsOneWidget);
-      expect(find.text('Review and submit'), findsOneWidget);
-      expect(find.text('Number: ••••••••9012'), findsOneWidget);
-      expect(find.textContaining('123456789012'), findsNothing);
-      expect(find.text('Government ID'), findsOneWidget);
-      expect(find.text('Live selfie'), findsOneWidget);
-    });
-
-    testWidgets('ID capture advances to the live selfie step', (tester) async {
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-        selfieCapture: (_) async => null,
-      );
-      await _reachReview(tester);
-
-      expect(find.text('Step 3 of 4'), findsOneWidget);
-      expect(find.text('Take a live selfie'), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('verification_capture_selfie')),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('retake replaces and deletes the previous document', (
+    testWidgets('changing the ID replaces and deletes the previous photo', (
       tester,
     ) async {
       final deleted = <String>[];
+      final review = FakeDocumentReview();
       var documentCaptureCount = 0;
       await _pumpVerification(
         tester,
+        documentReview: review,
         documentCapture: (_) async =>
             documentCaptureCount++ == 0 ? document : replacementDocument,
-        selfieCapture: (_) async => selfie,
         deleteFile: (file) async => deleted.add(file.path),
       );
-      await _reachReview(tester);
-
-      await tester.ensureVisible(
+      await _start(tester);
+      await _scanId(tester);
+      await _tapVisible(
+        tester,
         find.byKey(const ValueKey('verification_retake_id')),
       );
-      await tester.tap(find.byKey(const ValueKey('verification_retake_id')));
       await tester.pumpAndSettle();
+      expect(find.text('Step 2 of 3'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('verification_id_accepted')),
+        findsOneWidget,
+      );
+      await _scanId(tester);
 
-      expect(find.text('Review and submit'), findsOneWidget);
       expect(deleted, contains(document.path));
+      expect(review.uploads, 2);
+      expect(find.text('Step 3 of 3'), findsOneWidget);
     });
 
-    testWidgets(
-      'explicit backend verified response remains readable for legacy compatibility',
-      (tester) async {
-        final deleted = <String>[];
-        File? sentSelfie;
-        await _pumpVerification(
-          tester,
-          documentCapture: (_) async => document,
-          selfieCapture: (_) async => selfie,
-          deleteFile: (file) async => deleted.add(file.path),
-          submitter:
-              ({
-                required idType,
-                required idNumber,
-                required governmentId,
-                required facePhoto,
-              }) async {
-                sentSelfie = facePhoto;
-                return const FaceVerificationResult(
-                  similarity: 92.3,
-                  confidence: 92.3,
-                  band: 'strong',
-                  status: 'verified',
-                );
-              },
-        );
-        await _reachReview(tester);
-        await _submit(tester);
+    testWidgets('a verified response shows the result and removes the photos', (
+      tester,
+    ) async {
+      final deleted = <String>[];
+      await _pumpVerification(
+        tester,
+        documentCapture: (_) async => document,
+        selfieCapture: (_) async => selfie,
+        deleteFile: (file) async => deleted.add(file.path),
+        submitter:
+            ({
+              required idType,
+              required idNumber,
+              required governmentId,
+              required facePhoto,
+            }) async => const FaceVerificationResult(
+              similarity: 92.3,
+              confidence: 92.3,
+              band: 'strong',
+              status: 'verified',
+            ),
+      );
+      await _complete(tester);
 
-        expect(sentSelfie?.path, selfie.path);
-        expect(find.text('Worker approval recorded'), findsOneWidget);
-        expect(find.textContaining('92%'), findsOneWidget);
-        expect(deleted, containsAll(<String>[document.path, selfie.path]));
-      },
-    );
+      expect(find.text('You are verified'), findsOneWidget);
+      expect(find.textContaining('92%'), findsOneWidget);
+      expect(deleted, containsAll(<String>[document.path, selfie.path]));
+    });
 
-    testWidgets(
-      'strong face-only result remains under review without worker privileges',
-      (tester) async {
-        await _pumpVerification(
-          tester,
-          documentCapture: (_) async => document,
-          selfieCapture: (_) async => selfie,
-          submitter:
-              ({
-                required idType,
-                required idNumber,
-                required governmentId,
-                required facePhoto,
-              }) async => const FaceVerificationResult(
-                similarity: 92.3,
-                band: 'strong',
-                status: 'pending',
-              ),
-        );
-        await _reachReview(tester);
-        await _submit(tester);
-        expect(
-          find.byKey(const ValueKey('verification_submission_complete')),
-          findsOneWidget,
-        );
-        expect(find.text('Verified'), findsNothing);
-        expect(find.textContaining('You can now accept jobs'), findsNothing);
-      },
-    );
-
-    testWidgets('borderline match shows admin review copy', (tester) async {
+    testWidgets('a match that still needs an administrator is not shown as '
+        'verified', (tester) async {
       await _pumpVerification(
         tester,
         documentCapture: (_) async => document,
@@ -403,26 +430,27 @@ void main() {
               required governmentId,
               required facePhoto,
             }) async => const FaceVerificationResult(
-              similarity: 71,
-              band: 'borderline',
+              similarity: 92.3,
+              band: 'strong',
               status: 'pending',
             ),
       );
-      await _reachReview(tester);
-      await _submit(tester);
+      await _complete(tester);
 
       expect(
-        find.textContaining(
-          'Official government authentication and trusted server liveness remain unavailable.',
-        ),
+        find.byKey(const ValueKey('verification_submission_complete')),
         findsOneWidget,
       );
+      expect(find.text('Almost done'), findsOneWidget);
+      expect(find.textContaining('administrator'), findsOneWidget);
+      expect(find.text('You are verified'), findsNothing);
     });
 
-    testWidgets('mismatch shows similarity and returns to the selfie step', (
+    testWidgets('mismatch shows the similarity and retakes the selfie', (
       tester,
     ) async {
       final deleted = <String>[];
+      var comparisons = 0;
       await _pumpVerification(
         tester,
         documentCapture: (_) async => document,
@@ -435,6 +463,7 @@ void main() {
               required governmentId,
               required facePhoto,
             }) async {
+              comparisons++;
               throw const FaceVerificationException(
                 FaceVerificationFailure.mismatch,
                 'The selfie did not match the face on the ID.',
@@ -442,8 +471,7 @@ void main() {
               );
             },
       );
-      await _reachReview(tester);
-      await _submit(tester);
+      await _complete(tester);
 
       expect(
         find.byKey(const ValueKey('verification_mismatch')),
@@ -452,6 +480,7 @@ void main() {
       expect(find.textContaining('41%'), findsOneWidget);
       expect(find.textContaining('remove glasses'), findsOneWidget);
       expect(find.textContaining('hold the ID flat'), findsOneWidget);
+      expect(find.text('Step 3 of 3'), findsOneWidget);
       expect(deleted, isEmpty);
 
       await _tapVisible(
@@ -459,188 +488,72 @@ void main() {
         find.byKey(const ValueKey('verification_retry_selfie')),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Step 3 of 4'), findsOneWidget);
-      expect(find.text('Take a live selfie'), findsOneWidget);
+      expect(comparisons, 2);
+
+      await _tapVisible(
+        tester,
+        find.byKey(const ValueKey('verification_mismatch_retake_id')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Step 2 of 3'), findsOneWidget);
     });
 
-    for (final image in VerificationImage.values) {
-      testWidgets('face not detected in ${image.name} returns to its capture', (
-        tester,
-      ) async {
-        await _pumpVerification(
-          tester,
-          documentCapture: (_) async => document,
-          selfieCapture: (_) async => selfie,
-          submitter:
-              ({
-                required idType,
-                required idNumber,
-                required governmentId,
-                required facePhoto,
-              }) async {
-                throw FaceVerificationException(
-                  FaceVerificationFailure.noFace,
-                  'No face was detected.',
-                  image: image,
-                );
-              },
-        );
-        await _reachReview(tester);
-        await _submit(tester);
+    for (final failure in [
+      FaceVerificationFailure.noFace,
+      FaceVerificationFailure.quality,
+      FaceVerificationFailure.multipleFaces,
+    ]) {
+      for (final image in VerificationImage.values) {
+        testWidgets(
+          '${failure.name} in the ${image.name} returns to that capture with guidance',
+          (tester) async {
+            await _pumpVerification(
+              tester,
+              documentCapture: (_) async => document,
+              selfieCapture: (_) async => selfie,
+              submitter:
+                  ({
+                    required idType,
+                    required idNumber,
+                    required governmentId,
+                    required facePhoto,
+                  }) async {
+                    throw FaceVerificationException(
+                      failure,
+                      'Hold the camera steady and retake the photo.',
+                      image: image,
+                    );
+                  },
+            );
+            await _complete(tester);
 
-        if (image == VerificationImage.document) {
-          expect(find.text('Step 2 of 4'), findsOneWidget);
-          expect(find.text('Photograph your government ID'), findsOneWidget);
-        } else {
-          expect(find.text('Step 3 of 4'), findsOneWidget);
-          expect(find.text('Take a live selfie'), findsOneWidget);
-        }
-        expect(find.textContaining('No face was detected.'), findsOneWidget);
-      });
+            expect(
+              find.text(
+                image == VerificationImage.document
+                    ? 'Step 2 of 3'
+                    : 'Step 3 of 3',
+              ),
+              findsOneWidget,
+            );
+            expect(
+              find.textContaining('Hold the camera steady'),
+              findsOneWidget,
+            );
+            expect(find.text('Almost done'), findsNothing);
+            expect(
+              find.byKey(const ValueKey('verification_mismatch')),
+              findsNothing,
+            );
+          },
+        );
+      }
     }
 
-    for (final image in VerificationImage.values) {
-      testWidgets(
-        'quality rejection in ${image.name} provides retake guidance without match result',
-        (tester) async {
-          await _pumpVerification(
-            tester,
-            documentCapture: (_) async => document,
-            selfieCapture: (_) async => selfie,
-            submitter:
-                ({
-                  required idType,
-                  required idNumber,
-                  required governmentId,
-                  required facePhoto,
-                }) async {
-                  throw FaceVerificationException(
-                    FaceVerificationFailure.quality,
-                    'Hold the camera steady and retake the photo.',
-                    image: image,
-                  );
-                },
-          );
-          await _reachReview(tester);
-          await _submit(tester);
-          expect(
-            find.text(
-              image == VerificationImage.document
-                  ? 'Photograph your government ID'
-                  : 'Take a live selfie',
-            ),
-            findsOneWidget,
-          );
-          expect(find.textContaining('Hold the camera steady'), findsOneWidget);
-          expect(find.text('Face comparison complete'), findsNothing);
-          expect(find.textContaining('Similarity'), findsNothing);
-        },
-      );
-    }
-
-    testWidgets(
-      'document review blocks face submission until accepted and rejection offers replacement',
-      (tester) async {
-        final gateway = FakeDocumentReview(status: 'DOCUMENT_REVIEW_REQUIRED');
-        var faceCalls = 0;
-        await _pumpVerification(
-          tester,
-          documentReview: gateway,
-          documentCapture: (_) async => document,
-          selfieCapture: (_) async => selfie,
-          submitter:
-              ({
-                required idType,
-                required idNumber,
-                required governmentId,
-                required facePhoto,
-              }) async {
-                faceCalls++;
-                return const FaceVerificationResult(
-                  band: 'strong',
-                  status: 'pending',
-                  similarity: 90,
-                );
-              },
-        );
-        await _reachReview(tester);
-        await _submit(tester);
-        expect(gateway.uploads, 1);
-        expect(faceCalls, 0);
-        expect(find.textContaining('awaiting document review'), findsOneWidget);
-        gateway.status = 'DOCUMENT_REJECTED';
-        await _tapVisible(tester, find.text('Refresh document review'));
-        await tester.pumpAndSettle();
-        expect(
-          find.text('Document rejected — upload a replacement'),
-          findsOneWidget,
-        );
-        expect(find.text('Replace document'), findsOneWidget);
-        expect(faceCalls, 0);
-        gateway.status = 'DOCUMENT_ACCEPTED';
-        await _tapVisible(tester, find.text('Refresh document review'));
-        await tester.pumpAndSettle();
-        await _submit(tester);
-        expect(faceCalls, 1);
-        expect(find.text('Worker approval pending'), findsOneWidget);
-      },
-    );
-
-    testWidgets(
-      'unreadable document response shows retake guidance instead of a face mismatch',
-      (tester) async {
-        await _pumpVerification(
-          tester,
-          documentReview: FakeDocumentReview(error: 'DOCUMENT_UNREADABLE'),
-          documentCapture: (_) async => document,
-          selfieCapture: (_) async => selfie,
-        );
-        await _reachReview(tester);
-        await _submit(tester);
-        expect(find.text('Photograph your government ID'), findsOneWidget);
-        expect(
-          find.textContaining('Please upload a clearer image'),
-          findsOneWidget,
-        );
-        expect(find.text('Worker approval pending'), findsNothing);
-      },
-    );
-
-    testWidgets('multiple faces in the selfie returns to the selfie step', (
-      tester,
-    ) async {
-      await _pumpVerification(
-        tester,
-        documentCapture: (_) async => document,
-        selfieCapture: (_) async => selfie,
-        submitter:
-            ({
-              required idType,
-              required idNumber,
-              required governmentId,
-              required facePhoto,
-            }) async {
-              throw const FaceVerificationException(
-                FaceVerificationFailure.multipleFaces,
-                'More than one face was detected.',
-                image: VerificationImage.selfie,
-              );
-            },
-      );
-      await _reachReview(tester);
-      await _submit(tester);
-
-      expect(find.text('Step 3 of 4'), findsOneWidget);
-      expect(
-        find.textContaining('More than one face was detected.'),
-        findsOneWidget,
-      );
-    });
-
-    testWidgets('network failure keeps the complete review draft', (
+    testWidgets('a network failure keeps both photos and offers a retry', (
       tester,
     ) async {
       final deleted = <String>[];
+      var comparisons = 0;
       await _pumpVerification(
         tester,
         documentCapture: (_) async => document,
@@ -653,25 +566,28 @@ void main() {
               required governmentId,
               required facePhoto,
             }) async {
-              throw const FaceVerificationException(
-                FaceVerificationFailure.network,
-                'Check your connection and try again.',
-              );
+              if (comparisons++ == 0) {
+                throw const FaceVerificationException(
+                  FaceVerificationFailure.network,
+                  'Check your connection and try again.',
+                );
+              }
+              return const FaceVerificationResult(status: 'pending');
             },
       );
-      await _reachReview(tester);
+      await _complete(tester);
 
-      await tester.ensureVisible(
+      expect(find.text('Step 3 of 3'), findsOneWidget);
+      expect(find.text('Check your connection and try again.'), findsOneWidget);
+      expect(deleted, isEmpty);
+
+      await _tapVisible(
+        tester,
         find.byKey(const ValueKey('verification_submit')),
       );
-      await tester.tap(find.byKey(const ValueKey('verification_submit')));
       await tester.pumpAndSettle();
-
-      expect(find.text('Step 4 of 4'), findsOneWidget);
-      expect(find.text('Check your connection and try again.'), findsOneWidget);
-      expect(find.text('Government ID'), findsOneWidget);
-      expect(find.text('Live selfie'), findsOneWidget);
-      expect(deleted, isEmpty);
+      expect(comparisons, 2);
+      expect(find.text('Almost done'), findsOneWidget);
     });
 
     testWidgets('status pages bypass the wizard and rejection can restart', (
@@ -684,7 +600,10 @@ void main() {
         selfieCapture: (_) async => selfie,
       );
       expect(find.text('Verification under review'), findsOneWidget);
-      expect(find.text('Start verification'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('verification_start_button')),
+        findsNothing,
+      );
 
       await _pumpVerification(
         tester,
@@ -705,8 +624,13 @@ void main() {
       await tester.tap(
         find.byKey(const ValueKey('verification_resubmit_button')),
       );
-      await tester.pump();
-      expect(find.text('Step 1 of 4'), findsOneWidget);
+      await tester.pumpAndSettle();
+      // Restarting begins again at the ID type and consent.
+      expect(find.text('Step 1 of 3'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('verification_start_button')),
+        findsOneWidget,
+      );
     });
 
     testWidgets('sign-out confirmation discards captured temporary files', (
@@ -721,19 +645,8 @@ void main() {
         deleteFile: (file) async => deleted.add(file.path),
         signOut: () async => signedOut = true,
       );
-      await _tapVisible(
-        tester,
-        find.byKey(const ValueKey('verification_start_button')),
-      );
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('verification_id_number')),
-        '12345678',
-      );
-      await tester.tap(find.byKey(const ValueKey('verification_continue')));
-      await tester.pump();
-      await tester.tap(find.byKey(const ValueKey('verification_capture_id')));
-      await tester.pumpAndSettle();
+      await _start(tester);
+      await _scanId(tester);
 
       await tester.tap(find.byTooltip('Sign out'));
       await tester.pumpAndSettle();
@@ -755,14 +668,7 @@ void main() {
         documentCapture: (_) async => document,
         selfieCapture: (_) async => selfie,
       );
-      await _tapVisible(
-        tester,
-        find.byKey(const ValueKey('verification_start_button')),
-      );
-      await tester.enterText(
-        find.byKey(const ValueKey('verification_id_number')),
-        '12345678',
-      );
+      await _start(tester);
 
       await tester.binding.handlePopRoute();
       await tester.pumpAndSettle();
@@ -770,16 +676,7 @@ void main() {
       expect(find.text('Discard verification?'), findsOneWidget);
       await tester.tap(find.text('Keep editing'));
       await tester.pumpAndSettle();
-      expect(find.text('Step 1 of 4'), findsOneWidget);
-      expect(
-        tester
-            .widget<TextFormField>(
-              find.byKey(const ValueKey('verification_id_number')),
-            )
-            .controller!
-            .text,
-        '12345678',
-      );
+      expect(find.text('Step 2 of 3'), findsOneWidget);
     });
 
     testWidgets('wizard remains scrollable on a narrow large-text display', (
@@ -802,12 +699,30 @@ void main() {
         200,
       );
       await tester.tap(find.byKey(const ValueKey('verification_start_button')));
-      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull, reason: 'ID step layout');
+      await _scanId(tester);
 
       expect(find.byType(Scrollable), findsWidgets);
-      expect(tester.takeException(), isNull);
+      expect(tester.takeException(), isNull, reason: 'selfie step layout');
     });
   });
+}
+
+/// Fails the first upload like a dropped connection, then accepts.
+class _FlakyReview extends FakeDocumentReview {
+  @override
+  Future<Map<String, dynamic>> submit(
+    File file,
+    String type,
+    Map<String, dynamic> previous,
+  ) async {
+    if (uploads == 0) {
+      uploads++;
+      throw const SocketException('offline');
+    }
+    return super.submit(file, type, previous);
+  }
 }
 
 Future<void> _pumpVerification(
@@ -824,6 +739,7 @@ Future<void> _pumpVerification(
   UserRole role = UserRole.worker,
   File? initialDocument,
   File? initialSelfie,
+  bool consent = true,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -866,10 +782,10 @@ Future<void> _pumpVerification(
     ),
   );
   await tester.pumpAndSettle();
-  final consent = find.byKey(const ValueKey('verification-consent'));
-  if (consent.evaluate().isNotEmpty) {
+  final consentTile = find.byKey(const ValueKey('verification-consent'));
+  if (consent && consentTile.evaluate().isNotEmpty) {
     final checkbox = find.descendant(
-      of: consent,
+      of: consentTile,
       matching: find.byType(Checkbox),
     );
     await tester.ensureVisible(checkbox);
@@ -878,35 +794,30 @@ Future<void> _pumpVerification(
   }
 }
 
-Future<void> _reachReview(
-  WidgetTester tester, {
-  String idNumber = '123456789',
-}) async {
+Future<void> _start(WidgetTester tester) async {
   await _tapVisible(
     tester,
     find.byKey(const ValueKey('verification_start_button')),
   );
-  await tester.pump();
-  await tester.enterText(
-    find.byKey(const ValueKey('verification_id_number')),
-    idNumber,
-  );
-  await tester.tap(find.byKey(const ValueKey('verification_continue')));
-  await tester.pump();
-  await tester.tap(find.byKey(const ValueKey('verification_capture_id')));
   await tester.pumpAndSettle();
-  final captureSelfie = find.byKey(
-    const ValueKey('verification_capture_selfie'),
-  );
-  if (captureSelfie.evaluate().isNotEmpty) {
-    await tester.tap(captureSelfie);
-    await tester.pumpAndSettle();
-  }
 }
 
-Future<void> _submit(WidgetTester tester) async {
-  await tester.ensureVisible(find.byKey(const ValueKey('verification_submit')));
-  await tester.tap(find.byKey(const ValueKey('verification_submit')));
+Future<void> _scanId(WidgetTester tester) async {
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('verification_capture_id')),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// Start, scan the ID and take the selfie; the match then runs on its own.
+Future<void> _complete(WidgetTester tester) async {
+  await _start(tester);
+  await _scanId(tester);
+  await _tapVisible(
+    tester,
+    find.byKey(const ValueKey('verification_capture_selfie')),
+  );
   await tester.pumpAndSettle();
 }
 

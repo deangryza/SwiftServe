@@ -48,6 +48,9 @@ class ApiService {
         'Could not verify availability. Please try again.',
       );
     }
+    if (body['available'] == false && body['incomplete'] == true) {
+      throw const RegistrationIncompleteException();
+    }
     return body['available'] as bool;
   }
 
@@ -298,6 +301,19 @@ class ApiConnectionException implements Exception {
   const ApiConnectionException(this.message);
 
   final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// The email belongs to a sign-up that created its login but never saved a
+/// profile. It is not available, but its owner can sign in and finish.
+class RegistrationIncompleteException implements Exception {
+  const RegistrationIncompleteException();
+
+  static const message =
+      'This email has an unfinished sign-up. Go back and sign in with it '
+      '(or with Google) to finish your profile.';
 
   @override
   String toString() => message;
