@@ -26,7 +26,16 @@ async function checkRegistrationAvailability(req, res) {
     } catch (error) {
       if (error.code !== 'auth/user-not-found') throw error;
     }
-    if (authUser && authUser.uid !== ownUid) return res.json({ available: false });
+    if (authUser && authUser.uid !== ownUid) {
+      // A login without a profile is a sign-up that never finished. Say so, so
+      // the person signs in to finish it instead of believing the email is lost.
+      // Staff logins have no profile by design and are never reported this way.
+      if (kind === 'email' && authUser.customClaims?.admin !== true && authUser.customClaims?.staff !== true) {
+        const profile = await db.collection('users').doc(authUser.uid).get();
+        if (!profile.exists) return res.json({ available: false, incomplete: true });
+      }
+      return res.json({ available: false });
+    }
     if (kind === 'phone') {
       const hash = crypto.createHash('sha256').update(normalized).digest('hex');
       const claim = await db.collection('phone_number_claims').doc(hash).get();

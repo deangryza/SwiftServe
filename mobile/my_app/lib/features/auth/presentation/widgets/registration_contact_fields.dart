@@ -142,6 +142,11 @@ class RegistrationContactFieldsState extends State<RegistrationContactFields> {
               ? 'This email address is already in use.'
               : 'This phone number is already in use.';
         }
+      } on RegistrationIncompleteException {
+        if (!mounted || check.version != version) return;
+        // Taken, but by a sign-up its owner can still finish.
+        check.available = false;
+        check.error = RegistrationIncompleteException.message;
       } catch (error) {
         if (!mounted || check.version != version) return;
         check.available = null;
