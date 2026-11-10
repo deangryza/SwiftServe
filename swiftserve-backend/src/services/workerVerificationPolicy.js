@@ -14,11 +14,15 @@ const STATUSES = Object.freeze({
 // Approvals made this way never count as official government authentication.
 const adminReviewMode = () => process.env.VERIFICATION_ADMIN_REVIEW_MODE === 'true';
 // With this second switch on, a strong server face match on an automatically
-// checked ID verifies the account at once. Borderline matches still go to an
-// administrator. Requires admin-review mode.
+// checked ID verifies a client-only account at once. Borderline matches, and
+// every account that holds the worker role, still go to an administrator: a
+// face match shows the selfie fits the card, not that the card is genuine.
+// Requires admin-review mode.
 const AUTO_REVIEWER = 'auto_face_match';
 const autoApprove = () => adminReviewMode() && process.env.VERIFICATION_AUTO_APPROVE === 'true';
 const verifiableRoles = ['worker', 'client'];
+const holdsWorkerRole = account => account?.role === 'worker'
+  || (Array.isArray(account?.roles) && account.roles.includes('worker'));
 const milliseconds = value => value instanceof Date ? value.getTime()
   : value && typeof value.toMillis === 'function' ? value.toMillis() : NaN;
 const faceResultFor = comparison => ({
@@ -80,7 +84,7 @@ function evaluateWorkerVerification(record, { workerId, account, now = new Date(
     && typeof review.reasonCode === 'string' && review.reasonCode.length > 0
     && Number.isFinite(milliseconds(review.reviewedAt)) && milliseconds(review.reviewedAt) <= time
     // The automatic reviewer may only stand in for a person on a strong match.
-    && (review.reviewerId !== AUTO_REVIEWER || (autoApprove() && strong));
+    && (review.reviewerId !== AUTO_REVIEWER || (autoApprove() && strong && !holdsWorkerRole(account)));
   if (!approvedReview) reasons.push('ADMIN_REVIEW_REQUIRED');
   const rejected = face?.status === 'NO_MATCH' || government?.status === 'NOT_AUTHENTICATED'
     || live?.status === 'FAILED' || review?.status === 'REJECTED';
@@ -90,4 +94,4 @@ function evaluateWorkerVerification(record, { workerId, account, now = new Date(
   return { policyVersion: POLICY_VERSION, status, eligible: status === 'APPROVED',
     officiallyVerified: official === true, reasonCodes: reasons, evaluatedAt: now };
 }
-module.exports = { adminReviewMode, autoApprove, AUTO_REVIEWER, verifiableRoles, POLICY_VERSION, SCHEMA_VERSION, STATUSES, faceResultFor, newEvidence, evaluateWorkerVerification };
+module.exports = { adminReviewMode, autoApprove, AUTO_REVIEWER, holdsWorkerRole, verifiableRoles, POLICY_VERSION, SCHEMA_VERSION, STATUSES, faceResultFor, newEvidence, evaluateWorkerVerification };

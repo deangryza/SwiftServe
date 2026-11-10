@@ -1,7 +1,9 @@
 const crypto = require('node:crypto');
 const { validateBirthday } = require('../services/registrationBirthday');
 
+const { FieldValue } = require('firebase-admin/firestore');
 const { db } = require('../config/firebase');
+const { AUTO_REVIEWER } = require('../services/workerVerificationPolicy');
 const { normalizeProfilePhoto } = require('../services/profilePhotoService');
 const { publicProfileLocation } = require('../services/publicProfileLocation');
 const { isPhilippineMobile, readPhoneToken } = require('../services/otpService');
@@ -321,6 +323,12 @@ const addRole = async (req, res) => {
       const currentRoles = rolesOf(user);
       const location = publicProfileLocation(user.address);
       const existingWorker = await transaction.get(workerProfileRef);
+      const verificationRef = db.collection('worker_verifications').doc(uid);
+      const verification = role === 'worker' ? await transaction.get(verificationRef) : null;
+      // Client accounts can be verified by face match alone. That is not enough
+      // to work in people's homes, so the submission goes back to an admin.
+      const needsReview = Boolean(verification?.exists) && user.verificationStatus === 'verified'
+        && verification.data().reviewedBy === AUTO_REVIEWER;
       if (currentRoles.includes(role)) {
         throw new RoleRequestError(409, 'ROLE_ALREADY_ADDED', `This account is already a ${role}.`);
       }
@@ -336,9 +344,20 @@ const addRole = async (req, res) => {
 
       const skills = [trimmedCategory];
       const workerDescription = description || user.description || '';
-      const verificationStatus = !user.verificationStatus || user.verificationStatus === 'not_required'
+      const verificationStatus = needsReview || !user.verificationStatus || user.verificationStatus === 'not_required'
         ? 'pending'
         : user.verificationStatus;
+      if (needsReview) {
+        transaction.set(verificationRef, {
+          status: 'pending',
+          review: { required: true, status: 'PENDING' },
+          reviewedBy: FieldValue.delete(),
+          reviewedAt: FieldValue.delete(),
+          purgeAfter: FieldValue.delete(),
+          adminNotes: 'Verified automatically as a client. Review the ID before approving worker access.',
+          updatedAt,
+        }, { merge: true });
+      }
       transaction.set(userRef, {
         roles: nextRoles,
         category: trimmedCategory,

@@ -9,7 +9,7 @@ const {
   resolveUploadsDir,
   saveLocalBuffer,
 } = require('./verificationStorageService');
-const { newEvidence, faceResultFor, verifiableRoles, autoApprove, AUTO_REVIEWER } = require('./workerVerificationPolicy');
+const { newEvidence, faceResultFor, verifiableRoles, autoApprove, AUTO_REVIEWER, holdsWorkerRole } = require('./workerVerificationPolicy');
 const { evaluateWorkerVerification, addStatusWrites, purgeDateFor } = require('./verificationDecisionService');
 const { validateFaceCapture } = require('./captureQualityService');
 
@@ -375,7 +375,8 @@ const compareAndCreateSubmission = async ({
 
   const submittedAt = now();
   // Face matching alone never authorizes an account. The one exception is the
-  // opt-in auto-approve switch: a strong match on an accepted ID document.
+  // opt-in auto-approve switch: a strong match on an accepted ID document, for
+  // a client-only account. Workers always wait for an administrator.
   let status = 'pending';
   const autoEligible = autoApprove() && comparison.band === 'strong' && Boolean(documentBinding);
   const submissionId = crypto.randomUUID();
@@ -454,7 +455,7 @@ const compareAndCreateSubmission = async ({
           (currentVerification.exists && !FINAL_OR_REPLACEABLE_STATUSES.has(currentVerification.data().status))) {
           throw new VerificationConflictError('Verification eligibility changed during upload.');
         }
-        if (autoEligible) {
+        if (autoEligible && !holdsWorkerRole(currentUser.data())) {
           const account = currentUser.data();
           const autoReview = { required: true, status: 'APPROVED', reviewerId: AUTO_REVIEWER,
             reasonCode: 'AUTO_STRONG_FACE_MATCH', reviewedAt: submittedAt };

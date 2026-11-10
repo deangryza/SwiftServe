@@ -16,6 +16,7 @@ const collections = {
   phone_number_claims: phoneClaims,
   public_profiles: publicProfiles,
   worker_profiles: workerProfiles,
+  worker_verifications: {},
 };
 const db = {
   collection: name => ({
@@ -510,6 +511,27 @@ test('adding a role keeps an existing worker verification', async () => {
     .send({ role: 'client' }).expect(200);
   assert.deepEqual(records.verifiedworker.roles, ['worker', 'client']);
   assert.equal(records.verifiedworker.verificationStatus, 'verified');
+});
+
+test('a client verified by face match alone goes back to an admin before working', async () => {
+  const verifications = collections.worker_verifications;
+  records.autoclient = { fullName: 'Auto Client', role: 'client', verificationStatus: 'verified' };
+  verifications.autoclient = { status: 'verified', reviewedBy: 'auto_face_match', review: { status: 'APPROVED', reviewerId: 'auto_face_match' } };
+  await request(app).post('/api/users/roles').set('Authorization', 'Bearer autoclient')
+    .send({ role: 'worker', category: 'Plumbing' }).expect(200);
+  assert.equal(records.autoclient.verificationStatus, 'pending');
+  assert.equal(workerProfiles.autoclient.verificationStatus, 'pending');
+  assert.equal(verifications.autoclient.status, 'pending');
+  assert.deepEqual(verifications.autoclient.review, { required: true, status: 'PENDING' });
+  assert.match(verifications.autoclient.adminNotes, /Review the ID/);
+
+  // A client an administrator approved keeps that approval as a worker.
+  records.reviewedclient = { fullName: 'Reviewed Client', role: 'client', verificationStatus: 'verified' };
+  verifications.reviewedclient = { status: 'verified', reviewedBy: 'admin-1' };
+  await request(app).post('/api/users/roles').set('Authorization', 'Bearer reviewedclient')
+    .send({ role: 'worker', category: 'Plumbing' }).expect(200);
+  assert.equal(records.reviewedclient.verificationStatus, 'verified');
+  assert.equal(verifications.reviewedclient.status, 'verified');
 });
 
 test('switching is limited to roles the account owns', async () => {

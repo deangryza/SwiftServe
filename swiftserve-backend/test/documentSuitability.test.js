@@ -8,6 +8,7 @@ Object.assign(process.env,{GCLOUD_PROJECT:'demo-swiftserve-cleanup',FIRESTORE_EM
 let records, writes, directory, service;
 const ref = (collection, id) => ({ collection, id, get: async () => ({ exists: records.has(`${collection}/${id}`), data: () => records.get(`${collection}/${id}`) }) });
 const db = { projectId:'demo-swiftserve-cleanup',databaseId:'(default)',collection: collection => ({ doc: id => ref(collection,id),
+  where: (field, _operator, wanted) => ({ limit(){return this;},get: async () => ({ docs: [...records].filter(([key,value]) => key.startsWith(`${collection}/`) && value[field] === wanted).map(([key,value]) => ({ id:key.split('/')[1],data: () => value })) }) }),
   orderBy: () => ({ orderBy(){return this;},startAfter(){return this;},limit(){return this;},get: async () => ({ docs: [...records].filter(([key]) => key.startsWith(`${collection}/`)).map(([key,value]) => ({ id:key.split('/')[1],data: () => value })) }) }),
   }),
   async runTransaction(fn) { const pending = []; const result = await fn({ get: r => r.get(), set: (r, value) => pending.push([`${r.collection}/${r.id}`,value]) });
@@ -230,4 +231,15 @@ test('admin-review mode checks the ID at once: accepted when a face is found, re
     const files = await fs.readdir(path.join(directory, 'document_suitability', 'worker'));
     assert.equal(files.length, 1);
   } finally { delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
+});
+
+test('an ID photo already held by another account is refused; the owner may send it again', async () => {
+  const file = image('shared id'), first = await submit(file);
+  await assert.rejects(service.submit('client', { idType: 'National ID' }, file),
+    e => e.code === 'DOCUMENT_ALREADY_USED' && e.status === 409 && /already in use on another account/.test(e.publicMessage));
+  assert.equal(records.has('document_suitability/client'), false);
+  const again = await submit(file, first);
+  assert.equal(again.sessionId, first.sessionId);
+  // A different photo on the second account is unaffected.
+  assert.equal((await service.submit('client', { idType: 'National ID' }, image('own id'))).status, 'DOCUMENT_REVIEW_REQUIRED');
 });

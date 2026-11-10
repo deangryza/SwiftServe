@@ -43,7 +43,7 @@ afterEach(async () => {
   await fs.rm(uploadsDir, { recursive: true, force: true });
 });
 
-const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', transactionUserStatus } = {}) => {
+const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', transactionUserStatus, account = { role: 'worker' } } = {}) => {
   const writes = [];
   const attempts = [];
   const deleted = [];
@@ -72,7 +72,7 @@ const fixtures = ({ secondUploadFails = false, prior, userStatus = 'pending', tr
           if (name === 'users') {
             return {
               name,
-              get: async () => ({ exists: true, data: () => ({ role: 'worker', verificationStatus: userStatus }) }),
+              get: async () => ({ exists: true, data: () => ({ ...account, verificationStatus: userStatus }) }),
             };
           }
           if (name === 'worker_verifications') {
@@ -470,8 +470,8 @@ test('tries the EXIF orientation first, then other turns, and prefers the main I
 
 test('auto-approve verifies a strong match on an accepted ID and leaves every other case to an administrator', async () => {
   const binding = { sessionId: 'session-1', attemptId: 'attempt-1', sha256: 'digest-1', declaredType: 'National ID' };
-  const run = async (band, similarity, documentBinding = binding) => {
-    const fixture = fixtures();
+  const run = async (band, similarity, documentBinding = binding, account = { role: 'client' }) => {
+    const fixture = fixtures({ account });
     const result = await compareAndCreateSubmission({ ...input(fixture, async () => comparison(band, similarity)), documentBinding });
     return { fixture, result };
   };
@@ -499,10 +499,14 @@ test('auto-approve verifies a strong match on an accepted ID and leaves every ot
     assert.ok(record.purgeAfter instanceof Date);
     assert.deepEqual(record.documentBinding, binding);
     assert.equal(fixture.writesTo('users')[0].verificationStatus, 'verified');
-    assert.equal(fixture.writesTo('worker_profiles')[0].verificationStatus, 'verified');
+    // A client-only account has no worker profile to mark.
+    assert.deepEqual(fixture.writesTo('worker_profiles'), []);
     assert.equal(fixture.writesTo('notifications').length, 1);
     pending(await run('borderline', 70));
     pending(await run('strong', 95, null));
+    // Anyone who holds the worker role waits for an administrator.
+    pending(await run('strong', 95, binding, { role: 'worker' }));
+    pending(await run('strong', 95, binding, { role: 'client', roles: ['client', 'worker'] }));
   } finally { delete process.env.VERIFICATION_AUTO_APPROVE; delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
   // The auto switch does nothing without admin-review mode.
   process.env.VERIFICATION_AUTO_APPROVE = 'true';

@@ -369,6 +369,14 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                     : 'It takes about two minutes. Scan your ID, then take a '
                           'selfie. We compare the two to confirm it is you.',
               ),
+              if (!_requester) ...[
+                const SizedBox(height: 8),
+                const Text(
+                  'For worker accounts, an administrator also checks your ID '
+                  'before you can accept jobs.',
+                  key: ValueKey('verification_worker_review_note'),
+                ),
+              ],
               const SizedBox(height: 24),
               Text(
                 'Which ID will you use?',

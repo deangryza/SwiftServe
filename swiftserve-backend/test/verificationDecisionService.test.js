@@ -114,9 +114,13 @@ test('the automatic reviewer only counts for a strong match while auto-approve i
   try {
     refused(auto());
     process.env.VERIFICATION_ADMIN_REVIEW_MODE = 'true';
-    assert.equal(evaluate(auto()).eligible, true);
-    assert.equal(evaluate(auto()).officiallyVerified, false);
+    refused(auto());
+    assert.equal(evaluateWorkerVerification(auto(), { workerId: 'worker', account: { role: 'client' }, now }).officiallyVerified, false);
     refused(auto({ status: 'BORDERLINE', band: 'borderline', similarity: 65 }));
+    // Only client-only accounts: anyone holding the worker role needs a person.
+    const as = roleAccount => evaluateWorkerVerification(auto(), { workerId: 'worker', account: roleAccount, now });
+    assert.equal(as({ role: 'client' }).eligible, true);
+    assert.ok(as({ role: 'client', roles: ['client', 'worker'] }).reasonCodes.includes('ADMIN_REVIEW_REQUIRED'));
     delete process.env.VERIFICATION_AUTO_APPROVE;
     refused(auto());
   } finally { delete process.env.VERIFICATION_AUTO_APPROVE; delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
