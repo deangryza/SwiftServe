@@ -38,17 +38,21 @@ const addStatusWrites = (batch, db, workerId, status, { senderId, now, evidence,
     verificationStatus: status,
     updatedAt: now,
   }, { merge: true });
-  batch.set(db.collection('worker_profiles').doc(workerId), {
-    verificationStatus: status,
-    updatedAt: now,
-  }, { merge: true });
+  // Client-only accounts have no worker profile; never create one for them.
+  const isWorker = account?.role === 'worker' || (Array.isArray(account?.roles) && account.roles.includes('worker'));
+  if (isWorker || !account) {
+    batch.set(db.collection('worker_profiles').doc(workerId), {
+      verificationStatus: status,
+      updatedAt: now,
+    }, { merge: true });
+  }
   batch.set(db.collection('notifications').doc(), {
     recipientId: workerId,
     recipientRole: 'account',
     type: 'verificationUpdated',
     senderId,
     title: 'Verification updated',
-    body: `Your worker verification is now ${status.replaceAll('_', ' ')}.`,
+    body: `Your ${isWorker || !account ? 'worker' : 'account'} verification is now ${status.replaceAll('_', ' ')}.`,
     read: false,
     createdAt: now,
   });

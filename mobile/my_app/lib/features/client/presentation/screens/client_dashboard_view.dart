@@ -393,14 +393,14 @@ class _RequestBannerState extends State<_RequestBanner> {
   }
 
   @override
-  Widget build(BuildContext context) => AspectRatio(
-    aspectRatio: 350 / 168,
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(22),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          PageView.builder(
+  Widget build(BuildContext context) => Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      AspectRatio(
+        aspectRatio: 350 / 168,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: PageView.builder(
             controller: _controller,
             itemCount: _assets.length,
             onPageChanged: (page) => setState(() => _currentPage = page),
@@ -417,41 +417,28 @@ class _RequestBannerState extends State<_RequestBanner> {
               ),
             ),
           ),
-          Positioned(
-            bottom: 7,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0x66000000),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: List.generate(
-                    _assets.length,
-                    (index) => AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      width: index == _currentPage ? 14 : 6,
-                      height: 6,
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
-                      decoration: BoxDecoration(
-                        color: index == _currentPage
-                            ? ClientDashboardView._yellow
-                            : Colors.white70,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+        ),
+      ),
+      const SizedBox(height: 8),
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: List.generate(
+          _assets.length,
+          (index) => AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
+            width: index == _currentPage ? 14 : 6,
+            height: 6,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: index == _currentPage
+                  ? ClientDashboardView._yellow
+                  : Theme.of(context).colorScheme.outline,
+              borderRadius: BorderRadius.circular(3),
             ),
           ),
-        ],
+        ),
       ),
-    ),
+    ],
   );
 }
 

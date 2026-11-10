@@ -50,7 +50,7 @@ void main() {
           requester: true,
           legacyAccess: true,
         ).eligibility,
-        contains('NOT APPLICABLE'),
+        'ACCOUNT APPROVAL RECORDED',
       );
     },
   );
@@ -149,7 +149,7 @@ void main() {
         expect(
           find.text(
             role == UserRole.client
-                ? 'NOT APPLICABLE — REQUESTER ACCOUNT'
+                ? 'ACCOUNT APPROVAL PENDING'
                 : 'WORKER APPROVAL PENDING / BLOCKED',
           ),
           findsOneWidget,

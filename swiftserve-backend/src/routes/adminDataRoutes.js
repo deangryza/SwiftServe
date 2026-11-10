@@ -37,11 +37,30 @@ function normalize(kind, document) {
   return { ...base, status: title(data.status || 'pending'), date: iso(data.createdAt).slice(0, 10),
     reporter: data.reporterName || data.reporter || '', reportedUser: data.reportedUserName || data.reportedUser || '' };
 }
+// One dashboard refresh needs each collection several times. Sharing the read
+// keeps a refresh from multiplying Firestore usage. Permissions are applied per
+// request after this, so the shared data never reaches a restricted admin.
+const READ_CACHE_MS = 60000;
+const SOS_READ_CACHE_MS = 8000; // Below the dashboard's 10-second SOS refresh.
+const readCache = new Map();
+function readCollection(name) {
+  const cached = readCache.get(name);
+  if (cached && Date.now() < cached.expires) return cached.snapshot;
+  const snapshot = db.collection(name).get();
+  const entry = { snapshot, expires: Date.now() + (name === collections.sos ? SOS_READ_CACHE_MS : READ_CACHE_MS) };
+  readCache.set(name, entry);
+  snapshot.catch(() => { if (readCache.get(name) === entry) readCache.delete(name); });
+  return snapshot;
+}
+router.clearOnWrite = (req, res, next) => {
+  if (req.method !== 'GET') res.on('finish', () => readCache.clear());
+  next();
+};
 async function list(kind) {
-  const snapshot = await db.collection(collections[kind]).get();
+  const snapshot = await readCollection(collections[kind]);
   let items = snapshot.docs.map(document => normalize(kind, document));
   if (kind === 'users') {
-    const [bookingSnapshot, verificationSnapshot] = await Promise.all([db.collection('service_requests').get(), db.collection('worker_verifications').get()]);
+    const [bookingSnapshot, verificationSnapshot] = await Promise.all([readCollection('service_requests'), readCollection('worker_verifications')]);
     const verificationByUser = new Map(verificationSnapshot.docs.map(document => [document.id, document.data()]));
     const bookings = bookingSnapshot.docs.map(document => document.data());
     items = items.map(user => {
@@ -53,7 +72,7 @@ async function list(kind) {
     });
   }
   if (kind === 'bookings') {
-    const userSnapshot = await db.collection('users').get();
+    const userSnapshot = await readCollection('users');
     const users = new Map(userSnapshot.docs.map(document => [document.id, document.data()]));
     items = items.map(booking => {
       const client = users.get(booking.clientId) || {};
@@ -76,7 +95,7 @@ async function categories() {
 router.get('/overview', async (req, res, next) => {
   try {
     const [users, bookings, reports, categoryItems, verifications] = await Promise.all([
-      list('users'), list('bookings'), list('reports'), categories(), db.collection('worker_verifications').get(),
+      list('users'), list('bookings'), list('reports'), categories(), readCollection('worker_verifications'),
     ]);
     if (!req.adminAccess.fullAccess) {
       return res.json({ users: users.map(({ role, createdAt }) => ({ role, createdAt })),
@@ -222,6 +241,7 @@ router.patch('/:kind/:id', async (req, res, next) => {
 });
 router.delete('/categories/:id', async (req, res, next) => {
   try {
+    readCache.clear(); // The in-use check below must not rely on shared data.
     const item = (await categories()).find(category => category.id === req.params.id);
     if (!item) return res.sendStatus(404);
     if (item.workerCount || item.bookingCount) return res.status(409).json({ message: 'Category is in use. Deactivate it instead.' });

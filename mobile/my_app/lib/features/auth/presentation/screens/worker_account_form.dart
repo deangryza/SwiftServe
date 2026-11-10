@@ -573,7 +573,7 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
       ],
       Row(
         children: [
-          const Icon(Icons.check_circle_outline, color: AppTheme.ink, size: 15),
+          Icon(Icons.check_circle_outline, color: _text, size: 15),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
@@ -646,9 +646,9 @@ class _WorkerAccountFormState extends State<WorkerAccountForm> {
         style: TextStyle(color: _muted, height: 1.5),
       ),
       const SizedBox(height: 28),
-      _reviewCard('Identity Check', 'NOT YET VERIFIED', AppTheme.ink),
+      _reviewCard('Identity Check', 'NOT YET VERIFIED', _text),
       const SizedBox(height: 16),
-      _reviewCard('Face comparison', 'NOT RUN YET', AppTheme.ink),
+      _reviewCard('Face comparison', 'NOT RUN YET', _text),
       const SizedBox(height: 86),
     ],
   );

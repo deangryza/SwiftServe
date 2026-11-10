@@ -1232,7 +1232,7 @@ class _ClientReportDialogState extends State<_ClientReportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    icon: const Icon(Icons.report_outlined, color: AppTheme.ink, size: 34),
+    icon: Icon(Icons.report_outlined, color: context.themeInk, size: 34),
     title: Text('Report ${widget.clientName}?'),
     content: SingleChildScrollView(
       child: Column(

@@ -8,6 +8,12 @@ const STATUSES = Object.freeze({
   review: ['PENDING', 'APPROVED', 'REJECTED'],
   decision: ['PENDING', 'BLOCKED', 'REVIEW_REQUIRED', 'APPROVED', 'REJECTED', 'EXPIRED', 'REVOKED'],
 });
+// Hosted deployments have no PSA or server-liveness provider. With this switch
+// on, a reviewed ID document, a server face match and an admin approval are
+// enough to verify an account, and document review runs outside the emulator.
+// Approvals made this way never count as official government authentication.
+const adminReviewMode = () => process.env.VERIFICATION_ADMIN_REVIEW_MODE === 'true';
+const verifiableRoles = ['worker', 'client'];
 const milliseconds = value => value instanceof Date ? value.getTime()
   : value && typeof value.toMillis === 'function' ? value.toMillis() : NaN;
 const faceResultFor = comparison => ({
@@ -32,14 +38,22 @@ function evaluateWorkerVerification(record, { workerId, account, now = new Date(
     && typeof record.submissionId === 'string' && record.submissionId.length > 0 && record.submissionId.length <= 128
     && record.providerType !== 'MOCK' && record.checkSource !== 'SYNTHETIC_FIXTURE';
   if (!binding) reasons.push('EVIDENCE_BINDING_REQUIRED');
-  if (!account || !(account.role === 'worker' || (Array.isArray(account.roles) && account.roles.includes('worker')))
+  // Clients are verified through the same evidence and review as workers.
+  if (!account || !(verifiableRoles.includes(account.role) || (Array.isArray(account.roles) && account.roles.some(role => verifiableRoles.includes(role))))
       || ['suspended', 'disabled', 'inactive'].includes(account.status)
       || ['suspended', 'disabled', 'inactive'].includes(account.accountStatus)) reasons.push('WORKER_ACCOUNT_REQUIRED');
   const face = record?.face, government = record?.government, live = record?.liveness, review = record?.review;
-  if (face?.status !== 'MATCH' || face.source !== 'SERVER' || face.provider !== 'local_face_api' || face.band !== 'strong'
+  const manual = adminReviewMode();
+  // In admin-review mode a borderline match may be approved, because the
+  // reviewer compares the ID and selfie directly.
+  const borderline = manual && face?.status === 'BORDERLINE' && face.band === 'borderline'
+    && Number.isFinite(face.thresholds?.reviewMin) && face.similarity >= face.thresholds.reviewMin;
+  const strong = face?.status === 'MATCH' && face.band === 'strong'
+    && Number.isFinite(face.thresholds?.autoVerifyMin) && face.thresholds.autoVerifyMin >= 0 && face.thresholds.autoVerifyMin <= 100
+    && face.similarity >= face.thresholds.autoVerifyMin;
+  if (!(strong || borderline) || face.source !== 'SERVER' || face.provider !== 'local_face_api'
       || !Number.isFinite(face.distance) || face.distance < 0 || !Number.isFinite(face.similarity) || face.similarity > 100
-      || !Number.isFinite(face.thresholds?.autoVerifyMin) || face.thresholds.autoVerifyMin < 0 || face.thresholds.autoVerifyMin > 100
-      || face.similarity < face.thresholds.autoVerifyMin || !Number.isFinite(milliseconds(face.completedAt))
+      || !Number.isFinite(milliseconds(face.completedAt))
       || milliseconds(face.completedAt) > time) reasons.push('FACE_MATCH_REQUIRED');
   // Every external result must be backend-validated, live, bound to this exact
   // user/attempt, and unexpired. No endpoint currently produces these proofs.
@@ -50,8 +64,8 @@ function evaluateWorkerVerification(record, { workerId, account, now = new Date(
     && Number.isFinite(time) && milliseconds(evidence.validatedAt) <= time
     && Number.isFinite(milliseconds(evidence.validatedAt)) && milliseconds(evidence.expiresAt) > time;
   const official = government?.status === 'AUTHENTICATED' && government.provider === 'PSA' && trusted(government);
-  if (!official) reasons.push('OFFICIAL_GOVERNMENT_AUTHENTICATION_REQUIRED');
-  if (!(live?.status === 'PASSED' && live.source === 'SERVER' && typeof live.provider === 'string'
+  if (!official && !manual) reasons.push('OFFICIAL_GOVERNMENT_AUTHENTICATION_REQUIRED');
+  if (!manual && !(live?.status === 'PASSED' && live.source === 'SERVER' && typeof live.provider === 'string'
       && live.provider.length > 0 && !['MOCK', 'SYNTHETIC', 'NONE'].includes(live.provider) && trusted(live))) {
     reasons.push('TRUSTED_SERVER_LIVENESS_REQUIRED');
   }
@@ -69,4 +83,4 @@ function evaluateWorkerVerification(record, { workerId, account, now = new Date(
   return { policyVersion: POLICY_VERSION, status, eligible: status === 'APPROVED',
     officiallyVerified: official === true, reasonCodes: reasons, evaluatedAt: now };
 }
-module.exports = { POLICY_VERSION, SCHEMA_VERSION, STATUSES, faceResultFor, newEvidence, evaluateWorkerVerification };
+module.exports = { adminReviewMode, verifiableRoles, POLICY_VERSION, SCHEMA_VERSION, STATUSES, faceResultFor, newEvidence, evaluateWorkerVerification };

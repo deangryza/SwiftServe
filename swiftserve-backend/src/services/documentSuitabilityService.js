@@ -11,6 +11,7 @@ const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const mockDocument = record => record?.mock === true || record?.providerType === 'MOCK' || record?.checkSource === 'SYNTHETIC_FIXTURE';
 const dateText = value => value?.toDate ? value.toDate().toISOString() : value instanceof Date ? value.toISOString() : null;
 function documentEnvironment(db) {
+  if (require('./workerVerificationPolicy').adminReviewMode()) return;
   const loopback = value => /^(127\.0\.0\.1|localhost):\d+$/.test(value || '');
   if (!/^demo-[a-z0-9-]+$/.test(db.projectId || '') || db.databaseId !== '(default)'
     || process.env.GCLOUD_PROJECT !== db.projectId || !loopback(process.env.FIRESTORE_EMULATOR_HOST)

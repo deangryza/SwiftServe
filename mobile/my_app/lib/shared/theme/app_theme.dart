@@ -1,5 +1,17 @@
 import 'package:flutter/material.dart';
 
+/// Colors that follow the active light or dark theme. Use these for anything
+/// drawn directly on a page, card or dialog background.
+extension AppThemeColors on BuildContext {
+  Color get themeInk => Theme.of(this).colorScheme.onSurface;
+  Color get themeMuted => Theme.of(this).colorScheme.onSurfaceVariant;
+
+  /// A dark badge or pill fill that stays visible on dark cards.
+  Color get inkFill => Theme.of(this).brightness == Brightness.dark
+      ? const Color(0xFF494949)
+      : AppTheme.ink;
+}
+
 /// Shared white, yellow and charcoal styling for SwiftServe.
 abstract final class AppTheme {
   static const yellow = Color(0xFFFFC72C);

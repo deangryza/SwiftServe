@@ -604,10 +604,10 @@ class _PostRequestScreenState extends State<PostRequestScreen> {
         borderSide: BorderSide(color: text, width: 1.2),
       ),
       errorBorder: outline.copyWith(
-        borderSide: const BorderSide(color: AppTheme.ink),
+        borderSide: BorderSide(color: text),
       ),
       focusedErrorBorder: outline.copyWith(
-        borderSide: const BorderSide(color: AppTheme.ink, width: 1.2),
+        borderSide: BorderSide(color: text, width: 1.2),
       ),
     );
   }

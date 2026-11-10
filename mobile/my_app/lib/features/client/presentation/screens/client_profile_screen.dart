@@ -111,10 +111,10 @@ class _ProfileView extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
                 children: [
-                  const Text(
+                  Text(
                     'Profile',
                     style: TextStyle(
-                      color: _profileInk,
+                      color: text,
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
                     ),
@@ -780,7 +780,7 @@ class _VerificationBadge extends StatelessWidget {
       'resubmission_required' => 'Action required',
       _ => 'Pending',
     };
-    final color = verified ? AppTheme.ink : AppTheme.ink;
+    final color = context.inkFill;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
       decoration: BoxDecoration(

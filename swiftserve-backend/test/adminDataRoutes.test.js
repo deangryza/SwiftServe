@@ -4,7 +4,10 @@ const express = require('express');
 const request = require('supertest');
 
 const records = {
-  users: { worker: { fullName: 'Real worker', role: 'worker', verificationStatus: 'verified', category: 'Cleaning' } },
+  users: {
+    worker: { fullName: 'Real worker', role: 'worker', verificationStatus: 'verified', category: 'Cleaning' },
+    dual: { fullName: 'Dual', role: 'client', roles: ['client', 'worker'], verificationStatus: 'pending' },
+  },
   service_requests: { booking: { title: 'Clean home', clientName: 'Client', category: 'Cleaning', status: 'accepted', schedule: { toDate: () => new Date('2026-10-02T10:00:00Z') } } },
   reports: {}, service_categories: {}, worker_verifications: {}, notifications: {},
 };
@@ -60,11 +63,9 @@ test('rejects worker approval through user management and malformed categories',
 });
 
 test('dual-role users list both roles and show worker verification', async () => {
-  records.users.dual = { fullName: 'Dual', role: 'client', roles: ['client', 'worker'], verificationStatus: 'pending' };
   const users = await request(app).get('/api/admin/users').set('Authorization', 'Bearer admin').expect(200);
   const dual = users.body.items.find(item => item.id === 'dual');
   assert.equal(dual.role, 'Client');
   assert.deepEqual(dual.roles, ['Client', 'Worker']);
   assert.equal(dual.status, 'Pending');
-  delete records.users.dual;
 });

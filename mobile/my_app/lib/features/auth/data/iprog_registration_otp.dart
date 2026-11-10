@@ -1,7 +1,8 @@
 import '../../../shared/services/api_service.dart';
 import '../domain/registration_otp_gateway.dart';
 
-typedef SendPhoneOtp = Future<void> Function(String phoneNumber);
+/// Resolves to true when the server has SMS switched off and sent no code.
+typedef SendPhoneOtp = Future<bool> Function(String phoneNumber);
 typedef VerifyPhoneOtp =
     Future<String> Function(String phoneNumber, String code);
 
@@ -23,7 +24,7 @@ class IprogRegistrationOtp extends RegistrationOtpGateway {
   String? get error => _error;
 
   @override
-  bool verifiedFor(String phone) => _token != null && _verifiedPhone == phone;
+  bool verifiedFor(String phone) => _verifiedPhone == phone;
 
   /// The backend's proof for [phone], or null when it is not verified.
   String? tokenFor(String phone) => verifiedFor(phone) ? _token : null;
@@ -40,7 +41,11 @@ class IprogRegistrationOtp extends RegistrationOtpGateway {
     if (verifiedFor(phone)) return;
     _error = null;
     try {
-      await _sendCode(phone);
+      if (await _sendCode(phone)) {
+        _token = null;
+        _verifiedPhone = phone;
+        notifyListeners();
+      }
     } on ApiException catch (error) {
       throw RegistrationOtpException(error.message);
     } on ApiConnectionException catch (error) {

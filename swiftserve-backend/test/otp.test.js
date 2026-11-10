@@ -128,6 +128,21 @@ test('SMS provider failures are reported without exposing details', async () => 
   assert.equal(response.body.code, 'OTP_SEND_FAILED');
 });
 
+test('the emergency switch skips the SMS without calling IPROG', async () => {
+  const { sendOtp } = require('../src/services/otpService');
+  const env = { PHONE_OTP_REQUIRED: 'false', IPROGSMS_API_TOKEN: 'test-iprog-token' };
+  assert.deepEqual(await sendOtp({ db, phone: '+639171234567', env }), { otpSkipped: true });
+  assert.equal(iprog.sent.length, 0);
+  await assert.rejects(sendOtp({ db, phone: 'bad-number', env }), { code: 'INVALID_PHONE_NUMBER' });
+});
+
+test('a failed send does not start the resend cooldown', async () => {
+  iprog.fail = true;
+  await send('+639171234567').expect(502);
+  iprog.fail = false;
+  await send('+639171234567').expect(200);
+});
+
 test('expired or tampered tokens are invalid', () => {
   const token = signPhoneToken('+639171234567', { now: Date.now() - 25 * 60 * 60 * 1000 });
   assert.equal(readPhoneToken(token), null);

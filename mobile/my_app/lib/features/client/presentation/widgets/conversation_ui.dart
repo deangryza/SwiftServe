@@ -790,8 +790,8 @@ class _ConversationCard extends StatelessWidget {
                         Container(
                           width: 9,
                           height: 9,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.ink,
+                          decoration: BoxDecoration(
+                            color: context.themeInk,
                             shape: BoxShape.circle,
                           ),
                         ),

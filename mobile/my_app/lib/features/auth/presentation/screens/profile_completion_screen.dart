@@ -129,8 +129,9 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
           ),
         ),
       );
+      if (result != 'verified') return null;
       final token = gateway.tokenFor(draft.phoneNumber);
-      if (result != 'verified' || token == null) return null;
+      if (token == null) return draft; // The server has SMS switched off.
       final updated = draft.withPhoneVerificationToken(token);
       await ProfileDraftStore().save(updated);
       _draft = updated;
@@ -243,7 +244,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                       Text(
                         _error!,
                         textAlign: TextAlign.center,
-                        style: const TextStyle(color: AppTheme.ink),
+                        style: TextStyle(color: context.themeInk),
                       ),
                     ],
                     const SizedBox(height: 20),

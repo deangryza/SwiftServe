@@ -99,6 +99,7 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   Map<String, dynamic> _documentReview = {};
   bool _documentMatches = false;
   bool get _requester => widget.profile.role == UserRole.client;
+  String get _accountLabel => _requester ? 'Account' : 'Worker';
   Widget _checks() => VerificationEvidencePanel(
     evidence: VerificationEvidence(
       data: _evidence,
@@ -125,14 +126,13 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
     }
     _statusStream =
         widget.statusStream ??
-        (_requester
-            ? Stream.value(null)
-            : _repository!.watch(widget.profile.id).map((doc) {
-                _evidence = doc.data() ?? {};
-                return doc.exists
-                    ? VerificationStatus.fromWire(doc.data()?['status'])
-                    : null;
-              }));
+        // Clients and workers share one submission record and review flow.
+        _repository!.watch(widget.profile.id).map((doc) {
+          _evidence = doc.data() ?? {};
+          return doc.exists
+              ? VerificationStatus.fromWire(doc.data()?['status'])
+              : null;
+        });
     _submitter =
         widget.submitter ??
         ({
@@ -145,7 +145,6 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
           idNumber: idNumber,
           governmentId: governmentId,
           facePhoto: facePhoto,
-          comparisonOnly: _requester,
           documentSessionId: _documentReview['sessionId'],
           documentAttemptId: _documentReview['attemptId'],
         );
@@ -224,7 +223,6 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                   title: 'Checks could not be loaded',
                   description:
                       'Your account access has not changed. Go back and try again.',
-                  accentColor: AppTheme.ink,
                 );
               }
 
@@ -242,56 +240,43 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
   }
 
   Widget _buildContent(WorkerVerificationUiState state) {
-    if (state.isVerified && !_requester) {
+    if (state.isVerified) {
       return _VerificationStatusView(
         key: ValueKey('verification_verified_status'),
         icon: Icons.verified_outlined,
-        title: 'Worker access retained',
-        description:
-            'Existing worker access does not establish official PSA authentication.',
-        accentColor: AppTheme.ink,
+        title: _requester ? 'Account verified' : 'Worker access retained',
+        description: _requester
+            ? 'Your account is verified. This does not establish official PSA authentication.'
+            : 'Existing worker access does not establish official PSA authentication.',
         action: _checks(),
       );
     }
 
     if (_submissionComplete) {
       final similarity = _formatPercent(_submittedConfidence);
-      if (_submittedVerified && !_requester) {
+      if (_submittedVerified) {
         return _VerificationStatusView(
           key: const ValueKey('verification_submission_verified'),
           icon: Icons.verified_outlined,
-          title: 'Worker approval recorded',
+          title: '$_accountLabel approval recorded',
           description: similarity == null
-              ? 'The backend reported worker approval. Face matching alone does not establish official identity.'
+              ? 'The backend reported approval. Face matching alone does not establish official identity.'
               : 'Your selfie matched your ID with $similarity similarity. '
-                    'Worker approval is a separate backend decision.',
-          accentColor: AppTheme.ink,
+                    '$_accountLabel approval is a separate backend decision.',
           action: _checks(),
         );
       }
       return _VerificationStatusView(
         key: ValueKey('verification_submission_complete'),
         icon: Icons.schedule_send_outlined,
-        title: _requester
-            ? 'Face comparison complete'
-            : 'Worker approval pending',
+        title: '$_accountLabel approval pending',
         description:
-            'Face and DEMO QR results cannot approve an account. Official government authentication and trusted server liveness remain unavailable.',
-        accentColor: AppTheme.ink,
-        action: Column(
-          children: [
-            _checks(),
-            if (_requester)
-              TextButton(
-                onPressed: _startFreshWizard,
-                child: const Text('Run another face check'),
-              ),
-          ],
-        ),
+            'Your ID and selfie were submitted. An administrator reviews them before your account is verified. Face and DEMO QR results alone cannot approve an account. Official government authentication and trusted server liveness remain unavailable.',
+        action: _checks(),
       );
     }
 
-    if (state.isAwaitingReview && !_requester) {
+    if (state.isAwaitingReview) {
       return _VerificationStatusView(
         key: ValueKey('verification_pending_status'),
         icon: Icons.hourglass_top_rounded,
@@ -299,7 +284,6 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
         description:
             'Your documents were submitted successfully. We will '
             'notify you when the review is complete.',
-        accentColor: AppTheme.ink,
         action: _checks(),
       );
     }
@@ -315,7 +299,6 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
             ? 'Verification was not approved'
             : 'New submission required',
         description: state.description,
-        accentColor: AppTheme.ink,
         action: FilledButton(
           key: const ValueKey('verification_resubmit_button'),
           onPressed: _startFreshWizard,
@@ -400,10 +383,8 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
                 title: const Text(
                   'I consent to private document suitability review and face comparison.',
                 ),
-                subtitle: Text(
-                  _requester
-                      ? 'Requester face checks are processed in memory and are not saved as worker verification. DEMO QR data stays on this screen.'
-                      : 'Worker photos use the existing private review storage and deletion process. Pending retention still needs review before production. No PSA service is contacted.',
+                subtitle: const Text(
+                  'Your photos use the existing private review storage and deletion process. Pending retention still needs review before production. No PSA service is contacted.',
                 ),
               ),
               FilledButton(
@@ -637,6 +618,9 @@ class _WorkerVerificationScreenState extends State<WorkerVerificationScreen> {
         }
         _documentReview = result;
       });
+    } on DocumentReviewException catch (error) {
+      // The server answered; show its reason instead of blaming the connection.
+      if (mounted) setState(() => _stepMessage = error.message);
     } catch (_) {
       if (mounted) {
         setState(
@@ -1295,14 +1279,12 @@ class _VerificationStatusView extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.description,
-    required this.accentColor,
     this.action,
   });
 
   final IconData icon;
   final String title;
   final String description;
-  final Color accentColor;
   final Widget? action;
 
   @override
@@ -1315,7 +1297,7 @@ class _VerificationStatusView extends StatelessWidget {
           child: Column(
             children: [
               const SizedBox(height: 48),
-              Icon(icon, size: 80, color: accentColor),
+              Icon(icon, size: 80, color: context.themeInk),
               const SizedBox(height: 24),
               Text(
                 title,
@@ -1423,8 +1405,8 @@ class _PhotoPreview extends StatelessWidget {
           child: Image.file(
             file,
             fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => const ColoredBox(
-              color: AppTheme.line,
+            errorBuilder: (context, error, stackTrace) => ColoredBox(
+              color: Theme.of(context).colorScheme.outlineVariant,
               child: Center(child: Icon(Icons.broken_image_outlined, size: 40)),
             ),
           ),
@@ -1458,10 +1440,10 @@ class _ReviewPhoto extends StatelessWidget {
           if (file != null)
             _PhotoPreview(file: file!, semanticLabel: title)
           else
-            const AspectRatio(
+            AspectRatio(
               aspectRatio: 4 / 3,
               child: ColoredBox(
-                color: AppTheme.line,
+                color: Theme.of(context).colorScheme.outlineVariant,
                 child: Center(child: Icon(Icons.add_a_photo_outlined)),
               ),
             ),

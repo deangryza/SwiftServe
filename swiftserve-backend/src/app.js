@@ -11,6 +11,10 @@ const verificationRoutes = require('./routes/verificationRoutes');
 
 const app = express();
 
+// Railway's proxy is the one hop in front of the API. Without this, rate limits
+// see every phone as the same address and share one allowance.
+if (process.env.RAILWAY_ENVIRONMENT_NAME) app.set('trust proxy', 1);
+
 if (process.env.SWIFTSERVE_NETLIFY_PILOT === 'true') {
   app.disable('x-powered-by');
   app.use(cors({ origin(origin, callback) {
@@ -55,6 +59,7 @@ if (process.env.SWIFTSERVE_STAGING === 'true') {
 
 app.use('/api/test', testRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', require('./routes/adminDataRoutes').clearOnWrite);
 // Disabled by default and guarded BEFORE authentication/database reads. Mock
 // records cannot change existing worker verification or production profiles.
 const identityRouters = require('./routes/nationalIdRoutes').createIdentityRouters({

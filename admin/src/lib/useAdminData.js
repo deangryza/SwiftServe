@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from './api';
 
-export default function useAdminData(resource, initialValue = [], pollMs = 30000) {
+export default function useAdminData(resource, initialValue = [], pollMs = 300000) {
   const [data, setData] = useState(initialValue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -14,9 +14,16 @@ export default function useAdminData(resource, initialValue = [], pollMs = 30000
       } catch (failure) { if (active) setError(failure.message); }
       finally { if (active) setLoading(false); }
     }
+    // Hidden tabs do not refresh, and catch up as soon as they are shown again.
+    const refreshIfVisible = () => { if (document.visibilityState === 'visible') load(); };
     load();
-    const interval = setInterval(load, pollMs);
-    return () => { active = false; clearInterval(interval); };
+    const interval = setInterval(refreshIfVisible, pollMs);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+    return () => {
+      active = false;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
   }, [resource, pollMs]);
   return { data, setData, loading, error };
 }

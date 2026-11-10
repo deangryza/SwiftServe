@@ -548,7 +548,7 @@ class _LoginPalette {
   Color get googleBorder =>
       dark ? const Color(0xFFD7D8DC) : const Color(0xFFAAADB4);
   Color get accent => AppTheme.yellow;
-  Color get link => AppTheme.muted;
+  Color get link => dark ? const Color(0xFFB8B8B8) : AppTheme.muted;
 }
 
 class _FieldLabel extends StatelessWidget {

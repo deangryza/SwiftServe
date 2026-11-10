@@ -63,7 +63,8 @@ async function callIprog(path, body, { env = process.env, fetchImpl = fetch } = 
       body: JSON.stringify({ api_token: apiToken, ...body }),
       signal: AbortSignal.timeout(15000),
     });
-  } catch (_) {
+  } catch (error) {
+    console.error('IPROG SMS request failed:', error.cause?.code || error.name);
     throw new OtpError(502, 'OTP_SEND_FAILED', 'The SMS service could not be reached. Try again.');
   }
   let data = {};
@@ -78,6 +79,8 @@ async function sendOtp({ db, phone, env = process.env, fetchImpl = fetch, now = 
   if (!isPhilippineMobile(phone)) {
     throw new OtpError(400, 'INVALID_PHONE_NUMBER', 'Enter a valid Philippine mobile number (+63 9XX XXX XXXX).');
   }
+  // Emergency switch for SMS provider outages: the app skips the code step.
+  if (env.PHONE_OTP_REQUIRED === 'false') return { otpSkipped: true };
   const ref = db.collection('otp_requests').doc(phoneKey(phone));
   await db.runTransaction(async (transaction) => {
     const record = (await transaction.get(ref)).data() || {};
@@ -95,12 +98,26 @@ async function sendOtp({ db, phone, env = process.env, fetchImpl = fetch, now = 
     }
     transaction.set(ref, { sends: [...sends, now], wrongCodes: 0, updatedAt: new Date(now) });
   });
-  const result = await callIprog('send_otp', {
-    phone_number: toIprogNumber(phone),
-    expires_in_minutes: CODE_MINUTES,
-    message: `Your SwiftServe code is :otp. It expires in ${CODE_MINUTES} minutes. Do not share it.`,
-  }, { env, fetchImpl });
-  if (!result.ok) throw new OtpError(502, 'OTP_SEND_FAILED', 'The code could not be sent. Try again.');
+  // No SMS went out, so this attempt must not count against the resend limits.
+  const forgetSend = () => db.runTransaction(async (transaction) => {
+    const record = (await transaction.get(ref)).data() || {};
+    transaction.set(ref, { ...record, sends: (record.sends || []).filter((at) => at !== now) });
+  }).catch(() => {});
+  let result;
+  try {
+    result = await callIprog('send_otp', {
+      phone_number: toIprogNumber(phone),
+      expires_in_minutes: CODE_MINUTES,
+      message: `Your SwiftServe code is :otp. It expires in ${CODE_MINUTES} minutes. Do not share it.`,
+    }, { env, fetchImpl });
+  } catch (error) {
+    await forgetSend();
+    throw error;
+  }
+  if (!result.ok) {
+    await forgetSend();
+    throw new OtpError(502, 'OTP_SEND_FAILED', 'The code could not be sent. Try again.');
+  }
   return { expiresInMinutes: CODE_MINUTES };
 }
 

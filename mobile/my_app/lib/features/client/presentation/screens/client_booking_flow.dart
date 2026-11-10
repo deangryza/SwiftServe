@@ -690,11 +690,11 @@ class _WorkersHeader extends StatelessWidget {
             children: [
               _CircleBackButton(onPressed: () => Navigator.pop(context)),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Workers Found',
                   style: TextStyle(
-                    color: _bookingInk,
+                    color: context.themeInk,
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                   ),
@@ -901,8 +901,8 @@ class _ApplicationCard extends StatelessWidget {
                         _accepted
                             ? 'Accepted worker · View profile'
                             : 'Applied worker · View profile',
-                        style: const TextStyle(
-                          color: AppTheme.muted,
+                        style: TextStyle(
+                          color: context.themeMuted,
                           fontSize: 9,
                           fontWeight: FontWeight.w700,
                         ),
@@ -1632,7 +1632,7 @@ class _WorkerReportDialogState extends State<_WorkerReportDialog> {
 
   @override
   Widget build(BuildContext context) => AlertDialog(
-    icon: const Icon(Icons.report_outlined, color: AppTheme.ink, size: 34),
+    icon: Icon(Icons.report_outlined, color: context.themeInk, size: 34),
     title: Text('Report ${widget.workerName}?'),
     content: SingleChildScrollView(
       child: Column(

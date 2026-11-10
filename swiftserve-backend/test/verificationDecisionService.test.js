@@ -79,3 +79,24 @@ test('writer preserves already verified accounts instead of reinterpreting legac
     senderId: 'reviewer', now, evidence: evidence(), account: { ...account, verificationStatus: 'verified' },
   }), { code: 'LEGACY_VERIFICATION_PROTECTED' });
 });
+test('admin-review mode verifies workers and clients without PSA or liveness, but never without review', () => {
+  const bare = () => { const record = evidence(); record.government = { status: 'NOT_INTEGRATED', provider: 'NONE' }; record.liveness = { status: 'NOT_IMPLEMENTED' }; return record; };
+  assert.equal(evaluate(bare()).eligible, false);
+  process.env.VERIFICATION_ADMIN_REVIEW_MODE = 'true';
+  try {
+    const approved = evaluate(bare());
+    assert.equal(approved.eligible, true); assert.equal(approved.officiallyVerified, false);
+    assert.equal(evaluateWorkerVerification(bare(), { workerId: 'worker', account: { role: 'client' }, now }).eligible, true);
+    const pending = bare(); pending.review = { required: true, status: 'PENDING' };
+    assert.deepEqual(evaluate(pending).reasonCodes, ['ADMIN_REVIEW_REQUIRED']);
+    const borderline = bare(); Object.assign(borderline.face, { status: 'BORDERLINE', band: 'borderline', similarity: 65 });
+    assert.equal(evaluate(borderline).eligible, true);
+    const mismatch = bare(); Object.assign(mismatch.face, { status: 'NO_MATCH', band: 'mismatch', similarity: 30 });
+    assert.equal(evaluate(mismatch).eligible, false);
+    const writes = [], db = { collection: name => ({ doc: (id = 'notice') => `${name}/${id}` }) };
+    addStatusWrites({ set: (...args) => writes.push(args) }, db, 'worker', 'verified', { senderId: 'reviewer', now, evidence: bare(), account: { role: 'client' } });
+    assert.deepEqual(writes.map(write => write[0]), ['users/worker', 'notifications/notice']);
+    const { documentEnvironment } = require('../src/services/documentSuitabilityService');
+    assert.doesNotThrow(() => documentEnvironment({ projectId: 'swiftserve-production', databaseId: '(default)' }));
+  } finally { delete process.env.VERIFICATION_ADMIN_REVIEW_MODE; }
+});

@@ -305,7 +305,7 @@ class _WorkerSearchScreenState extends State<WorkerSearchScreen> {
                   color: AppTheme.softYellow,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.search, size: 18),
+                child: const Icon(Icons.search, size: 18, color: AppTheme.ink),
               ),
               title: Text(search, style: TextStyle(color: text, fontSize: 13)),
               trailing: IconButton(

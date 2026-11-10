@@ -22,6 +22,10 @@ abstract final class CaptureQuality {
   static const minFaceSide = 64;
   static const minMean = 15.0, maxMean = 240.0, minSharpness = 4.0;
   static const sampleSide = 128;
+
+  /// Selfies are held still before capture, so they can meet a higher floor
+  /// than ID portraits, which are small and printed.
+  static const selfieMinSharpness = 12.0;
   static void reject(String reason) {
     throw CaptureQualityException(reason, switch (reason) {
       'NO_FACE' =>
@@ -113,7 +117,11 @@ abstract final class CaptureQuality {
     );
   }
 
-  static void checkMetrics(double mean, double sharpness) {
+  static void checkMetrics(
+    double mean,
+    double sharpness, {
+    double minSharpness = CaptureQuality.minSharpness,
+  }) {
     if (!mean.isFinite || !sharpness.isFinite) reject('FACE_DETAIL');
     if (mean < minMean) reject('TOO_DARK');
     if (mean > maxMean) reject('TOO_BRIGHT');
@@ -123,8 +131,10 @@ abstract final class CaptureQuality {
   /// Decode and detect on the actual final file, never a preview frame.
   static Future<void> validate(
     File file,
-    Future<List<CaptureFace>> Function(File) detect,
-  ) async {
+    Future<List<CaptureFace>> Function(File) detect, {
+    double minSharpness = CaptureQuality.minSharpness,
+    void Function(double mean, double sharpness)? onMetrics,
+  }) async {
     final codec = await ui.instantiateImageCodec(await file.readAsBytes());
     ui.Image? image;
     try {
@@ -142,11 +152,48 @@ abstract final class CaptureQuality {
         image.height,
         faces.single.box,
       );
-      checkMetrics(result.mean, result.sharpness);
+      onMetrics?.call(result.mean, result.sharpness);
+      checkMetrics(result.mean, result.sharpness, minSharpness: minSharpness);
     } finally {
       image?.dispose();
       codec.dispose();
     }
+  }
+}
+
+/// Front cameras save a mirror image. Rewrites the photo flipped left-to-right
+/// so it shows the person the way others see them, and returns the new file.
+Future<File> unmirrorPhoto(File file) async {
+  final codec = await ui.instantiateImageCodec(await file.readAsBytes());
+  ui.Image? source, flipped;
+  try {
+    source = (await codec.getNextFrame()).image;
+    final recorder = ui.PictureRecorder();
+    ui.Canvas(recorder)
+      ..translate(source.width.toDouble(), 0)
+      ..scale(-1, 1)
+      ..drawImage(source, ui.Offset.zero, ui.Paint());
+    flipped = await recorder.endRecording().toImage(
+      source.width,
+      source.height,
+    );
+    final png = await flipped.toByteData(format: ui.ImageByteFormat.png);
+    if (png == null) throw StateError('Could not encode the selfie.');
+    final path = file.path;
+    final dot = path.lastIndexOf('.');
+    final output = File(
+      '${dot > path.lastIndexOf(Platform.pathSeparator) ? path.substring(0, dot) : path}-unmirrored.png',
+    );
+    await output.writeAsBytes(
+      png.buffer.asUint8List(png.offsetInBytes, png.lengthInBytes),
+      flush: true,
+    );
+    await file.delete().catchError((_) => file);
+    return output;
+  } finally {
+    source?.dispose();
+    flipped?.dispose();
+    codec.dispose();
   }
 }
 

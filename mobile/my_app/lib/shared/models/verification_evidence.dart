@@ -54,7 +54,11 @@ class VerificationEvidence {
         _ => 'ADMIN REVIEW PENDING',
       };
   String get eligibility => requester
-      ? 'NOT APPLICABLE — REQUESTER ACCOUNT'
+      ? (mock
+            ? 'MOCK RESULT — NO ACCOUNT APPROVAL'
+            : legacyAccess || _map('workerDecision')['eligible'] == true
+            ? 'ACCOUNT APPROVAL RECORDED'
+            : 'ACCOUNT APPROVAL PENDING')
       : mock
       ? 'MOCK RESULT — NO WORKER PRIVILEGES'
       : legacyAccess && data['schemaVersion'] != 2

@@ -232,8 +232,13 @@ class ApiService {
 
   /// Texts a one-time code to a Philippine mobile number (+639XXXXXXXXX).
   /// No sign-in needed: email sign-ups verify before the account exists.
-  Future<void> sendPhoneOtp(String phoneNumber) =>
-      _postJson('/api/otp/send', null, {'phoneNumber': phoneNumber});
+  /// Returns true when the server has SMS switched off and sent no code.
+  Future<bool> sendPhoneOtp(String phoneNumber) async {
+    final body = await _postJson('/api/otp/send', null, {
+      'phoneNumber': phoneNumber,
+    });
+    return body['otpSkipped'] == true;
+  }
 
   /// Checks the SMS code; returns the token that profile creation requires.
   Future<String> verifyPhoneOtp(String phoneNumber, String code) async {

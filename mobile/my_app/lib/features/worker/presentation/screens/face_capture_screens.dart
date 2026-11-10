@@ -3,36 +3,51 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 
 import '../../domain/liveness_tracker.dart';
 import '../../domain/capture_quality.dart';
+import '../../domain/steady_hold_tracker.dart';
 
-Future<void> _validateFinalPhoto(File file, FaceDetector detector) =>
-    CaptureQuality.validate(file, (photo) async {
-      final faces = await detector.processImage(
-        InputImage.fromFilePath(photo.path),
-      );
-      return faces
-          .map(
-            (face) => CaptureFace(face.boundingBox, [
-              for (final type in [
-                FaceLandmarkType.leftEye,
-                FaceLandmarkType.rightEye,
-                FaceLandmarkType.noseBase,
-                FaceLandmarkType.bottomMouth,
-              ])
-                if (face.landmarks[type] != null)
-                  Offset(
-                    face.landmarks[type]!.position.x.toDouble(),
-                    face.landmarks[type]!.position.y.toDouble(),
-                  ),
-            ]),
-          )
-          .toList();
-    });
+Future<void> _validateFinalPhoto(
+  File file,
+  FaceDetector detector, {
+  double minSharpness = CaptureQuality.minSharpness,
+}) => CaptureQuality.validate(
+  file,
+  minSharpness: minSharpness,
+  // Debug builds print the measured values so the floor can be tuned.
+  onMetrics: (mean, sharpness) {
+    if (kDebugMode) {
+      debugPrint('Capture quality: mean=$mean sharpness=$sharpness');
+    }
+  },
+  (photo) async {
+    final faces = await detector.processImage(
+      InputImage.fromFilePath(photo.path),
+    );
+    return faces
+        .map(
+          (face) => CaptureFace(face.boundingBox, [
+            for (final type in [
+              FaceLandmarkType.leftEye,
+              FaceLandmarkType.rightEye,
+              FaceLandmarkType.noseBase,
+              FaceLandmarkType.bottomMouth,
+            ])
+              if (face.landmarks[type] != null)
+                Offset(
+                  face.landmarks[type]!.position.x.toDouble(),
+                  face.landmarks[type]!.position.y.toDouble(),
+                ),
+          ]),
+        )
+        .toList();
+  },
+);
 
 class DocumentCaptureScreen extends StatefulWidget {
   const DocumentCaptureScreen({super.key});
@@ -136,18 +151,28 @@ class SelfieLivenessScreen extends StatefulWidget {
   State<SelfieLivenessScreen> createState() => _SelfieLivenessScreenState();
 }
 
+/// challenge: follow the random prompt. hold: stay still for the countdown.
+/// checking: photo taken, being validated. confirm: user accepts or retakes.
+/// failed: timed out or the photo was rejected.
+enum _SelfiePhase { challenge, hold, checking, confirm, failed }
+
 class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
   CameraController? _controller;
   late final FaceDetector _detector;
   late final FaceDetector _finalDetector;
   late LivenessTracker _tracker;
+  SteadyHoldTracker _hold = SteadyHoldTracker();
   Timer? _timer;
+  _SelfiePhase _phase = _SelfiePhase.challenge;
   bool _processing = false;
-  bool _capturing = false;
-  bool _timedOut = false;
   bool _retakePhoto = false;
+  bool _faceReady = false;
+  bool _accepted = false;
+  File? _photo;
   String? _error;
   String? _guidance;
+  String _failure =
+      'The challenge timed out. Keep one face centered and try again.';
 
   @override
   void initState() {
@@ -184,7 +209,8 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
       }
       final controller = CameraController(
         camera,
-        ResolutionPreset.medium,
+        // Higher than the live analysis needs, so the saved selfie is sharp.
+        ResolutionPreset.high,
         enableAudio: false,
         imageFormatGroup: Platform.isAndroid
             ? ImageFormatGroup.nv21
@@ -203,26 +229,52 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     final controller = _controller;
     if (controller == null) return;
     _timer?.cancel();
+    final discarded = _photo;
+    _photo = null;
+    if (discarded != null) unawaited(_deleteQuietly(discarded));
     if (controller.value.isStreamingImages) await controller.stopImageStream();
+    if (!mounted) return;
     setState(() {
       _tracker = LivenessTracker(_randomChallenge());
-      _timedOut = false;
+      _hold = SteadyHoldTracker();
+      _phase = _SelfiePhase.challenge;
       _retakePhoto = false;
+      _faceReady = false;
       _error = null;
       _guidance = null;
     });
     await controller.startImageStream(_processFrame);
-    _timer = Timer(const Duration(seconds: 20), () async {
-      if (!mounted || _capturing) return;
+    _startTimeout(
+      const Duration(seconds: 20),
+      'The challenge timed out. Keep one face centered and try again.',
+    );
+  }
+
+  void _startTimeout(Duration after, String message) {
+    _timer?.cancel();
+    final controller = _controller;
+    _timer = Timer(after, () async {
+      if (!mounted ||
+          controller == null ||
+          (_phase != _SelfiePhase.challenge && _phase != _SelfiePhase.hold)) {
+        return;
+      }
+      // Set the phase first so no later frame can start a capture.
+      setState(() {
+        _phase = _SelfiePhase.failed;
+        _failure = message;
+      });
       if (controller.value.isStreamingImages) {
         await controller.stopImageStream();
       }
-      if (mounted) setState(() => _timedOut = true);
     });
   }
 
   Future<void> _processFrame(CameraImage image) async {
-    if (_processing || _capturing || _timedOut) return;
+    if (_processing ||
+        (_phase != _SelfiePhase.challenge && _phase != _SelfiePhase.hold)) {
+      return;
+    }
     final frame = _inputImage(image);
     if (frame == null) {
       if (mounted && _error == null) {
@@ -236,31 +288,60 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     _processing = true;
     try {
       final faces = await _detector.processImage(frame.input);
+      // The phase may have changed (timeout, retake) while detecting.
+      if (_phase != _SelfiePhase.challenge && _phase != _SelfiePhase.hold) {
+        return;
+      }
       final face = faces.length == 1 ? faces.first : null;
       final centered = face != null && _isCentered(face, frame.coordinateSize);
-      final guidance = switch ((faces.length, centered)) {
+      var guidance = switch ((faces.length, centered)) {
         (0, _) => 'No face detected. Move closer and face the camera.',
         (> 1, _) => 'More than one face detected. Keep only your face in view.',
-        (1, false) => 'Move your face toward the center of the frame.',
+        (1, false) => 'Move your face into the oval.',
         _ => null,
       };
-      final complete = _tracker.process(
-        faceCount: faces.length,
-        leftEyeOpenProbability: face?.leftEyeOpenProbability,
-        rightEyeOpenProbability: face?.rightEyeOpenProbability,
-        yaw: face?.headEulerAngleY,
-        centered: centered,
-      );
+      var capture = false;
+      if (_phase == _SelfiePhase.challenge) {
+        final complete = _tracker.process(
+          faceCount: faces.length,
+          leftEyeOpenProbability: face?.leftEyeOpenProbability,
+          rightEyeOpenProbability: face?.rightEyeOpenProbability,
+          yaw: face?.headEulerAngleY,
+          centered: centered,
+        );
+        if (complete) {
+          // The challenge proves a live person; the photo waits for stillness.
+          _phase = _SelfiePhase.hold;
+          _hold = SteadyHoldTracker();
+          _startTimeout(
+            const Duration(seconds: 15),
+            'Could not get a steady view. Hold the phone still and try again.',
+          );
+        }
+      } else {
+        capture = _hold.process(
+          now: DateTime.now(),
+          faceCount: faces.length,
+          frameSize: frame.coordinateSize,
+          box: face?.boundingBox,
+          centered: centered,
+          yaw: face?.headEulerAngleY,
+          pitch: face?.headEulerAngleX,
+          roll: face?.headEulerAngleZ,
+          leftEyeOpenProbability: face?.leftEyeOpenProbability,
+          rightEyeOpenProbability: face?.rightEyeOpenProbability,
+        );
+        guidance = _hold.guidance;
+      }
+      if (capture) _phase = _SelfiePhase.checking;
       if (mounted) {
         setState(() {
           _error = null;
           _guidance = guidance;
+          _faceReady = guidance == null;
         });
       }
-      if (complete && !_capturing) {
-        _capturing = true;
-        unawaited(Future<void>.delayed(Duration.zero, _finishCapture));
-      }
+      if (capture) unawaited(_finishCapture());
     } catch (error) {
       if (mounted) {
         setState(() => _error = 'Could not analyze the camera image.');
@@ -338,44 +419,63 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
 
   Future<void> _finishCapture() async {
     final controller = _controller;
-    if (controller == null) {
-      _capturing = false;
-      return;
-    }
+    if (controller == null) return;
     _timer?.cancel();
     try {
       if (controller.value.isStreamingImages) {
         await controller.stopImageStream();
       }
-      await Future<void>.delayed(const Duration(milliseconds: 250));
       final photo = await captureValidatedPhoto(
-        capture: () async => File((await controller.takePicture()).path),
-        validate: (file) => _validateFinalPhoto(file, _finalDetector),
+        capture: () async {
+          final raw = File((await controller.takePicture()).path);
+          // The Android front camera saves a mirror image.
+          return Platform.isAndroid ? unmirrorPhoto(raw) : raw;
+        },
+        validate: (file) => _validateFinalPhoto(
+          file,
+          _finalDetector,
+          minSharpness: CaptureQuality.selfieMinSharpness,
+        ),
         isActive: () =>
             mounted &&
             controller.value.isInitialized &&
             WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed,
       );
-      if (mounted) Navigator.pop(context, photo);
+      if (!mounted) return _deleteQuietly(photo);
+      setState(() {
+        _photo = photo;
+        _phase = _SelfiePhase.confirm;
+      });
     } on CaptureQualityException catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = error.message;
-          _timedOut = true;
-          _retakePhoto = true;
-        });
-      }
-      _capturing = false;
+      _fail(error.message);
     } catch (error) {
-      if (mounted) {
-        setState(() {
-          _error = 'Could not check the captured selfie. Retake the selfie.';
-          _timedOut = true;
-          _retakePhoto = true;
-        });
-      }
-      _capturing = false;
+      _fail('Could not check the captured selfie. Retake the selfie.');
     }
+  }
+
+  void _fail(String message) {
+    if (!mounted) return;
+    setState(() {
+      _error = message;
+      _phase = _SelfiePhase.failed;
+      _failure = 'That selfie could not be used.';
+      _retakePhoto = true;
+    });
+  }
+
+  Future<void> _deleteQuietly(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } catch (_) {
+      // Best-effort cleanup of a camera-owned temporary file.
+    }
+  }
+
+  void _usePhoto() {
+    final photo = _photo;
+    if (photo == null) return;
+    _accepted = true;
+    Navigator.pop(context, photo);
   }
 
   @override
@@ -384,29 +484,321 @@ class _SelfieLivenessScreenState extends State<SelfieLivenessScreen> {
     _controller?.dispose();
     _detector.close();
     _finalDetector.close();
+    // A photo the user never accepted must not outlive this screen.
+    final photo = _photo;
+    if (photo != null && !_accepted) unawaited(_deleteQuietly(photo));
     super.dispose();
   }
 
+  (IconData, String) get _prompt => switch (_phase) {
+    _SelfiePhase.challenge => (
+      switch (_tracker.challenge) {
+        LivenessChallenge.blink => Icons.visibility_outlined,
+        LivenessChallenge.turnLeft => Icons.turn_left,
+        LivenessChallenge.turnRight => Icons.turn_right,
+      },
+      _tracker.prompt,
+    ),
+    _SelfiePhase.hold => (
+      Icons.center_focus_strong_outlined,
+      'Look straight and hold still',
+    ),
+    _SelfiePhase.checking => (
+      Icons.hourglass_top_rounded,
+      'Checking your selfie…',
+    ),
+    _SelfiePhase.confirm => (
+      Icons.check_circle_outline,
+      'Is this photo clear?',
+    ),
+    _SelfiePhase.failed => (Icons.refresh, _failure),
+  };
+
   @override
-  Widget build(BuildContext context) => _CameraScaffold(
-    title: 'Live selfie check',
-    controller: _controller,
-    error: _error,
-    instructions: _capturing
-        ? 'Checking the captured selfie…'
-        : _timedOut
-        ? 'The challenge timed out. Keep one face centered and try again.'
-        : [_tracker.prompt, ?_guidance].join('\n'),
-    action: _timedOut
-        ? FilledButton.icon(
-            onPressed: _startChallenge,
-            icon: const Icon(Icons.refresh),
-            label: Text(
-              _retakePhoto ? 'Retake selfie' : 'Try another challenge',
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), colors = theme.colorScheme;
+    final controller = _controller;
+    final ready = controller?.value.isInitialized ?? false;
+    final photo = _photo;
+    final live =
+        _phase == _SelfiePhase.challenge || _phase == _SelfiePhase.hold;
+    final guideColor = !live
+        ? colors.outlineVariant
+        : _faceReady
+        ? Colors.green
+        : _guidance != null
+        ? Colors.amber
+        : Colors.white;
+    final (icon, prompt) = _prompt;
+    final step = switch (_phase) {
+      _SelfiePhase.challenge || _SelfiePhase.failed => 0,
+      _SelfiePhase.hold || _SelfiePhase.checking => 1,
+      _SelfiePhase.confirm => 2,
+    };
+    return Scaffold(
+      appBar: AppBar(title: const Text('Live selfie check')),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: _SelfieSteps(current: step),
             ),
-          )
-        : const LinearProgressIndicator(),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child: _phase == _SelfiePhase.confirm && photo != null
+                        ? Image.file(
+                            photo,
+                            key: const ValueKey('selfie_confirm_photo'),
+                            fit: BoxFit.contain,
+                          )
+                        : ready
+                        ? Stack(
+                            children: [
+                              CameraPreview(controller!),
+                              Positioned.fill(
+                                child: CustomPaint(
+                                  painter: _FaceGuidePainter(guideColor),
+                                ),
+                              ),
+                              if (_phase == _SelfiePhase.hold)
+                                Positioned(
+                                  left: 0,
+                                  right: 0,
+                                  bottom: 16,
+                                  child: Center(
+                                    child: _Countdown(
+                                      progress: _hold.progress,
+                                      secondsLeft: _hold.secondsLeft,
+                                    ),
+                                  ),
+                                ),
+                              if (_phase == _SelfiePhase.checking)
+                                const Positioned.fill(
+                                  child: ColoredBox(
+                                    color: Colors.black54,
+                                    child: Center(
+                                      child: CircularProgressIndicator(),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          )
+                        : _error == null
+                        ? const CircularProgressIndicator()
+                        : const SizedBox.shrink(),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 28, color: colors.primary),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Text(
+                          prompt,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  // Fixed height so the layout does not jump as hints change.
+                  SizedBox(
+                    height: 40,
+                    child: Text(
+                      switch (_phase) {
+                        _SelfiePhase.confirm =>
+                          'Your face should be sharp, well lit and fully visible.',
+                        _SelfiePhase.hold =>
+                          _guidance ??
+                              'The photo is taken when the timer ends.',
+                        _SelfiePhase.challenge => _guidance ?? '',
+                        _ => '',
+                      },
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    Material(
+                      color: colors.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: colors.onErrorContainer),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_phase == _SelfiePhase.confirm) ...[
+                    FilledButton.icon(
+                      key: const ValueKey('selfie_use_photo'),
+                      onPressed: _usePhoto,
+                      icon: const Icon(Icons.check),
+                      label: const Text('Use this photo'),
+                    ),
+                    TextButton.icon(
+                      key: const ValueKey('selfie_retake'),
+                      onPressed: _startChallenge,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retake'),
+                    ),
+                  ] else if (_phase == _SelfiePhase.failed)
+                    FilledButton.icon(
+                      onPressed: _startChallenge,
+                      icon: const Icon(Icons.refresh),
+                      label: Text(_retakePhoto ? 'Retake selfie' : 'Try again'),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SelfieSteps extends StatelessWidget {
+  const _SelfieSteps({required this.current});
+
+  final int current;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    const labels = ['Follow the prompt', 'Hold still', 'Confirm'];
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++)
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: Column(
+                children: [
+                  Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: i <= current
+                          ? colors.primary
+                          : colors.outlineVariant,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${i + 1}. ${labels[i]}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontWeight: i == current
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _Countdown extends StatelessWidget {
+  const _Countdown({required this.progress, required this.secondsLeft});
+
+  final double progress;
+  final int secondsLeft;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    label: 'Taking the photo in $secondsLeft',
+    child: SizedBox.square(
+      dimension: 72,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          const DecoratedBox(
+            decoration: BoxDecoration(
+              color: Colors.black54,
+              shape: BoxShape.circle,
+            ),
+          ),
+          CircularProgressIndicator(
+            value: progress,
+            strokeWidth: 5,
+            color: Colors.green,
+            backgroundColor: Colors.white24,
+          ),
+          Center(
+            child: Text(
+              '$secondsLeft',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
   );
+}
+
+/// Dims everything outside an oval so the user knows where to place the face.
+class _FaceGuidePainter extends CustomPainter {
+  const _FaceGuidePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final oval = Rect.fromCenter(
+      center: Offset(size.width / 2, size.height * 0.45),
+      width: size.width * 0.68,
+      height: size.height * 0.62,
+    );
+    canvas.drawPath(
+      Path.combine(
+        PathOperation.difference,
+        Path()..addRect(Offset.zero & size),
+        Path()..addOval(oval),
+      ),
+      Paint()..color = Colors.black54,
+    );
+    canvas.drawOval(
+      oval,
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4
+        ..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_FaceGuidePainter old) => old.color != color;
 }
 
 class _CameraScaffold extends StatelessWidget {

@@ -845,7 +845,7 @@ class _WorkerRequestFilter extends StatelessWidget {
                     duration: const Duration(milliseconds: 180),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: active ? AppTheme.ink : Colors.transparent,
+                      color: active ? context.inkFill : Colors.transparent,
                       borderRadius: BorderRadius.circular(17),
                     ),
                     child: Text(
@@ -892,9 +892,9 @@ class _LocationStatusBanner extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(top: 2),
-              child: Icon(Icons.location_off_outlined, color: AppTheme.ink),
+              child: Icon(Icons.location_off_outlined, color: context.themeInk),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1537,7 +1537,7 @@ class _WorkerBookingsEmptyState extends StatelessWidget {
             ? 'No completed bookings yet.'
             : 'No recent bookings yet.',
         textAlign: TextAlign.center,
-        style: const TextStyle(color: AppTheme.muted),
+        style: TextStyle(color: context.themeMuted),
       ),
     ),
   );
@@ -1674,10 +1674,10 @@ class _WorkerProfileView extends StatelessWidget {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(22, 28, 22, 20),
             children: [
-              const Text(
+              Text(
                 'Profile',
                 style: TextStyle(
-                  color: AppTheme.ink,
+                  color: text,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
                 ),
@@ -1899,7 +1899,7 @@ class _WorkerVerificationBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = state.isVerified ? AppTheme.ink : AppTheme.ink;
+    final color = context.inkFill;
     return InkWell(
       onTap: state.isVerified
           ? null

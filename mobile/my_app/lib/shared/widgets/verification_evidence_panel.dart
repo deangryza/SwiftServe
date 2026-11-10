@@ -36,7 +36,10 @@ class VerificationEvidencePanel extends StatelessWidget {
             ('Government authentication', evidence.government),
             ('Server-side liveness', evidence.liveness),
             ('Administrative review', evidence.review),
-            ('Worker eligibility', evidence.eligibility),
+            (
+              evidence.requester ? 'Account approval' : 'Worker eligibility',
+              evidence.eligibility,
+            ),
           ])
             Padding(
               padding: const EdgeInsets.only(top: 12),

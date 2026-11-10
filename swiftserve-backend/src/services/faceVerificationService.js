@@ -9,7 +9,7 @@ const {
   resolveUploadsDir,
   saveLocalBuffer,
 } = require('./verificationStorageService');
-const { newEvidence, faceResultFor } = require('./workerVerificationPolicy');
+const { newEvidence, faceResultFor, verifiableRoles } = require('./workerVerificationPolicy');
 const { evaluateWorkerVerification } = require('./verificationDecisionService');
 const { validateFaceCapture } = require('./captureQualityService');
 
@@ -356,11 +356,11 @@ const compareAndCreateSubmission = async ({
   ]);
   const user = userSnapshot.data();
 
-  if (!userSnapshot.exists || user?.role !== 'worker') {
-    throw new WorkerAccessError('Worker access is required.');
+  if (!userSnapshot.exists || !verifiableRoles.includes(user?.role)) {
+    throw new WorkerAccessError('A worker or client account is required.');
   }
   if (user.verificationStatus === 'verified') {
-    throw new VerificationConflictError('This worker is already verified.');
+    throw new VerificationConflictError('This account is already verified.');
   }
   const prior = verificationSnapshot.exists ? verificationSnapshot.data() : null;
   if (prior && !FINAL_OR_REPLACEABLE_STATUSES.has(prior.status)) {
@@ -445,7 +445,7 @@ const compareAndCreateSubmission = async ({
         if (documentBinding) {
           await require('./documentSuitabilityService').acceptedDocument(db, uid, documentBinding.sessionId, documentBinding.attemptId, documentBinding.sha256, tx);
         }
-        if (currentUser.data()?.role !== 'worker' || currentUser.data()?.verificationStatus === 'verified' ||
+        if (!verifiableRoles.includes(currentUser.data()?.role) || currentUser.data()?.verificationStatus === 'verified' ||
           (currentVerification.exists && !FINAL_OR_REPLACEABLE_STATUSES.has(currentVerification.data().status))) {
           throw new VerificationConflictError('Verification eligibility changed during upload.');
         }

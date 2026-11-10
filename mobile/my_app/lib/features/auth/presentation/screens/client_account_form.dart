@@ -655,7 +655,7 @@ class _ClientAccountFormState extends State<ClientAccountForm> {
           children: [
             const Icon(Icons.badge_outlined, color: _yellow),
             const SizedBox(height: 8),
-            const Text('PENDING', style: TextStyle(color: AppTheme.ink)),
+            Text('PENDING', style: TextStyle(color: _text)),
             const SizedBox(height: 14),
             Text('Identity Check', style: TextStyle(color: _text)),
             Text(
