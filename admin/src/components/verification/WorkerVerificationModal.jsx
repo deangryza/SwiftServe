@@ -164,15 +164,15 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
   };
 
   const handleVerify = () =>
-    applyAction(VERIFICATION_STATUS.VERIFIED, "Worker verification approved.");
+    applyAction(VERIFICATION_STATUS.VERIFIED, "Verification approved.");
 
   const handleReject = () =>
-    applyAction(VERIFICATION_STATUS.REJECTED, "Worker verification rejected.");
+    applyAction(VERIFICATION_STATUS.REJECTED, "Verification rejected.");
 
   const handleResubmission = () =>
     applyAction(
       VERIFICATION_STATUS.RESUBMISSION_REQUIRED,
-      "Worker resubmission requested."
+      "Resubmission requested."
     );
 
   const closeCompare = useCallback(() => setComparing(false), []);
@@ -198,7 +198,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
           <div className="sticky top-0 flex items-center justify-between border-b border-gray-100 bg-white px-4 py-4 sm:rounded-t-2xl sm:px-6">
             <div>
               <h2 className="text-lg font-semibold text-gray-800">
-                {request.workerName ?? "Worker Verification"}
+                {request.workerName ?? "User Verification"}
               </h2>
               <p className="text-xs text-gray-400">{request.verificationId ?? "—"}</p>
             </div>
@@ -229,13 +229,14 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
                 before approving.
               </div>
             )}
-            {/* Worker Information */}
+            {/* User Information */}
             <section>
               <h3 className="text-sm font-semibold text-gray-700 mb-3">
-                Worker Information
+                User Information
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <InfoRow icon={User} label="Worker ID" value={request.workerId} />
+                <InfoRow icon={User} label="User ID" value={request.workerId} />
+                <InfoRow icon={User} label="User Type" value={request.userType} />
                 <InfoRow icon={Tag} label="Category" value={request.category} />
                 <InfoRow icon={MapPin} label="Location" value={request.location} />
                 <InfoRow icon={Calendar} label="Date Joined" value={request.dateJoined} />
@@ -405,7 +406,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
               className="inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-amber-300 text-sm text-gray-900 hover:bg-amber-400 disabled:opacity-50 transition-colors"
             >
               <CheckCircle2 size={15} />
-              Verify Worker
+              Verify User
             </button>
           </div>
         </motion.div>

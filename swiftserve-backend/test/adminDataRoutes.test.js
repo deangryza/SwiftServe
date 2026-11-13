@@ -47,6 +47,29 @@ test('maps Firestore worker roles and booking statuses without demo records', as
   const reports = await request(app).get('/api/admin/reports').set('Authorization', 'Bearer admin').expect(200);
   assert.deepEqual(reports.body.items, []);
 });
+test('booking DTO exposes cancel reason and labels who cancelled without raw uids', async () => {
+  const original = records.service_requests.booking;
+  const fetch = async () => (await request(app).get('/api/admin/bookings').set('Authorization', 'Bearer admin').expect(200)).body.items[0];
+  try {
+    records.service_requests.booking = { ...original, status: 'cancelled', clientId: 'client-uid', cancelledBy: 'client-uid',
+      cancelReason: 'Schedule changed', cancelNote: 'Moving next week' };
+    let item = await fetch();
+    assert.equal(item.cancelledBy, 'Client');
+    assert.equal(item.cancelReason, 'Schedule changed');
+    assert.equal(item.cancelNote, 'Moving next week');
+    records.service_requests.booking = { ...original, status: 'cancelled', clientId: 'client-uid', cancelledBy: 'admin-uid' };
+    item = await fetch();
+    assert.equal(item.cancelledBy, 'Admin');
+    assert.equal(item.cancelReason, '');
+    assert.equal(item.cancelNote, '');
+    records.service_requests.booking = { ...original };
+    item = await fetch();
+    assert.equal(item.cancelledBy, '');
+    assert.ok(!JSON.stringify(item).includes('admin-uid'));
+  } finally {
+    records.service_requests.booking = original;
+  }
+});
 test('accepted bookings require override and completed bookings cannot be cancelled', async () => {
   const initialWrites = writes;
   await request(app).patch('/api/admin/bookings/booking').set('Authorization', 'Bearer admin').send({ status: 'Cancelled' }).expect(409);

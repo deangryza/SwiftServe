@@ -28,7 +28,7 @@ const SUMMARY_CONFIG = [
   },
   {
     key: VERIFICATION_STATUS.VERIFIED,
-    label: "Worker access recorded",
+    label: "Access recorded",
     icon: CheckCircle2,
     color: "green",
   },
@@ -52,6 +52,7 @@ export default function WorkerVerification() {
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [idFilter, setIdFilter] = useState("All");
   const [faceFilter, setFaceFilter] = useState("All");
+  const [typeFilter, setTypeFilter] = useState("All");
   const [selectedRequest, setSelectedRequest] = useState(null);
 
   const loadRequests = () =>
@@ -99,7 +100,7 @@ export default function WorkerVerification() {
     return requests.filter((r) => {
       const matchesSearch =
         !term ||
-        [r?.workerId, r?.workerName, r?.verificationId, r?.category]
+        [r?.workerId, r?.workerName, r?.verificationId, r?.category, r?.userType]
           .filter(Boolean)
           .some((field) => field.toLowerCase().includes(term));
 
@@ -117,15 +118,19 @@ export default function WorkerVerification() {
         (faceFilter === "Passed" && r?.faceVerified) ||
         (faceFilter === "Not Verified" && !r?.faceVerified);
 
+      // Dual-role accounts show under both Worker and Client.
+      const matchesType = typeFilter === "All" || (r?.userType ?? "").includes(typeFilter);
+
       return (
         matchesSearch &&
+        matchesType &&
         matchesStatus &&
         matchesCategory &&
         matchesId &&
         matchesFace
       );
     });
-  }, [requests, searchTerm, statusFilter, categoryFilter, idFilter, faceFilter]);
+  }, [requests, searchTerm, statusFilter, categoryFilter, idFilter, faceFilter, typeFilter]);
 
   const handleClearFilters = () => {
     setSearchTerm("");
@@ -133,6 +138,7 @@ export default function WorkerVerification() {
     setCategoryFilter("All");
     setIdFilter("All");
     setFaceFilter("All");
+    setTypeFilter("All");
   };
 
   const handleViewDetails = async (request) => {
@@ -165,10 +171,10 @@ export default function WorkerVerification() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold text-gray-800">
-            Worker Verification
+            User Verification
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Review and manage worker verification submissions. Newest first.
+            Review worker and client verification submissions in one place. Newest first.
           </p>
         </div>
         <button
@@ -219,6 +225,8 @@ export default function WorkerVerification() {
         onIdFilterChange={setIdFilter}
         faceFilter={faceFilter}
         onFaceFilterChange={setFaceFilter}
+        typeFilter={typeFilter}
+        onTypeFilterChange={setTypeFilter}
         onClearFilters={handleClearFilters}
       />
 

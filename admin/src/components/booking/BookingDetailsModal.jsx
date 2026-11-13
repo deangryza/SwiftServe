@@ -150,9 +150,28 @@ export default function BookingDetailsModal({ booking, onClose }) {
               </h3>
 
               {isCancelled ? (
-                <div className="flex items-center gap-2 text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5">
-                  <XCircle size={16} />
-                  This booking was cancelled before completion.
+                <div className="text-sm text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2.5 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <XCircle size={16} />
+                    This booking was cancelled before completion.
+                  </div>
+                  {booking.cancelledBy === "Admin" && !booking.cancelReason ? (
+                    <p className="pl-6 text-red-600">Cancelled by admin</p>
+                  ) : booking.cancelledBy ? (
+                    <p className="pl-6 text-red-600">
+                      <span className="font-medium">Cancelled by:</span> {booking.cancelledBy}
+                    </p>
+                  ) : null}
+                  {booking.cancelReason && (
+                    <p className="pl-6 text-red-600">
+                      <span className="font-medium">Reason:</span> {booking.cancelReason}
+                    </p>
+                  )}
+                  {booking.cancelNote && (
+                    <p className="pl-6 text-red-600 break-words">
+                      <span className="font-medium">Note:</span> {booking.cancelNote}
+                    </p>
+                  )}
                 </div>
               ) : (
                 <ol className="space-y-3">

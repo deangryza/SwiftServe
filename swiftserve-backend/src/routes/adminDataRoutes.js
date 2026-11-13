@@ -29,7 +29,11 @@ function normalize(kind, document) {
   if (kind === 'bookings') { const schedule = iso(data.schedule); return { ...base,
     serviceTitle: data.title || '', providerName: data.workerName || 'Unassigned', clientName: data.clientName || '',
     date: schedule.slice(0, 10), time: schedule.slice(11, 16), amount: data.budget || 0,
-    status: title(data.status), schedule }; }
+    status: title(data.status), schedule,
+    cancelReason: typeof data.cancelReason === 'string' ? data.cancelReason : '',
+    cancelNote: typeof data.cancelNote === 'string' ? data.cancelNote : '',
+    // Label only: raw uids stay out of the dashboard payload.
+    cancelledBy: !data.cancelledBy ? '' : data.cancelledBy === data.clientId ? 'Client' : 'Admin' }; }
   if (kind === 'sos') return { ...base, statusKey: data.status || 'active', status: title(data.status || 'active'),
     positionUpdatedAt: iso(data.positionUpdatedAt), safeAt: iso(data.safeAt), handledAt: iso(data.handledAt),
     workerIdentity: data.workerIdentity ? { ...data.workerIdentity, reviewedAt: iso(data.workerIdentity.reviewedAt) } : null };
@@ -126,7 +130,7 @@ router.get('/notifications', async (req, res, next) => {
     // waiting queue is counted live (one aggregation read) for admins who can see it.
     if (can(req.adminAccess, 'verification.view')) {
       const waiting = (await db.collection('worker_verifications').where('status', 'in', ['pending', 'under_review']).count().get()).data().count;
-      if (waiting) items.unshift({ id: 'pending-verifications', title: 'Workers waiting for review', body: `${waiting} verification${waiting === 1 ? '' : 's'} need a decision`, read: false, createdAt: '', route: '/dashboard/verification' });
+      if (waiting) items.unshift({ id: 'pending-verifications', title: 'Users waiting for review', body: `${waiting} verification${waiting === 1 ? '' : 's'} need a decision`, read: false, createdAt: '', route: '/dashboard/verification' });
     }
     res.json({ items });
   } catch (error) { next(error); }
@@ -195,7 +199,7 @@ router.patch('/:kind/:id', async (req, res, next) => {
     let update;
     if (kind === 'users') {
       if (id === req.user.uid) return res.status(400).json({ message: 'You cannot change your own account status.' });
-      if (!Object.hasOwn(req.body, 'fullName') && !['Suspended', 'Approved'].includes(req.body.status)) return res.status(400).json({ message: 'Use Worker Verification to approve or reject verification.' });
+      if (!Object.hasOwn(req.body, 'fullName') && !['Suspended', 'Approved'].includes(req.body.status)) return res.status(400).json({ message: 'Use User Verification to approve or reject verification.' });
       const user = await auth.getUser(id);
       if (user.customClaims?.admin || user.customClaims?.staff) return res.status(400).json({ message: 'Administrator accounts cannot be managed here.' });
       if (Object.hasOwn(req.body, 'fullName')) {
@@ -203,7 +207,7 @@ router.patch('/:kind/:id', async (req, res, next) => {
         if (Object.keys(req.body).some(key => key !== 'fullName') || typeof req.body.fullName !== 'string' || !req.body.fullName.trim() || req.body.fullName.length > 120) return res.status(400).json({ message: 'Only a valid full name may be edited here.' });
         update = { fullName: req.body.fullName.trim() };
       } else {
-        if (!['Suspended', 'Approved'].includes(req.body.status)) return res.status(400).json({ message: 'Use Worker Verification to approve or reject verification.' });
+        if (!['Suspended', 'Approved'].includes(req.body.status)) return res.status(400).json({ message: 'Use User Verification to approve or reject verification.' });
         const roles = rolesOf(snapshot.data());
         if (!can(req.adminAccess, 'users.manage') && !roles.some(role => can(req.adminAccess, `${role === 'worker' ? 'workers' : 'clients'}.manage`))) return res.sendStatus(403);
         await db.collection('admin_audit_logs').add(auditData(actorOf(req), 'user.status_requested', id, { status: req.body.status }));

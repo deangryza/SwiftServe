@@ -5,7 +5,7 @@ import FeatureCard from '../../components/FeatureCard';
 import LoginForm from '../../components/LoginForm';
 
 const FEATURES = [
-  { icon: ShieldCheck, label: 'Worker verification' },
+  { icon: ShieldCheck, label: 'User verification' },
   { icon: CalendarClock, label: 'Booking oversight' },
   { icon: ChartNoAxesCombined, label: 'Reports and insights' },
 ];
