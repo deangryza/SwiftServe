@@ -24,6 +24,7 @@ import '../widgets/conversation_ui.dart';
 import 'client_booking_flow.dart';
 import 'client_sections.dart' show ClientMessagesScreen;
 import 'client_settings_screen.dart';
+import '../../../../shared/utils/profanity_filter.dart';
 
 const _profileYellow = AppTheme.yellow;
 const _profileCream = Color(0xFFFFFFFF);
@@ -414,9 +415,11 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw StateError('Your session has expired.');
       final role = widget.initialData['role'] == 'worker' ? 'worker' : 'client';
-      final name = _nameController.text.trim().isEmpty
-          ? (widget.initialData['fullName'] ?? 'SwiftServe user').toString()
-          : _nameController.text.trim();
+      final name = maskProfanity(
+        _nameController.text.trim().isEmpty
+            ? (widget.initialData['fullName'] ?? 'SwiftServe user').toString()
+            : _nameController.text.trim(),
+      );
       final timestamp = FieldValue.serverTimestamp();
       final batch = FirebaseFirestore.instance.batch();
       batch.update(
@@ -474,7 +477,7 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
     }
     if (addressChanged && !_addressFormKey.currentState!.validate()) return;
     final user = FirebaseAuth.instance.currentUser;
-    final name = _nameController.text.trim();
+    final name = maskProfanity(_nameController.text.trim());
     if (user == null || name.isEmpty || _saving) return;
     setState(() => _saving = true);
     try {
@@ -485,7 +488,9 @@ class _ClientEditProfileScreenState extends State<ClientEditProfileScreen> {
           idToken: token,
           fullName: name,
           address: addressChanged ? _addressController.text.trim() : null,
-          description: aboutChanged ? _aboutController.text.trim() : null,
+          description: aboutChanged
+              ? maskProfanity(_aboutController.text.trim())
+              : null,
           services: servicesChanged ? _services.services : null,
         );
       } else {

@@ -14,6 +14,7 @@ import '../../../../shared/widgets/chat_message_timeline.dart';
 import 'client_booking_flow.dart';
 import 'client_profile_screen.dart';
 import 'client_request_details_screen.dart';
+import '../../../../shared/utils/profanity_filter.dart';
 
 export 'client_profile_screen.dart';
 
@@ -510,7 +511,7 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
   }
 
   Future<void> _sendMessage() async {
-    final text = _messageController.text.trim();
+    final text = maskProfanity(_messageController.text.trim());
     final uid = clientUid;
 
     if (text.isEmpty || uid == null || _sending) return;
@@ -720,7 +721,7 @@ class _ClientChatScreenState extends State<ClientChatScreen> {
                         : CrossAxisAlignment.start,
                     children: [
                       Text(
-                        (data['text'] ?? '').toString(),
+                        maskProfanity((data['text'] ?? '').toString()),
                         style: TextStyle(color: isMine ? AppTheme.ink : text),
                       ),
                       const SizedBox(height: 4),

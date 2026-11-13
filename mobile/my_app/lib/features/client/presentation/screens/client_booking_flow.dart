@@ -19,6 +19,7 @@ import '../widgets/errand_tracking_map.dart';
 import 'client_request_details_screen.dart';
 import 'client_sections.dart';
 import 'post_request_screen.dart';
+import '../../../../shared/utils/profanity_filter.dart';
 
 const _bookingYellow = AppTheme.yellow;
 const _bookingCream = Color(0xFFFFFFFF);
@@ -1104,7 +1105,7 @@ class _ClientBookingDetailsScreenState
         'workerId': request.workerId,
         'workerName': request.workerName ?? '',
         'rating': review.rating,
-        'comment': review.comment,
+        'comment': maskProfanity(review.comment),
         'createdAt': FieldValue.serverTimestamp(),
       });
       batch.set(notificationReference, {
@@ -1164,7 +1165,7 @@ class _ClientBookingDetailsScreenState
         'reportedUserId': workerId,
         'reportedUserName': request.workerName ?? '',
         'reason': report.reason,
-        'details': report.details,
+        'details': maskProfanity(report.details),
         'status': 'open',
         'createdAt': FieldValue.serverTimestamp(),
       });

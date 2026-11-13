@@ -10,7 +10,7 @@ export default function UserFilters({
   onStatusChange,
 }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-gray-100 sm:p-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="flex flex-col gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-gray-100 sm:p-4 lg:flex-row lg:items-end lg:gap-4">
       <div className="relative w-full lg:max-w-md">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
@@ -22,7 +22,7 @@ export default function UserFilters({
         />
       </div>
 
-      <div className="grid w-full grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:w-auto">
+      <div className="grid w-full grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:w-96">
         <div className="flex min-w-0 flex-col gap-1">
           <label className="text-xs font-medium text-gray-500">Role</label>
           <select

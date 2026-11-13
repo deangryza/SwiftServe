@@ -121,7 +121,14 @@ router.get('/profile', async (req, res, next) => {
 router.get('/notifications', async (req, res, next) => {
   try {
     const snapshot = await db.collection('notifications').where('recipientId', '==', req.user.uid).get();
-    res.json({ items: snapshot.docs.map(document => ({ id: document.id, title: document.data().title || 'Update', body: document.data().body || '', read: document.data().read === true, createdAt: iso(document.data().createdAt) })).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30) });
+    const items = snapshot.docs.map(document => ({ id: document.id, title: document.data().title || 'Update', body: document.data().body || '', read: document.data().read === true, createdAt: iso(document.data().createdAt) })).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30);
+    // Nothing writes a notification when a worker submits ID + selfie, so the
+    // waiting queue is counted live (one aggregation read) for admins who can see it.
+    if (can(req.adminAccess, 'verification.view')) {
+      const waiting = (await db.collection('worker_verifications').where('status', 'in', ['pending', 'under_review']).count().get()).data().count;
+      if (waiting) items.unshift({ id: 'pending-verifications', title: 'Workers waiting for review', body: `${waiting} verification${waiting === 1 ? '' : 's'} need a decision`, read: false, createdAt: '', route: '/dashboard/verification' });
+    }
+    res.json({ items });
   } catch (error) { next(error); }
 });
 router.patch('/profile', async (req, res, next) => {

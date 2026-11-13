@@ -79,7 +79,7 @@ function PriorityMetric({ metric }) {
             <Icon className="size-5" aria-hidden="true" />
           </span>
         </div>
-        <Badge variant="secondary" className={`mt-3 ${styles.detail}`}>{metric.detail}</Badge>
+        <Badge variant="secondary" className={`mt-3 h-auto max-w-full whitespace-normal py-1 text-left leading-snug ${styles.detail}`}>{metric.detail}</Badge>
         <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
           <span className={`block h-full rounded-full ${styles.bar}`} style={{ width: `${metric.progress}%` }} />
         </div>
@@ -130,7 +130,7 @@ export default function DashboardHome() {
     { title: 'Active bookings', value: activeBookings, detail: 'Accepted or ongoing', progress: ratio(activeBookings, bookings.length), icon: CalendarClock, tone: 'primary' },
     { title: 'Pending verification', value: pending, detail: 'Needs review', progress: ratio(pending, verifications.length), icon: ShieldCheck, tone: 'warning' },
     { title: 'Open reports', value: openReports.length, detail: openReports.filter(item => item.priority === 'High').length + ' marked urgent', progress: ratio(openReports.length, reports.length), icon: FileWarning, tone: 'danger' },
-    { title: 'Worker access recorded', value: verified, detail: 'Existing access status; not proof of PSA authentication', progress: ratio(verified, verifications.length), icon: UsersRound, tone: 'success' },
+    { title: 'Worker access recorded', value: verified, detail: 'Not proof of PSA authentication', progress: ratio(verified, verifications.length), icon: UsersRound, tone: 'success' },
   ]
   const attentionItems = [
     { title: 'Worker verification', description: 'ID and face review', count: pending, route: '/dashboard/verification', tone: 'warning' },

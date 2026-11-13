@@ -56,7 +56,7 @@ export default function ProfileDropdown() {
                 </button>
               </li>
               <li>
-                <button className="flex w-full items-center gap-2.5 px-4 py-2 text-ink-700 hover:bg-surface-50">
+                <button onClick={() => { setOpen(false); navigate('/dashboard/profile#settings'); }} className="flex w-full items-center gap-2.5 px-4 py-2 text-ink-700 hover:bg-surface-50">
                   <Settings size={15} /> Settings
                 </button>
               </li>

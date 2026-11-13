@@ -7,6 +7,7 @@ const { AUTO_REVIEWER } = require('../services/workerVerificationPolicy');
 const { normalizeProfilePhoto } = require('../services/profilePhotoService');
 const { publicProfileLocation } = require('../services/publicProfileLocation');
 const { isPhilippineMobile, readPhoneToken } = require('../services/otpService');
+const { maskProfanity } = require('../services/profanityFilter');
 
 const normalizePhoneNumber = (value) => {
   const phoneNumber = String(value || '').replace(/[\s()-]/g, '');
@@ -35,16 +36,19 @@ const createUserProfile = async (req, res) => {
 
     const {
       dateOfBirth,
-      fullName,
+      fullName: rawFullName,
       email,
       phoneNumber,
       address,
       role,
       category,
       skills,
-      description,
+      description: rawDescription,
       photoBase64,
     } = req.body;
+    // Names and descriptions are shown to other users, so bad words are masked.
+    const fullName = maskProfanity(rawFullName);
+    const description = maskProfanity(rawDescription);
 
     const birthdayError = validateBirthday(dateOfBirth);
     if (birthdayError) {
@@ -193,7 +197,7 @@ const createUserProfile = async (req, res) => {
 // Only the authenticated account can update its private address and public area.
 // Keep these projections atomic: never report a private-only address save.
 const updateProfileAddress = async (req, res) => {
-  const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : '';
+  const fullName = typeof req.body.fullName === 'string' ? maskProfanity(req.body.fullName.trim()) : '';
   const hasAddress = Object.hasOwn(req.body, 'address');
   const hasDescription = Object.hasOwn(req.body, 'description');
   const hasServices = Object.hasOwn(req.body, 'services');
@@ -206,7 +210,7 @@ const updateProfileAddress = async (req, res) => {
   if (hasDescription && (typeof req.body.description !== 'string' || req.body.description.length > 500)) {
     return res.status(400).json({ message: 'About must be text of 500 characters or fewer.' });
   }
-  const description = hasDescription ? { description: req.body.description.trim() } : {};
+  const description = hasDescription ? { description: maskProfanity(req.body.description.trim()) } : {};
   let services = [];
   if (hasServices) {
     if (!Array.isArray(req.body.services) || req.body.services.length === 0 || req.body.services.length > 50
@@ -301,7 +305,8 @@ class RoleRequestError extends Error {
 
 const addRole = async (req, res) => {
   const uid = req.user.uid;
-  const { role, category, description } = req.body;
+  const { role, category } = req.body;
+  const description = maskProfanity(req.body.description);
   if (!ROLES.includes(role)) {
     return res.status(400).json({ message: 'A valid role is required.' });
   }

@@ -10,8 +10,8 @@ import { useNavigate } from 'react-router-dom';
 
 export default function NotificationDropdown() {
   const navigate = useNavigate();
-  const { data, loading, error } = useAdminData('notifications');
-  const notifications = data.map(item => ({ ...item, icon: Bell, color: 'text-swift-600 bg-swift-50', text: item.title + (item.body ? ': ' + item.body : ''), time: item.createdAt }));
+  const { data, loading, error } = useAdminData('notifications', [], 120000);
+  const notifications = data.map(item => ({ ...item, icon: item.route ? ShieldAlert : Bell, color: item.route ? 'text-warning-600 bg-warning-50' : 'text-swift-600 bg-swift-50', text: item.title + (item.body ? ': ' + item.body : ''), time: item.createdAt }));
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
 
@@ -52,17 +52,20 @@ export default function NotificationDropdown() {
               <p className="font-display text-sm font-semibold text-ink-900">Notifications</p>
             </div>
             <div className="max-h-80 overflow-y-auto">
-              {(loading || error || notifications.length === 0) && <p className="p-4 text-xs">{error || (loading ? 'Loading?' : 'No notifications.')}</p>}
+              {(loading || error || notifications.length === 0) && <p className="p-4 text-xs">{error || (loading ? 'Loading…' : 'No notifications.')}</p>}
               {notifications.map((n) => {
                 const Icon = n.icon
                 return (
-                  <div key={n.id} className="flex gap-3 border-b border-surface-100 px-4 py-3 last:border-0 hover:bg-surface-50">
+                  <div key={n.id} role={n.route ? 'button' : undefined} tabIndex={n.route ? 0 : undefined}
+                    onClick={n.route ? () => { setOpen(false); navigate(n.route); } : undefined}
+                    onKeyDown={n.route ? e => { if (e.key === 'Enter') { setOpen(false); navigate(n.route); } } : undefined}
+                    className={`flex gap-3 border-b border-surface-100 px-4 py-3 last:border-0 hover:bg-surface-50 ${n.route ? 'cursor-pointer' : ''}`}>
                     <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${n.color}`}>
                       <Icon size={14} />
                     </span>
                     <div className="min-w-0">
                       <p className="text-xs leading-snug text-ink-800">{n.text}</p>
-                      <p className="mt-0.5 text-[11px] text-ink-600/50">{n.time}</p>
+                      {n.time && <p className="mt-0.5 text-[11px] text-ink-600/50">{new Date(n.time).toLocaleString()}</p>}
                     </div>
                   </div>
                 )
