@@ -15,7 +15,7 @@ export const ID_TYPES = [
 ];
 
 export const formatVerificationStatus = (status) =>
-  status === 'verified' ? 'Worker access recorded' : status
+  status === 'verified' ? 'Access recorded' : status
     ? status
         .replaceAll('_', ' ')
         .replace(/\b\w/g, (letter) => letter.toUpperCase())

@@ -13,13 +13,15 @@ export default function WorkerVerificationFilters({
   onIdFilterChange,
   faceFilter,
   onFaceFilterChange,
+  typeFilter,
+  onTypeFilterChange,
   onClearFilters,
 }) {
   const statusOptions = ["All", ...Object.values(VERIFICATION_STATUS)];
 
   return (
     <div className="mb-6 rounded-2xl border border-gray-100 bg-white p-3 shadow-sm sm:p-4">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_repeat(5,auto)] xl:items-center">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_repeat(6,auto)] xl:items-center">
         {/* Search */}
         <div className="relative min-w-0 sm:col-span-2 xl:col-span-1">
           <Search
@@ -30,10 +32,21 @@ export default function WorkerVerificationFilters({
             type="text"
             value={searchTerm}
             onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search by worker ID, name, verification ID, or category..."
+            placeholder="Search by user ID, name, type, verification ID, or category..."
             className="w-full pl-10 pr-3 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-400"
           />
         </div>
+
+        {/* User type filter */}
+        <select
+          value={typeFilter}
+          onChange={(e) => onTypeFilterChange(e.target.value)}
+          className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-700 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+        >
+          <option value="All">All Users</option>
+          <option value="Worker">Workers</option>
+          <option value="Client">Clients</option>
+        </select>
 
         {/* Status filter */}
         <select

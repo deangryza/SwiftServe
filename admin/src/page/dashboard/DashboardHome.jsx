@@ -130,10 +130,10 @@ export default function DashboardHome() {
     { title: 'Active bookings', value: activeBookings, detail: 'Accepted or ongoing', progress: ratio(activeBookings, bookings.length), icon: CalendarClock, tone: 'primary' },
     { title: 'Pending verification', value: pending, detail: 'Needs review', progress: ratio(pending, verifications.length), icon: ShieldCheck, tone: 'warning' },
     { title: 'Open reports', value: openReports.length, detail: openReports.filter(item => item.priority === 'High').length + ' marked urgent', progress: ratio(openReports.length, reports.length), icon: FileWarning, tone: 'danger' },
-    { title: 'Worker access recorded', value: verified, detail: 'Not proof of PSA authentication', progress: ratio(verified, verifications.length), icon: UsersRound, tone: 'success' },
+    { title: 'Access recorded', value: verified, detail: 'Not proof of PSA authentication', progress: ratio(verified, verifications.length), icon: UsersRound, tone: 'success' },
   ]
   const attentionItems = [
-    { title: 'Worker verification', description: 'ID and face review', count: pending, route: '/dashboard/verification', tone: 'warning' },
+    { title: 'User verification', description: 'ID and face review', count: pending, route: '/dashboard/verification', tone: 'warning' },
     { title: 'Open complaints', description: 'Pending or under review', count: openReports.length, route: '/dashboard/reports', tone: 'danger' },
     { title: 'Pending bookings', description: 'Awaiting assignment or response', count: bookings.filter(item => item.status === 'Pending').length, route: '/dashboard/bookings', tone: 'primary' },
   ].filter(item => access.canOpen(item.route))

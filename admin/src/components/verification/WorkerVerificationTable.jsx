@@ -61,8 +61,8 @@ export default function WorkerVerificationTable({ requests, onViewDetails }) {
         <table className="w-full table-fixed text-sm min-w-[900px]">
           <thead>
             <tr className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
-              <th className="w-[13%] text-left font-medium px-4 py-3">Verification ID</th>
-              <th className="w-[12%] text-left font-medium px-4 py-3">Worker</th>
+              <th className="w-[11%] text-left font-medium px-4 py-3">Verification ID</th>
+              <th className="w-[14%] text-left font-medium px-4 py-3">User</th>
               <th className="w-[10%] text-left font-medium px-4 py-3">Category</th>
               <th className="w-[12%] text-left font-medium px-4 py-3">Location</th>
               <th className="w-[11%] text-left font-medium px-4 py-3">Submitted</th>
@@ -84,8 +84,17 @@ export default function WorkerVerificationTable({ requests, onViewDetails }) {
                 <td className="truncate px-4 py-3 font-medium text-gray-800" title={r?.verificationId}>
                   {r?.verificationId ?? "—"}
                 </td>
-                <td className="truncate px-4 py-3 text-gray-700" title={r?.workerName}>
-                  {r?.workerName ?? "—"}
+                <td className="px-4 py-3 text-gray-700" title={r?.workerName}>
+                  <div className="truncate">{r?.workerName ?? "—"}</div>
+                  {r?.userType && (
+                    <span
+                      className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        r.userType === "Client" ? "bg-sky-50 text-sky-700" : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
+                      {r.userType}
+                    </span>
+                  )}
                 </td>
                 <td className="truncate px-4 py-3 text-gray-500" title={r?.category}>
                   {r?.category ?? "—"}

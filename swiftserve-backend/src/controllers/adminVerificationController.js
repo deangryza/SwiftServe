@@ -15,6 +15,7 @@ const {
   evaluateWorkerVerification,
 } = require('../services/verificationDecisionService');
 const { SCHEMA_VERSION } = require('../services/workerVerificationPolicy');
+const { rolesOf } = require('./userController');
 
 const ALLOWED_STATUSES = new Set([
   'under_review',
@@ -39,7 +40,9 @@ const serialize = (id, verification, user = {}) => {
   return ({
   verificationId: id,
   workerId: id,
-  workerName: user.fullName || 'Worker',
+  workerName: user.fullName || 'User',
+  // 'Worker', 'Client' or both for dual-role accounts; one submission covers both.
+  userType: user.role || user.roles ? rolesOf(user).map(role => (role === 'worker' ? 'Worker' : 'Client')).join(' & ') : '',
   category: user.category || '',
   location: user.address || '',
   email: user.email || '',
