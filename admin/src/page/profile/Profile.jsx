@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 
 import PersonalInfoCard from "../../components/profile/PersonalInfoCard";
@@ -11,11 +12,17 @@ import DataState from '../../components/DataState';
 
 export default function Profile() {
   const { data: profile, setData: setProfile, loading, error } = useAdminData('profile', {});
+  const { hash } = useLocation();
 
   const handleSavePersonalInfo = async (updatedFields) => {
     await apiRequest('/api/admin/profile', { method: 'PATCH', body: JSON.stringify(updatedFields) });
     setProfile((prev) => ({ ...prev, ...updatedFields }));
   };
+
+  // The navbar's Settings item links here with #settings; scroll once the page has loaded.
+  useEffect(() => {
+    if (!loading && hash === '#settings') document.getElementById('settings')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [loading, hash]);
 
   if (loading || error) return <DataState loading={loading} error={error} />;
   const displayProfile = { ...profile, device: navigator.userAgent };
@@ -59,7 +66,7 @@ export default function Profile() {
       </motion.div>
 
       {/* Content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="settings" className="grid scroll-mt-24 grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-6">
           <PersonalInfoCard profile={displayProfile} onSave={handleSavePersonalInfo} />
           <ChangePasswordCard />

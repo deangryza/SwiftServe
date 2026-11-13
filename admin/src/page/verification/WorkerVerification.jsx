@@ -54,11 +54,21 @@ export default function WorkerVerification() {
   const [faceFilter, setFaceFilter] = useState("All");
   const [selectedRequest, setSelectedRequest] = useState(null);
 
-  useEffect(() => {
+  const loadRequests = () =>
     apiRequest("/api/admin/verifications")
-      .then(({ items }) => setRequests(items))
+      .then(({ items }) => { setRequests(items); setError(""); })
       .catch((loadError) => setError(loadError.message))
       .finally(() => setLoading(false));
+
+  // New submissions arrive while the page is open, so reload every 2 minutes
+  // and whenever the admin returns to this tab. Each load reads every
+  // submission plus its user, so keep this slow on the Firebase free plan.
+  useEffect(() => {
+    loadRequests();
+    const timer = setInterval(() => { if (!document.hidden) loadRequests(); }, 120000);
+    const onVisible = () => { if (!document.hidden) loadRequests(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
   }, []);
 
   const categoryOptions = useMemo(() => {
@@ -152,13 +162,22 @@ export default function WorkerVerification() {
     <div>
       <NationalIdMockReviews />
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-800">
-          Worker Verification
-        </h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Review and manage worker verification submissions.
-        </p>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-800">
+            Worker Verification
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Review and manage worker verification submissions. Newest first.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={loadRequests}
+          className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+        >
+          Refresh
+        </button>
       </div>
 
       {/* Summary Cards */}
@@ -213,7 +232,7 @@ export default function WorkerVerification() {
 
       {/* IDs are checked automatically on upload; this is the log, and the
           manual queue when automatic checks are switched off. */}
-      <DocumentSuitabilityReviews />
+      <DocumentSuitabilityReviews names={Object.fromEntries(requests.map((r) => [r.workerId, r.workerName]))} />
 
       {/* Details Modal */}
       {selectedRequest && (

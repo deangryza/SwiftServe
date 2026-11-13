@@ -45,13 +45,19 @@ router.get('/', async (_req, res, next) => {
 });
 router.get('/audit', async (req, res, next) => {
   try {
-    let query = db.collection('admin_audit_logs');
+    const logs = db.collection('admin_audit_logs');
+    let docs;
     if (req.query.actorId) {
       if (typeof req.query.actorId !== 'string' || req.query.actorId.length > 128 || req.query.actorId.includes('/')) throw invalid('Invalid activity filter.');
-      query = query.where('actorId', '==', req.query.actorId);
+      // actorId + createdAt ordering needs a composite index that production
+      // does not have, so filter in Firestore and sort here instead.
+      const millis = value => (value?.toMillis ? value.toMillis() : 0);
+      docs = (await logs.where('actorId', '==', req.query.actorId).get()).docs
+        .sort((a, b) => millis(b.data().createdAt) - millis(a.data().createdAt)).slice(0, 100);
+    } else {
+      docs = (await logs.orderBy('createdAt', 'desc').limit(100).get()).docs;
     }
-    const snapshot = await query.orderBy('createdAt', 'desc').limit(100).get();
-    res.json({ items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: time(doc.data().createdAt) })) });
+    res.json({ items: docs.map(doc => ({ id: doc.id, ...doc.data(), createdAt: time(doc.data().createdAt) })) });
   } catch (error) { next(error); }
 });
 router.post('/', async (req, res, next) => {

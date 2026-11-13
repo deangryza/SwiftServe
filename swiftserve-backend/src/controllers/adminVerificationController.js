@@ -88,6 +88,9 @@ const listVerifications = async (req, res) => {
       const user = await db.collection('users').doc(document.id).get();
       return serialize(document.id, document.data(), user.data());
     }));
+    // Firestore returns documents in ID order; newest submissions go first so
+    // a fresh request is at the top of the admin table.
+    items.sort((a, b) => String(b.submittedDate || '').localeCompare(String(a.submittedDate || '')));
     return res.json({ items });
   } catch (error) {
     console.error('List verifications error:', error);

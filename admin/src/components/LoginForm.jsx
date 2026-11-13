@@ -24,6 +24,10 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function getAuthErrorMessage(error) {
   if (error?.status === 403) return 'Administrator access is inactive or unavailable. Contact your Super Admin.';
   if (error?.message === 'This account does not have administrator access.') return error.message;
+  // Any other API failure (wrong server, 401, 5xx): show what the server said
+  // instead of hiding it behind the generic message.
+  if (error?.status) return `The admin API rejected the sign-in (${error.status}): ${error.message}`;
+  if (error instanceof TypeError) return 'Could not reach the admin API. Check that it is running and that VITE_API_BASE_URL is correct.';
 
   switch (error?.code) {
     case 'auth/invalid-credential':

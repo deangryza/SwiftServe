@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import toast from "react-hot-toast";
 import {
@@ -23,12 +23,84 @@ import { useAdminAccess } from '../../lib/AdminAccessContext';
 import { canApproveEvidence, canReviewEvidence, reviewBlockedReason, verificationRows, verificationBlockers } from '../../lib/verificationEvidence';
 
 // TODO(billing): local image links are backend routes needing the admin token,
-// so they open via an authenticated fetch into a blob URL. GCS signed URLs
-// keep plain anchors. Simplify to anchors only when VERIFICATION_STORAGE=gcs.
-async function openProtectedDocument(url) {
-  const path = protectedImagePath(url);
-  const blob = await apiRequestBinary(path);
-  window.open(URL.createObjectURL(blob), "_blank", "noopener");
+// so they load via an authenticated fetch into a blob URL. GCS signed URLs are
+// used as-is. Simplify when VERIFICATION_STORAGE=gcs.
+async function loadImage(url, backend) {
+  if (!url) return null;
+  if (!usesProtectedImages(backend)) return url;
+  return URL.createObjectURL(await apiRequestBinary(protectedImagePath(url)));
+}
+
+// Photos live on the disk of the backend that received the upload, so a
+// different backend (or a removed file) answers 404.
+const imageError = (error) => /\(404\)/.test(error?.message || "")
+  ? "Not stored on the server this dashboard is connected to."
+  : error?.message || "Could not load this photo.";
+
+function PhotoPanel({ label, photo }) {
+  return (
+    <figure className="flex min-w-0 flex-col">
+      <figcaption className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</figcaption>
+      <div className="flex h-72 items-center justify-center overflow-hidden rounded-xl bg-gray-900/5 sm:h-[26rem]">
+        {photo?.src ? (
+          <a href={photo.src} target="_blank" rel="noreferrer" title="Open full size" className="flex h-full w-full items-center justify-center">
+            <img src={photo.src} alt={label} className="max-h-full max-w-full object-contain" />
+          </a>
+        ) : (
+          <p className="px-4 text-center text-sm text-gray-500">{photo?.error || (photo === undefined ? "Loading…" : "No photo submitted.")}</p>
+        )}
+      </div>
+    </figure>
+  );
+}
+
+function PhotoCompare({ request, onClose }) {
+  const [photos, setPhotos] = useState({ id: undefined, face: undefined });
+
+  useEffect(() => {
+    let cancelled = false;
+    const created = [];
+    const load = (key, url) => loadImage(url, request.storageBackend)
+      .then((src) => {
+        if (src?.startsWith("blob:")) created.push(src);
+        if (!cancelled) setPhotos((prev) => ({ ...prev, [key]: src ? { src } : null }));
+      })
+      .catch((error) => { if (!cancelled) setPhotos((prev) => ({ ...prev, [key]: { error: imageError(error) } })); });
+    load("id", request.governmentIdUrl);
+    load("face", request.facePhotoUrl);
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      cancelled = true;
+      created.forEach((src) => URL.revokeObjectURL(src));
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [request, onClose]);
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-2 sm:p-6" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-label="Compare ID and face photo" onClick={(e) => e.stopPropagation()}
+        className="max-h-full w-full max-w-5xl overflow-y-auto rounded-2xl bg-white shadow-xl">
+        <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-6">
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-gray-800">{request.workerName} · ID and face</p>
+            <p className="text-xs text-gray-500">
+              {request.idType || "ID"} · Face match {formatPercent(request.faceMatchConfidence, 1)}
+              {request.faceMatchBand ? ` · ${BAND_LABELS[request.faceMatchBand] || request.faceMatchBand}` : ""}
+            </p>
+          </div>
+          <button type="button" aria-label="Close comparison" onClick={onClose} className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-6">
+          <PhotoPanel label="Government ID" photo={photos.id} />
+          <PhotoPanel label="Selfie" photo={photos.face} />
+        </div>
+        <p className="px-4 pb-4 text-xs text-gray-400 sm:px-6">Check that the face, name and photo on the ID belong to the same person. Click a photo to open it full size.</p>
+      </div>
+    </div>
+  );
 }
 
 const BAND_LABELS = {
@@ -61,7 +133,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
   const { can } = useAdminAccess();
   const [adminNotes, setAdminNotes] = useState(request?.adminNotes ?? "");
   const [saving, setSaving] = useState(false);
-  const [openingDocument, setOpeningDocument] = useState(false);
+  const [comparing, setComparing] = useState(false);
 
   useEffect(() => {
     if (request) {
@@ -103,17 +175,7 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
       "Worker resubmission requested."
     );
 
-  const handleOpenDocument = async (url) => {
-    if (!usesProtectedImages(request.storageBackend)) return;
-    setOpeningDocument(true);
-    try {
-      await openProtectedDocument(url);
-    } catch (error) {
-      toast.error(error.message || "Unable to open the document.");
-    } finally {
-      setOpeningDocument(false);
-    }
-  };
+  const closeCompare = useCallback(() => setComparing(false), []);
 
   return (
     <AnimatePresence>
@@ -185,32 +247,21 @@ export default function WorkerVerificationModal({ request, onClose, onUpdate }) 
             {(request.governmentIdUrl || request.facePhotoUrl) && (
               <section>
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Submitted Documents</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {request.governmentIdUrl && usesProtectedImages(request.storageBackend) ? (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDocument(request.governmentIdUrl)}
-                      disabled={openingDocument}
-                      className="text-sm text-blue-600 underline text-left disabled:opacity-50"
-                    >
-                      {openingDocument ? "Opening…" : "Open government ID"}
-                    </button>
-                  ) : (
-                    request.governmentIdUrl && <a href={request.governmentIdUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open government ID</a>
-                  )}
-                  {request.facePhotoUrl && usesProtectedImages(request.storageBackend) ? (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDocument(request.facePhotoUrl)}
-                      disabled={openingDocument}
-                      className="text-sm text-blue-600 underline text-left disabled:opacity-50"
-                    >
-                      {openingDocument ? "Opening…" : "Open face photo"}
-                    </button>
-                  ) : (
-                    request.facePhotoUrl && <a href={request.facePhotoUrl} target="_blank" rel="noreferrer" className="text-sm text-blue-600 underline">Open face photo</a>
-                  )}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setComparing(true)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-gray-200 p-3 text-left hover:border-blue-300 hover:bg-blue-50/40"
+                >
+                  <span className="flex shrink-0 -space-x-2">
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-blue-50 text-blue-600 ring-2 ring-white"><IdCard size={16} /></span>
+                    <span className="flex size-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 ring-2 ring-white"><ScanFace size={16} /></span>
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium text-gray-800">Compare ID and face</span>
+                    <span className="block text-xs text-gray-500">View the government ID and selfie side by side</span>
+                  </span>
+                </button>
+                {comparing && <PhotoCompare request={request} onClose={closeCompare} />}
               </section>
             )}
 
