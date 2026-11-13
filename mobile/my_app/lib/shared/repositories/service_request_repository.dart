@@ -8,6 +8,7 @@ import '../models/service_application.dart';
 import '../models/service_request.dart';
 import '../utils/job_location_utils.dart';
 import '../utils/errand_location_validation.dart';
+import '../utils/profanity_filter.dart';
 
 String conversationIdFor({
   required String clientId,
@@ -71,7 +72,7 @@ class _PostDetails {
     final pinned = this.pinned;
     final errand = this.errand;
     return {
-      'title': title,
+      'title': maskProfanity(title),
       'category': category,
       'budget': budget,
       'schedule': Timestamp.fromDate(scheduleFrom),
@@ -86,12 +87,12 @@ class _PostDetails {
         'dropoffAreaPosition': roundToPublicArea(
           errand.dropoff.position,
         ).toGeoPoint(),
-        'errandItems': errand.items,
+        'errandItems': maskProfanity(errand.items),
         'distanceKm': errand.distanceKm,
         if (errand.itemCostEstimate != null)
           'itemCostEstimate': errand.itemCostEstimate,
       },
-      'description': description,
+      'description': maskProfanity(description),
     };
   }
 

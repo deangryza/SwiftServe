@@ -10,6 +10,7 @@ import '../../../../shared/utils/message_time.dart';
 import '../../../../shared/widgets/action_confirmation_dialog.dart';
 
 import '../../../../shared/widgets/live_profile_avatar.dart';
+import '../../../../shared/utils/profanity_filter.dart';
 
 const _chatYellow = AppTheme.yellow;
 const _chatCream = Color(0xFFFFFFFF);
@@ -672,9 +673,10 @@ class _ConversationInboxScreenState extends State<ConversationInboxScreen> {
                             return _ConversationCard(
                               userId: counterpartId,
                               name: name,
-                              message:
-                                  (data['lastMessage'] ?? 'Open conversation')
-                                      .toString(),
+                              message: maskProfanity(
+                                (data['lastMessage'] ?? 'Open conversation')
+                                    .toString(),
+                              ),
                               timestamp: updatedAt?.toDate(),
                               unread: unread,
                               surface: unread ? unreadSurface : surface,

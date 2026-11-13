@@ -33,6 +33,7 @@ import '../../../../shared/widgets/errand_map_layers.dart';
 import '../../../../shared/widgets/open_street_map_layers.dart';
 import '../../../client/presentation/screens/client_sections.dart';
 import 'worker_verification_screen.dart';
+import '../../../../shared/utils/profanity_filter.dart';
 
 const _detailsYellow = AppTheme.yellow;
 const _detailsCream = Color(0xFFFFFFFF);
@@ -296,7 +297,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
         'reportedUserId': request.clientId,
         'reportedUserName': request.clientName,
         'reason': report.reason,
-        'details': report.details,
+        'details': maskProfanity(report.details),
         'status': 'open',
         'createdAt': FieldValue.serverTimestamp(),
       });
@@ -364,7 +365,7 @@ class _WorkerJobDetailsScreenState extends State<WorkerJobDetailsScreen>
         'clientId': request.clientId,
         'clientName': request.clientName,
         'rating': review.rating,
-        'comment': review.comment,
+        'comment': maskProfanity(review.comment),
         'createdAt': FieldValue.serverTimestamp(),
       });
       batch.set(notificationReference, {
